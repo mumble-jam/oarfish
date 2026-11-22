@@ -153,8 +153,8 @@ vec3 albedo(vec3 p, out vec4 M){
   float tip = smoothstep(.05, .8, dB);
   vec3 e = normalize(vec3(pb.x, pb.y, abs(pb.z)) - EYE);
   vec3 eye = mix(cEye, vec3(.04, .03, .07), smoothstep(.82, .92, dot(e, normalize(EYE_OUT))));
-  M = vec4((wE + wL) / ws, wT / ws, wF / ws, tip);
-  return (body * wB + mix(cFins * .8, cFinTip, tip) * wF + mix(cFins, cFinTip, smoothstep(.7, 1.7, pb.y)) * wR + eye * wE + vec3(.99, .95, .93) * wT + cLure * wL) / ws;
+  M = vec4((wE + wL * min(uLure, 1.)) / ws, wT / ws, wF / ws, tip);
+  return (body * wB + mix(cFins * .8, cFinTip, tip) * wF + mix(cFins, cFinTip, smoothstep(.7, 1.7, pb.y)) * wR + eye * wE + vec3(.99, .95, .93) * wT + cLure * (.25 + .75 * uLure) * wL) / ws;
 }`;
 
 // The spined drifter: an urchin adrift. Forty spines in rings, every other one long, each lit at its tip.
@@ -261,6 +261,152 @@ vec3 albedo(vec3 p, out vec4 M){
   return (mix(cShade, cSteel, smoothstep(.1, 2.2, p.y)) * wH + mix(cLead * .72, cLead, smoothstep(5.1, 6.1, p.y)) * wW + cTag * wG) / ws;
 }`;
 
+// The Keeper: a great crab under a dome of plates, a spire on the dome, two claws held open and six legs.
+const KEEPER = /* glsl */`
+#define ACCENT cTone
+#define EYE_COL cEye
+const vec3 EYE = vec3(1.05, .47, .26), EYE_OUT = vec3(1., .3, .35), EMBER = vec3(0., .40, 0.);
+const float EMBER_R = .22, BLOOM = .6;
+
+void parts(vec3 p, out float dD, out float dL, out float dE, out float dK){
+  vec3 s = vec3(p.x, p.y, abs(p.z));
+  dD = smax(sdEll(p - vec3(0., .12, 0.), vec3(.90, .80, .96)), .10 - p.y, .08);               // the dome
+  dD = smin(dD, sdEll(p - vec3(0., .13, 0.), vec3(.84, .15, .90)), .06);                       // the body under it
+  dD = smin(dD, sdCone(vec3(p.x + (p.y - .86) * .27, p.y - .86, p.z), .15, .012, .46), .10);   // the spire on top
+  float st = 6.28318 / 5., a = floor(atan(p.z, p.x) / st + .5) * st;                           // five knobs where the plates meet
+  dD = smin(dD, length(p - vec3(cos(a) * .66, .66, sin(a) * .70)) - .09, .08);
+  dK = sdEll(p - vec3(.80, .13, 0.), vec3(.16, .11, .42));                                     // the face under the shell's lip
+  dE = length(s - EYE) - .085;
+  dL = rcone(s, vec3(.85, .19, .19), vec3(1.02, .44, .26), .05, .04);                          // an eye stalk
+  dL = min(dL, smin(rcone(s, vec3(.62, .18, .59), vec3(1.00, .29, .94), .12, .11), rcone(s, vec3(1.00, .29, .94), vec3(1.38, .25, .74), .12, .17), .05));   // a claw: arm, forearm
+  dL = smin(dL, min(rcone(s, vec3(1.38, .25, .74), vec3(1.75, .40, .46), .17, .025), rcone(s, vec3(1.38, .25, .74), vec3(1.68, .06, .52), .12, .02)), .04);   // and two fingers
+  for(int i = 0; i < 3; i++){ float x = .29 - float(i) * .44;                                  // three legs a side
+    dL = min(dL, smin(rcone(s, vec3(x, .21, .79), vec3(x - .09, .56, 1.26), .075, .06), rcone(s, vec3(x - .09, .56, 1.26), vec3(x - .17, -.15, 1.50), .06, .02), .04)); }
+}
+float map(vec3 p){
+  float dD, dL, dE, dK; parts(p, dD, dL, dE, dK);
+  return smin(smin(smin(dD, dL, .07), dK, .05), dE, .02);
+}
+vec3 albedo(vec3 p, out vec4 M){
+  float dD, dL, dE, dK; parts(p, dD, dL, dE, dK);
+  float m = min(min(dD, dL), min(dE, dK)), wD = exp(-(dD - m) * 16.), wL = exp(-(dL - m) * 16.), wK = exp(-(dK - m) * 24.), wE = sharp(dE, m), ws = wD + wL + wK + wE;
+  float plate = smoothstep(-.15, .15, sin(atan(p.z, p.x) * 5.) * sin(p.y * 9.5));
+  vec3 dome = mix(mix(cTone * .8, cTone, plate), cPale, smoothstep(.26, .16, p.y));            // plates in two tones, a pale lip
+  dome = mix(dome, cPale, smoothstep(.95, 1.3, p.y));                                          // the spire pales to its tip
+  vec3 limb = mix(mix(cDark, cDeep, .5), cPale, smoothstep(.55, .95, dD));                     // legs and claws pale at their ends
+  vec3 e = normalize(vec3(p.x, p.y, abs(p.z)) - EYE);
+  vec3 eye = mix(cEye, vec3(.04, .03, .07), smoothstep(.80, .92, dot(e, normalize(EYE_OUT))));
+  M = vec4(wE / ws, 0., 0., 0.);
+  return (dome * wD + limb * wL + cDeep * wK + eye * wE) / ws;
+}`;
+
+// The Shearer: a sawfish. A flat body with wings, a tall fin, and the saw, toothed in the district's colour.
+const SHEARER = /* glsl */`
+#define ACCENT cTone
+#define EYE_COL cEye
+const vec3 EYE = vec3(.65, .15, .25), EYE_OUT = vec3(.2, .7, .7), EMBER = vec3(.30, 0., 0.);
+const float EMBER_R = .10, BLOOM = .6;
+
+void parts(vec3 p, out float dB, out float dS, out float dT, out float dE, out float dF, out float dW){
+  p = bend(p);
+  dB = smin(sdEll(p - vec3(.35, .06, 0.), vec3(.80, .25, .38)), sdEll(p - vec3(-.35, .05, 0.), vec3(.75, .22, .26)), .20);
+  dB = smin(dB, sdEll(p - vec3(-.85, .02, 0.), vec3(.36, .09, .07)), .20);
+  dB = smin(dB, sdEll(p - vec3(.86, -.06, 0.), vec3(.34, .11, .25)), .20);                     // the head, flattening into the saw
+  dS = sdEll(p - vec3(1.27, -.10, 0.), vec3(.36, .028, .11));                                   // the saw
+  float i = clamp(floor((p.x - 1.05) / .0675 + .5), 0., 7.);
+  dT = sdCone(vec3(p.x - 1.05 - i * .0675, abs(p.z) - (.105 - i * .006), p.y + .10), .022, .004, .10);   // its teeth, eight a side
+  dE = length(vec3(p.x, p.y, abs(p.z)) - EYE) - .06;
+  float d2 = min(sdTri(p.xy, vec2(.18, .28), vec2(-.38, .24), vec2(-.14, .68)) - .03, sdTri(p.xy, vec2(-.57, .13), vec2(-.76, .11), vec2(-.74, .33)) - .02);
+  d2 = min(d2, min(sdTri(p.xy, vec2(-.97, .06), vec2(-1.48, .53), vec2(-1.22, .05)), sdTri(p.xy, vec2(-.97, -.04), vec2(-1.33, -.27), vec2(-1.22, .05))) - .03);
+  dF = slab(p, d2, .012) - .014;                                                               // the tall fin, a small one, the tail
+  vec2 w = vec2(p.x, abs(p.z));
+  float d3 = min(sdTri(w, vec2(.58, .30), vec2(.02, .92), vec2(-.18, .30)), sdTri(w, vec2(-.38, .14), vec2(-.58, .40), vec2(-.62, .14))) - .04;
+  dW = slab(vec3(0., 0., p.y + .06 + (w.y - .3) * .12), d3, .014) - .016;                       // the wings
+}
+float map(vec3 p){
+  float dB, dS, dT, dE, dF, dW; parts(p, dB, dS, dT, dE, dF, dW);
+  return min(smin(smin(smin(smin(dB, dS, .08), dF, .06), dW, .08), dE, .02), dT);
+}
+vec3 albedo(vec3 p, out vec4 M){
+  float dB, dS, dT, dE, dF, dW; parts(p, dB, dS, dT, dE, dF, dW);
+  float m = min(min(min(dB, dS), min(dT, dE)), min(dF, dW));
+  float wB = exp(-(dB - m) * 16.), wS = exp(-(dS - m) * 20.), wF = exp(-(dF - m) * 12.), wW = exp(-(dW - m) * 12.), wT = sharp(dT, m), wE = sharp(dE, m), ws = wB + wS + wF + wW + wT + wE;
+  vec3 pb = bend(p);
+  float t = clamp((pb.y + .22) / .5, 0., 1.), tip = smoothstep(.03, .45, dB);
+  vec3 body = mix(mix(cBelly, cFlank, smoothstep(.1, .5, t)), cBack, smoothstep(.6, .98, t));
+  vec3 e = normalize(vec3(pb.x, pb.y, abs(pb.z)) - EYE);
+  vec3 eye = mix(cEye, vec3(.04, .03, .07), smoothstep(1.1, .9, length(vec2((e.x - .2) / .25, (e.z - .55) / .6))));
+  M = vec4((wE + wT * .45) / ws, 0., (wF + wW) / ws, tip);
+  return (body * wB + cSaw * wS + mix(cTone * .72, cTone, tip) * wF + mix(cFlank, cBack, tip) * wW + cTone * wT + eye * wE) / ws;
+}`;
+
+// The Warden's head: a moray's, with a crest. Its body is the next shape.
+const WARDEN = /* glsl */`
+#define ACCENT cTone
+#define EYE_COL cEye
+const vec3 EYE = vec3(1.26, .39, .60), EYE_OUT = vec3(.3, .45, 1.), EMBER = vec3(.60, 0., 0.);
+const float EMBER_R = .18, BLOOM = .8;
+
+void parts(vec3 p, out float dB, out float dJ, out float dE, out float dT, out float dF){
+  dB = smin(sdEll(p - vec3(.25, .05, 0.), vec3(1.15, .80, .78)), sdEll(p - vec3(1.50, .14, 0.), vec3(.82, .30, .50)), .35);
+  vec3 j = p - vec3(1.30, -.42, 0.); j.xy = rot(.12) * j.xy;
+  dJ = sdEll(j, vec3(.95, .17, .56));                                                          // the lower jaw
+  float i = clamp(floor((2.0 - p.x) / .32 + .5), 0., 3.), x = 2.0 - i * .32, z = abs(p.z) - (.19 + i * .11);
+  dT = min(sdCone(vec3(p.x - x, -(p.y + .12), z), .05, .008, .22), sdCone(vec3(p.x - x + .10, p.y + .42, z * 1.05), .045, .008, .24));   // four teeth a side, above and below
+  dE = length(vec3(p.x, p.y, abs(p.z)) - EYE) - .15;
+  float d2 = min(sdTri(p.xy, vec2(1.15, .60), vec2(-.85, .72), vec2(-.10, 1.52)), sdTri(p.xy, vec2(-.85, .72), vec2(-.10, 1.52), vec2(-.85, 1.30))) - .04;
+  dF = slab(p, d2, .014) - .016;                                                               // the crest
+}
+float map(vec3 p){
+  float dB, dJ, dE, dT, dF; parts(p, dB, dJ, dE, dT, dF);
+  return min(smin(smin(smin(dB, dJ, .10), dF, .08), dE, .03), dT);
+}
+vec3 albedo(vec3 p, out vec4 M){
+  float dB, dJ, dE, dT, dF; parts(p, dB, dJ, dE, dT, dF);
+  float m = min(min(dB, dJ), min(min(dE, dT), dF));
+  float wB = exp(-(dB - m) * 16.), wJ = exp(-(dJ - m) * 16.), wF = exp(-(dF - m) * 12.), wE = sharp(dE, m), wT = sharp(dT, m), ws = wB + wJ + wF + wE + wT;
+  float t = clamp((p.y + .8) / 1.6, 0., 1.), band = smoothstep(-.2, .2, sin(p.x * 5.5 + 1.));
+  vec3 body = mix(mix(cPale, mix(cTone * .88, cTone, band), smoothstep(.08, .4, t)), cTone * .72, smoothstep(.62, .98, t));
+  vec3 jaw = mix(cPale, cTone * .72, smoothstep(-.55, -.30, p.y));
+  float mouth = exp(-abs(dB - dJ) * 22.) * smoothstep(.55, .9, p.x);
+  body = mix(body, cGum, mouth * .8); jaw = mix(jaw, cGum, mouth * .8);
+  float tip = smoothstep(.05, .6, dB);
+  vec3 e = normalize(vec3(p.x, p.y, abs(p.z)) - EYE);
+  vec3 eye = mix(cEye, vec3(.04, .03, .07), smoothstep(.80, .92, dot(e, normalize(EYE_OUT))));
+  M = vec4(wE / ws, wT / ws, wF / ws, tip);
+  return (body * wB + jaw * wJ + mix(cPale, vec3(1., .96, .89), tip) * wF + eye * wE + vec3(.99, .95, .93) * wT) / ws;
+}`;
+
+// The Warden's body: every length of it as one soft thing, so the lengths melt into each other. uLink holds where its head
+// ends and where each length is; the game moves those, and the component (npc.js) hands them over every frame.
+const EEL = /* glsl */`
+uniform vec3 uLink[12];
+#define ACCENT cTone
+#define EYE_COL vec3(0.)
+const vec3 EYE = vec3(0.), EYE_OUT = vec3(0., 0., 1.), EMBER = vec3(0.);
+const float EMBER_R = .01, BLOOM = 0.;
+
+// the body between two of its marks: taller than it is wide, thinner toward the tail (k: 0 at the head, 1 at the tail), a fin along its back
+float link(vec3 p, vec3 a, vec3 b, float k, out float fin){
+  vec3 pa = p - a, ba = b - a, q = pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); float r = mix(.19, .13, k);
+  fin = max(length(q.xz) - .012, abs(q.y - r * 2.15) - r * .7) - .014;
+  return smin(length(vec3(q.x, q.y / 1.7, q.z)) - r, fin, .05);
+}
+float map(vec3 p){
+  float d = 1e9, fin;
+  for(int i = 0; i < 11; i++) d = smin(d, link(p, uLink[i], uLink[i + 1], float(i) / 10., fin), .08);
+  return d;
+}
+vec3 albedo(vec3 p, out vec4 M){
+  float best = 1e9, bestFin = 1e9, fin, seg = 0., y = 0.;
+  for(int i = 0; i < 11; i++){ float d = link(p, uLink[i], uLink[i + 1], float(i) / 10., fin); if(d < best){ best = d; bestFin = fin; seg = float(i); y = p.y - mix(uLink[i].y, uLink[i + 1].y, .5); } }
+  vec3 tone = mod(seg, 3.) < .5 ? cPale : cTone;                                                // two lengths in the district's colour, then a pale one
+  vec3 body = mix(mix(cPale, tone, smoothstep(-.30, -.10, y)), tone * .72, smoothstep(.12, .32, y));
+  float wF = exp(-(bestFin - best) * 30.);
+  M = vec4(0., 0., wF, smoothstep(.30, .50, y));
+  return mix(body, mix(cPale, vec3(1., .96, .89), M.w), wF);
+}`;
+
 // palette: which of the component's colours each of the shader's takes
 export const SHAPES = {
   biter: { glsl: BITER, unit: 0.33, offset: 0.021, box: [[-2.3, -1.3, -0.85], [1.7, 1.6, 0.85]],
@@ -269,6 +415,10 @@ export const SHAPES = {
     palette: { cBack: 'back', cSkin: 'skin', cWart: 'wart', cBelly: 'belly', cGum: 'gum', cFins: 'fins', cFinTip: 'finTip', cEye: 'eye', cLure: 'lure' } },
   drifter: { glsl: DRIFTER, unit: 0.27, offset: 0, box: [[-3.2, -3.2, -3.2], [3.2, 3.2, 3.2]], palette: { cTest: 'test', cBand: 'band', cSpine: 'spine', cTip: 'tip' } },
   leech: { glsl: LEECH, unit: 0.33, offset: 0, box: [[-2.3, -0.8, -0.8], [1.95, 0.95, 0.8]], palette: { cBack: 'back', cFlank: 'flank', cBelly: 'belly', cFin: 'fin', cEye: 'eye' } },
+  keeper: { glsl: KEEPER, unit: 1.7, offset: 0, box: [[-1.4, -0.5, -1.9], [2.1, 1.7, 1.9]], palette: { cTone: 'tone', cPale: 'pale', cDark: 'dark', cDeep: 'deep', cEye: 'eye' } },
+  shearer: { glsl: SHEARER, unit: 2.0, offset: 0, box: [[-1.85, -0.65, -1.25], [1.95, 1.0, 1.25]], palette: { cTone: 'tone', cBack: 'back', cFlank: 'flank', cBelly: 'belly', cSaw: 'saw', cEye: 'eye' } },
+  warden: { glsl: WARDEN, unit: 0.62, offset: 0, box: [[-1.3, -1.0, -1.2], [2.6, 1.9, 1.2]], palette: { cTone: 'tone', cPale: 'pale', cGum: 'gum', cEye: 'eye' } },
+  eel: { glsl: EEL, unit: 2.0, offset: 0, links: 12, box: [[-5.6, -1.2, -5.6], [5.6, 1.5, 5.6]], palette: { cTone: 'tone', cPale: 'pale' } },
   hook: { glsl: HOOK, unit: 0.26, offset: 0, box: [[-0.6, -0.35, -1.3], [0.6, 8.3, 2.75]], palette: { cSteel: 'steel', cShade: 'shade', cLead: 'lead', cTag: 'tag', cBait: 'bait' } },
 };
 
@@ -296,8 +446,8 @@ uniform vec2 uFit;
 uniform vec3 uBoxMin, uBoxMax;
 uniform float uSwim;
 uniform vec4 uSwimShape;
-uniform float uSoft, uHalo, uRim, uEmber, uEye, uGrain, uTurn;
-uniform vec3 ${Object.keys(shape.palette).join(', ')}, cRim, cDeep;
+uniform float uSoft, uHalo, uRim, uEmber, uEye, uGrain, uTurn, uFlash, uLure;
+uniform vec3 ${Object.keys(shape.palette).join(', ')}, cRim, cAbyss;
 varying vec3 vRo;
 varying vec3 vPos;
 varying vec3 vKey;
@@ -334,6 +484,7 @@ float smax(float a, float b, float k){ return -smin(-a, -b, k); }
 // how much a small, sharp-edged part (an eye, a tooth) counts at a point: crisp on the surface, loose out in the glow
 float sharp(float d, float m){ return exp(-(d - m) * 90. / (1. + 40. * max(m, 0.))); }
 float capsule(vec3 p, vec3 a, vec3 b, float r){ vec3 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)) - r; }
+float rcone(vec3 p, vec3 a, vec3 b, float r1, float r2){ vec3 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * h) - mix(r1, r2, h); }
 float sdBox2(vec2 p, vec2 b){ vec2 d = abs(p) - b; return length(max(d, 0.)) + min(max(d.x, d.y), 0.); }
 vec3 hueTurn(vec3 c, float a){ const vec3 k = vec3(.57735); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1. - ca); }
 float sdEll(vec3 p, vec3 r){ float k0 = length(p / r), k1 = length(p / (r * r)); return k0 * (k0 - 1.) / k1; }
@@ -420,14 +571,15 @@ void main(){
   if(!hit && minD < halo * 7.){
     float lo = max(tMin - minD, t0), hi = min(tMin + minD, t1);
     for(int i = 0; i < 4; i++){ float m1 = mix(lo, hi, .382), m2 = mix(lo, hi, .618); if(map(ro + rd * m1) < map(ro + rd * m2)) hi = m2; else lo = m1; }
-    tMin = .5 * (lo + hi); minD = map(ro + rd * tMin);
+    float tm = .5 * (lo + hi), dm = map(ro + rd * tm);
+    if(dm < minD){ minD = dm; tMin = tm; }   // (two parts may each come near: never end up further off than the march found)
   }
 
   vec3 p = ro + rd * (hit ? t : tMin);
   vec4 view = modelViewMatrix * vec4(vec3(p.z, p.y, p.x) * uFit.x + vec3(0., 0., uFit.y), 1.);
   vec3 day = clamp(sceneLight(view.xyz), 0., 1.);
   float dayS = max(day.r, max(day.g, day.b)), own = mix(mix(.32, .8, deep), 1., dayS);   // own: how much of its glow it keeps in the dark
-  vec3 rimC = mix(cRim, cDeep, deep), acc = mix(ACCENT, max(hueTurn(ACCENT, uTurn), 0.), deep * .8);
+  vec3 rimC = mix(cRim, cAbyss, deep), acc = mix(ACCENT, max(hueTurn(ACCENT, uTurn), 0.), deep * .8);
 
   vec4 M; vec3 alb = albedo(p, M);
   float lit = (1. - M.x) * (1. - M.y);
@@ -473,6 +625,8 @@ void main(){
   }
   if(a < .004) discard;
 
+  col = mix(col, vec3(1.), min(uFlash, 1.) * .7);   // struck: it flares white for a moment
+
   // into the water: the band's fog over it, as over everything else
   float clear = 1.;
   vec3 lin = toLin(clamp(col, 0., 1.));
@@ -494,12 +648,13 @@ void main(){
 
 // ---------------------------------------------------------------- making one
 const boxes = new Map();
-function boxOf(key) {
-  if (!boxes.has(key)) {
-    const { unit: u, offset, box: [lo, hi] } = SHAPES[key];
-    boxes.set(key, new THREE.BoxGeometry((hi[2] - lo[2]) * u, (hi[1] - lo[1]) * u, (hi[0] - lo[0]) * u).translate((hi[2] + lo[2]) * u / 2, (hi[1] + lo[1]) * u / 2, (hi[0] + lo[0]) * u / 2 + offset));
+function boxOf(key, k = 1) {
+  const id = `${key}|${k}`;
+  if (!boxes.has(id)) {
+    const { unit, offset, box: [lo, hi] } = SHAPES[key], u = unit * k;
+    boxes.set(id, new THREE.BoxGeometry((hi[2] - lo[2]) * u, (hi[1] - lo[1]) * u, (hi[0] - lo[0]) * u).translate((hi[2] + lo[2]) * u / 2, (hi[1] + lo[1]) * u / 2, (hi[0] + lo[0]) * u / 2 + offset * k));
   }
-  return boxes.get(key);
+  return boxes.get(id);
 }
 // the colours as the screen shows them: the look is worked out in those, not in the renderer's linear light
 const shown = (hex) => { const n = parseInt(hex.slice(1), 16); return new THREE.Vector3((n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255); };
@@ -507,21 +662,25 @@ const mix = (a, b, t) => a + (b - a) * t;
 
 // soft: the component's soft look ({ shape, rim, deep, turn, edge, halo, rimLight, inner, eyeGlow, grain }); palette: its colours
 // as they stand now; swim: its tail-beat. Returns { mesh, material }; material.userData.swim.value is the beat's phase,
-// advanced by whoever owns the creature, exactly as for a low-poly body.
+// advanced by whoever owns the creature, exactly as for a low-poly body. soft.scale: the same shape, larger; soft.colours:
+// colours worked out from the palette. material.emissiveIntensity, which the game raises when a keeper is struck, flares it.
 export function softBody(soft, palette, swim) {
-  const shape = SHAPES[soft.shape], u = shape.unit;
+  const shape = SHAPES[soft.shape], k = soft.scale || 1, u = shape.unit * k, pal = soft.colours ? soft.colours(palette) : palette;
   const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.lights, THREE.UniformsLib.fog, {
-    uFit: { value: new THREE.Vector2(u, shape.offset) },
+    uFit: { value: new THREE.Vector2(u, shape.offset * k) }, uFlash: { value: 0 }, uLure: { value: 1 },
+    ...(shape.links ? { uLink: { value: Array.from({ length: shape.links }, () => new THREE.Vector3()) } } : {}),
     uBoxMin: { value: new THREE.Vector3(...shape.box[0]) }, uBoxMax: { value: new THREE.Vector3(...shape.box[1]) },
     uSwim: { value: 0 },
-    uSwimShape: { value: new THREE.Vector4(swim ? swim.amp / u : 0, swim?.waves || 0, swim ? (swim.nose - shape.offset) / u : 0, swim ? u / swim.length : 0) },
+    uSwimShape: { value: new THREE.Vector4(swim ? swim.amp / u : 0, swim?.waves || 0, swim ? (swim.nose - shape.offset * k) / u : 0, swim ? u / swim.length : 0) },
     uSoft: { value: mix(0.02, 0.9, Math.pow(soft.edge, 1.3)) }, uHalo: { value: mix(0.003, 0.24, Math.pow(soft.halo, 1.5)) },
     uRim: { value: soft.rimLight }, uEmber: { value: soft.inner }, uEye: { value: soft.eyeGlow }, uGrain: { value: soft.grain },
-    cRim: { value: shown(soft.rim) }, cDeep: { value: shown(soft.deep) }, uTurn: { value: soft.turn * Math.PI / 180 },
-    ...Object.fromEntries(Object.entries(shape.palette).map(([name, key]) => [name, { value: shown(palette[key]) }])),
+    cRim: { value: shown(soft.rim) }, cAbyss: { value: shown(soft.deep) }, uTurn: { value: soft.turn * Math.PI / 180 },
+    ...Object.fromEntries(Object.entries(shape.palette).map(([name, key]) => [name, { value: shown(pal[key]) }])),
   }]);
   const material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG(shape), lights: true, fog: true,
     transparent: true, premultipliedAlpha: true, depthWrite: false, side: THREE.BackSide }); // the back of the box, so it is still drawn with the eye inside it
   material.userData.swim = uniforms.uSwim; material.userData.glow = { value: 1 };
-  return { mesh: new THREE.Mesh(boxOf(soft.shape), material), material };
+  let struck = 0.12;
+  Object.defineProperty(material, 'emissiveIntensity', { get: () => struck, set(v) { struck = v; uniforms.uFlash.value = Math.max(0, (v - 0.12) / 0.9); } });
+  return { mesh: new THREE.Mesh(boxOf(soft.shape, k), material), material, unit: u };
 }

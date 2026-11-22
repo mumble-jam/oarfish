@@ -69,7 +69,8 @@ s = await ev(() => { let teal = 0; window.__game.lib.scene.traverse((o) => { if 
 s = { ...s, before, after: await looks(), biter: await soft() };
 await snap('l-biter-soft');
 s.made = [];
-for (const id of ['angler', 'drifter', 'leech', 'hook']) { await page.click(`#lib-list [data-id="${id}"]`); await ev(() => { window.__game.lib.frame(0.3); }); await frame(); const o = await soft(); s.made.push(`${id}:${o.boxes}:${/no triangles/.test(o.tris)}`); await snap(`l-${id}-soft`); }
+const restyled = ['angler', 'drifter', 'leech', 'hook', 'keeper', 'shearer', 'lamplighter', 'warden']; // the warden is two soft things: its head, and one body through all its lengths
+for (const id of restyled) { await page.click(`#lib-list [data-id="${id}"]`); await ev(() => { window.__game.lib.frame(0.3); }); await frame(); const o = await soft(); s.made.push(`${id}:${o.boxes}:${/no triangles/.test(o.tris)}`); await snap(`l-${id}-soft`); }
 await page.click('#lib-list [data-id="kelp"]'); await frame(); s.kelp = (await soft()).tris;
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
 s = { ...s, ...(await ev(() => { const g = window.__game; g.setPaused(false); g.startRun(4242); g.enterFloor(2, false); g.sim(0.4); const f = g.foes, b = f.biters[0], m = b.actor.body.material, lit = (o) => { let n = 0; o.traverse((c) => { if (c.material?.isShaderMaterial) n++; }); return n === 1; };
@@ -79,9 +80,9 @@ await snap('l-soft-dive');
 await ev(() => { window.__game.setPaused(true); window.__game.openLibrary('biter'); }); await frame();
 await page.click('[data-set="look"] button[data-v="flat"]'); await frame();
 s = { ...s, back: await soft(), lookBack: await ev(() => localStorage.getItem('oarfish.look')) };
-check('the Look row turns the whole game from low-poly to soft and back: every hunter is then drawn as light, in the library and on the next dive, in the colours and size its component has; what has no soft look yet says so',
+check('the Look row turns the whole game from low-poly to soft and back: every hunter and keeper is then drawn as light, in the library and on the next dive, in the colours and size its component has; what has no soft look yet says so',
   s.before === 'Low-poly*,Soft' && s.after === 'Low-poly,Soft*' && s.look === 'soft' && /no triangles/.test(s.biter.tris) && s.biter.boxes === 1 && s.teal === 1 && s.sw === 8 && !/soft/.test(s.npc) && /"scale":1.3/.test(s.npc)
-  && s.made.join() === 'angler:1:true,drifter:1:true,leech:1:true,hook:1:true' && /triangles, soft look to come/.test(s.kelp) && s.game && s.beat && s.scale === 1.3 && s.shade && s.all === 'true,true,true,true'
+  && s.made.join() === restyled.map((id) => `${id}:${id === 'warden' ? 2 : 1}:true`).join() && /triangles, soft look to come/.test(s.kelp) && s.game && s.beat && s.scale === 1.3 && s.shade && s.all === 'true,true,true,true'
   && s.back.boxes === 0 && /^212 triangles$/.test(s.back.tris) && s.lookBack === 'flat', JSON.stringify(s).slice(0, 900));
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
 

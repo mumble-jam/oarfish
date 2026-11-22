@@ -11,10 +11,12 @@
 // back to low-poly, and forth again (`look`, below).
 
 import * as THREE from 'three';
-import { alive } from './kit.js';
+import { alive, dim } from './kit.js';
 import { glowTexture, lerp } from './geo.js';
 import * as model from './critters.js';
 import { softBody } from './soft.js';
+// a soft body's own lure burns as bright as the glow the game hangs on it (base: the glow's size when lit)
+const lureOf = (a, glow, base) => { if (a.soft) a.body.onBeforeRender = () => { a.body.material.uniforms.uLure.value = Math.min(1.6, glow.scale.x / base); }; };
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -58,7 +60,7 @@ export const NPCS = [
     about: 'A globe of a fish, all mouth, with a rod over its head. It sits on the old lamp plinths, where the lamps used to be.',
     palette: { back: '#221d36', skin: '#322d4b', wart: '#2a2540', belly: '#4d4770', gum: '#2a0f20', fins: '#474066', finTip: '#6a6190', eye: '#c8ecff', lure: '#ffd27a', glow: '#ffc56a' },
     build: (pal) => model.angler(pal), swim: { amp: 0.07, waves: 1.5, nose: 0.6, length: 1.6 }, beat: [1.6, 4.4], soft: { ...SOFT, shape: 'angler', inner: 0.5 },
-    assemble(a, pal) { const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: pal.lure }), bulb = new THREE.Mesh(BULB, m), glow = sprite(a, pal.glow, 1.7); a.owned.push(m); bulb.position.set(...model.ANGLER_ROD); bulb.visible = !a.soft; glow.position.copy(bulb.position); g.add(a.body, bulb, glow); a.object = g; a.parts = { bulb, glow }; }, // a soft angler draws its own lure
+    assemble(a, pal) { const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: pal.lure }), bulb = new THREE.Mesh(BULB, m), glow = sprite(a, pal.glow, 1.7); a.owned.push(m); bulb.position.set(...model.ANGLER_ROD); bulb.visible = !a.soft; glow.position.copy(bulb.position); g.add(a.body, bulb, glow); a.object = g; a.parts = { bulb, glow }; lureOf(a, glow, 1.7); }, // a soft angler draws its own lure
     states: [{ id: 'lurk', name: 'Lurking', speed: 0, lure: 1.7 }, { id: 'lunge', name: 'Lunging', speed: 1, lure: 2.6 }, { id: 'stun', name: 'Dazzled', speed: 0, lure: 0.3, wobble: true }] },
   { id: 'drifter', group: 'Hunters', name: 'Spined drifter', bands: [1, 2, 3, 4], length: 1.3, role: 'Hunts nothing. Costs a segment to brush against; head first, a dash breaks it.',
     about: 'An urchin adrift: plates in five bands, and spines lit at the tip so it can be seen coming.',
@@ -81,24 +83,32 @@ export const NPCS = [
   { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 5, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
     about: 'A great crab under a dome of plates. It keeps the first rift.',
     paintOf: 0, palette: { tone: DISTRICT[0], pale: '#e9dfc0', dark: '#3b2a4d', deep: '#2a1d38', eye: '#eaff7c' },
-    build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD, states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
+    build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD, soft: { ...SOFT, shape: 'keeper', inner: 0.25 }, states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
   { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 6, role: 'Charges the tail in a straight line, then tires. Ram or wrap it while it is tired.',
     about: 'A sawfish, the saw toothed in the district’s colour. It keeps the second rift.',
     paintOf: 1, palette: { tone: DISTRICT[1], back: '#3b2a4d', flank: '#55406b', belly: '#d9cfe0', saw: '#e9dfc0', eye: '#eaff7c' },
-    build: (pal) => model.shearer(pal), swim: { amp: 0.2, waves: 2.2, nose: 3.1, length: 6 }, beat: [2.2, 0.7], material: GUARD,
+    build: (pal) => model.shearer(pal), swim: { amp: 0.2, waves: 2.2, nose: 3.1, length: 6 }, beat: [2.2, 0.7], material: GUARD, soft: { ...SOFT, shape: 'shearer' },
     states: [{ id: 'idle', name: 'Circling', speed: 1.5 }, { id: 'charge', name: 'Charging', speed: 9 }, { id: 'tired', name: 'Tired', speed: 0, wobble: true }] },
   { id: 'lamplighter', group: 'Keepers of the rifts', name: 'The Lamplighter', bands: [2], length: 3.5, role: 'Hangs over the rift and lunges. It takes a bait first. Ram or wrap it while its lamp is out.',
     about: 'The angler grown huge, its fins in the district’s colour. It keeps the third rift.',
     paintOf: 2, palette: { tone: DISTRICT[2], back: '#221d36', skin: '#322d4b', wart: '#2a2540', belly: '#4d4770', gum: '#2a0f20', eye: '#c8ecff', lure: '#ffd27a' },
     build: (pal) => model.lamplighter(pal), swim: { amp: 0.16, waves: 1.5, nose: 1.3, length: 3.5 }, beat: [2.2, 0.7], material: GUARD,
-    assemble(a, pal) { const g = new THREE.Group(), lure = sprite(a, pal.lure, 3); lure.position.set(0, model.ANGLER_ROD[1] * model.LAMP_SCALE, model.ANGLER_ROD[2] * model.LAMP_SCALE); lure.visible = false; g.add(a.body, lure); a.object = g; a.parts = { glow: lure }; },
+    soft: { ...SOFT, shape: 'angler', scale: model.LAMP_SCALE, inner: 0.5, colours: (pal) => ({ ...pal, fins: dim(pal.tone, 0.75), finTip: pal.tone }) }, // the angler's shape, grown, its fins in the district's colour
+    assemble(a, pal) { const g = new THREE.Group(), lure = sprite(a, pal.lure, 3); lure.position.set(0, model.ANGLER_ROD[1] * model.LAMP_SCALE, model.ANGLER_ROD[2] * model.LAMP_SCALE); lure.visible = false; g.add(a.body, lure); a.object = g; a.parts = { glow: lure }; lureOf(a, lure, 3); },
     states: [{ id: 'hang', name: 'Hanging', speed: 0, lure: 3 }, { id: 'windup', name: 'Winding up', speed: 0.5, lure: 5 }, { id: 'dim', name: 'Lamp out', speed: 0, lure: 0.4 }] },
   { id: 'warden', group: 'Keepers of the rifts', name: 'The Warden', bands: [3], length: 11, role: 'An eel circling the mouth of the rift, which tightens on a fish inside its ring. Ram its head, or bait the head out and wrap it.',
     about: 'A moray’s head on eleven lengths of body, banded in the district’s colour. It keeps the fourth rift.',
     paintOf: 3, palette: { tone: DISTRICT[3], pale: '#e9dfc0', gum: '#3a1626', eye: '#eaff7c' },
-    build: (pal) => model.wardenHead(pal), swim: null, beat: [0, 0], material: GUARD,
+    build: (pal) => model.wardenHead(pal), swim: null, beat: [0, 0], material: GUARD, soft: { ...SOFT, shape: 'warden' },
     // the body is the game's to lay out: one mesh to a length, widest behind the head
-    assemble(a, pal) { a.segments = (n = 11) => Array.from({ length: n }, (_, i) => { const m = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, color: i % 3 ? pal.tone : pal.pale, ...GUARD }); a.owned.push(m); const s = new THREE.Mesh(shared('warden:length', () => model.eelSegment()), m); s.scale.set(0.75 - i * 0.03, 1.3 - i * 0.06, 0.95); return s; }); },
+    assemble(a, pal) {
+      // soft: the lengths are only marks for the game to move; one soft body is drawn through them all, hung on the first
+      if (a.soft) { a.segments = (n = 11) => { const marks = Array.from({ length: n }, () => new THREE.Object3D()), chain = softBody({ ...a.spec.soft, shape: 'eel', halo: 0.2 }, pal, null), w = new THREE.Vector3(), L = chain.material.uniforms.uLink.value;
+        const put = (to) => { chain.mesh.worldToLocal(w); to.set(w.z / chain.unit, w.y / chain.unit, w.x / chain.unit); };
+        chain.mesh.frustumCulled = false; a.owned.push(chain.material);
+        chain.mesh.onBeforeRender = () => { w.set(0, 0, -0.3).applyMatrix4(a.body.matrixWorld); put(L[0]); marks.forEach((m, i) => { m.getWorldPosition(w); put(L[i + 1]); }); };
+        marks[0].add(chain.mesh); return marks; }; return; }
+      a.segments = (n = 11) => Array.from({ length: n }, (_, i) => { const m = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, color: i % 3 ? pal.tone : pal.pale, ...GUARD }); a.owned.push(m); const s = new THREE.Mesh(shared('warden:length', () => model.eelSegment()), m); s.scale.set(0.75 - i * 0.03, 1.3 - i * 0.06, 0.95); return s; }); },
     states: [{ id: 'circle', name: 'Circling', speed: 0 }] },
 
   { id: 'sum', group: 'The Sum', name: 'The Sum', bands: [4], length: 0.72, role: 'Everything the Long Ones ever paid, joined into one body. It is the wall of the palace hall, and it hunts by closing a loop.',
