@@ -71,7 +71,8 @@ await snap('l-biter-soft');
 s.made = [];
 const restyled = ['angler', 'drifter', 'leech', 'hook', 'keeper', 'shearer', 'lamplighter', 'warden', ...['spire', 'fan', 'coil', 'ring', 'horn', 'cap', 'spine', 'lamp', 'tusk', 'pearl'].map((t) => `shell-${t}`)]; // the warden is two soft things: its head, and one body through all its lengths
 for (const id of restyled) { await page.click(`#lib-list [data-id="${id}"]`); await ev(() => { window.__game.lib.frame(0.3); }); await frame(); const o = await soft(); s.made.push(`${id}:${o.boxes}:${/no triangles/.test(o.tris)}`); await snap(`l-${id}-soft`); }
-await page.click('#lib-list [data-id="kelp"]'); await frame(); s.kelp = (await soft()).tris;
+await page.click('#lib-list [data-id="staghorn"]'); await frame(); s.skin = await ev(() => { let n = 0; window.__game.lib.scene.traverse((o) => { if (o.material?.userData?.softSkin && o.geometry?.attributes?.softNormal) n++; }); return n; });
+await page.click('#lib-list [data-id="shaft"]'); await frame(); s.kelp = (await soft()).tris;
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
 s = { ...s, ...(await ev(() => { const g = window.__game; g.setPaused(false); g.startRun(4242); g.enterFloor(2, false); g.giveShell('fan'); g.sim(0.4); let shells = 0; g.scene.traverse((o) => { if (o.material?.uniforms?.cShell) shells++; }); const f = g.foes, b = f.biters[0], m = b.actor.body.material, lit = (o) => { let n = 0; o.traverse((c) => { if (c.material?.isShaderMaterial) n++; }); return n === 1; };
   return { shells, game: b.actor.soft === true && !!m.isShaderMaterial, beat: m.userData.swim.value > 0, scale: +b.mesh.scale.x.toFixed(2), shade: b.actor.body.children.some((c) => c.castShadow),
@@ -82,7 +83,7 @@ await page.click('[data-set="look"] button[data-v="flat"]'); await frame();
 s = { ...s, back: await soft(), lookBack: await ev(() => localStorage.getItem('oarfish.look')) };
 check('the Look row turns the whole game from low-poly to soft and back: every hunter, keeper and shell is then drawn as light, in the library and on the next dive, in the colours and size its component has; what has no soft look yet says so',
   s.before === 'Low-poly*,Soft' && s.after === 'Low-poly,Soft*' && s.look === 'soft' && /no triangles/.test(s.biter.tris) && s.biter.boxes === 1 && s.teal === 1 && s.sw === 8 && !/soft/.test(s.npc) && /"scale":1.3/.test(s.npc)
-  && s.made.join() === restyled.map((id) => `${id}:${id === 'warden' ? 2 : 1}:true`).join() && /triangles, soft look to come/.test(s.kelp) && s.shells >= 2 && s.game && s.beat && s.scale === 1.3 && s.shade && s.all === 'true,true,true,true'
+  && s.made.join() === restyled.map((id) => `${id}:${id === 'warden' ? 2 : 1}:true`).join() && s.skin === 1 && /triangles, soft look to come/.test(s.kelp) && s.shells >= 2 && s.game && s.beat && s.scale === 1.3 && s.shade && s.all === 'true,true,true,true'
   && s.back.boxes === 0 && /^212 triangles$/.test(s.back.tris) && s.lookBack === 'flat', JSON.stringify(s).slice(0, 900));
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
 

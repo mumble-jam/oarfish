@@ -54,6 +54,8 @@ There are three ways to change one:
 
 Done so far: the five hunters (Tail-biter, Angler, Spined drifter, Leech, Hook) the four keepers of the rifts (Keeper, Shearer, Lamplighter, Warden) and the ten shells, lying about and worn. Swarms stay low-poly for now, and so does a shed tail: it is the oarfish's own body.
 
+On trial: things that grow and what lies on the bed keep their models and take a **soft skin** instead (rounded shading, a lit rim, the deep's colours in the dark bands, and on solid things edges that fade out in grain). It is a much smaller change than a soft shape. Stonework is untouched.
+
 Two components are colour sets rather than things: **District paint** (one colour per band, used on column tops, well curbs, the guards and the Sum) and **Stone** (the ruins of each band). Change one and everything built from it follows.
 
 ## Working on it together

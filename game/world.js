@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { rng, lerp, clamp, soup, M, glowTexture, beamTexture } from './geo.js';
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing } from './kit.js';
-import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf } from './npc.js';
+import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, look as theLook, SOFT } from './npc.js';
+import { softSkin, smoothNormals } from './soft.js';
 
 export const T = 144;
 const CELL = 3, GRID = 46, NCELL = T / CELL;
@@ -235,7 +236,7 @@ function geometries() {
 // stone carries none: it takes its band's stone, or its band's paint, from the two sets in npc.js.
 {
   const pal = (list) => Object.fromEntries(list.map((c, i) => [`tone${i + 1}`, c]));
-  const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show });
+  const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, soft: { ...SOFT, skin: true }, role: group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show });
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3 });
@@ -323,7 +324,9 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const scatters = [], owned = [], materials = [];
   const add = (o) => { scene.add(o); owned.push(o); return o; };
   const mat = (m) => { materials.push(m); return m; };
-  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, opts); scatters.push(s); add(s.mesh); return s; };
+  // in the soft look, what grows and what lies on the bed keep their models and take a soft skin (soft.js)
+  const skin = (m) => (theLook.soft ? softSkin(m, SOFT) : m);
+  const scatter = (geo, material, items, opts) => { if (material.userData.softSkin) smoothNormals(geo); const s = new Scatter(geo, material, items, opts); scatters.push(s); add(s.mesh); return s; };
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
@@ -836,10 +839,10 @@ float seaLight(vec2 p, float t) {
     rocks.push({ x, y, z, q, s, color: tone });
     if (base > 0.9) colliders.push({ x, y, z, r: (s.x + s.z) * 0.47 });
   }
-  scatter(G.rock, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true })), rocks);
+  scatter(G.rock, mat(skin(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }))), rocks);
 
   // everything that grows shares one kind of material: it may sway with the water, and faces marked for it give light
-  const plant = (o) => mat(growing(o, time));
+  const plant = (o) => mat(skin(growing(o, time)));
   // ------------------------------------------------------------ kelp, swaying
   if (F.kelp) {
     const kelpMat = plant({ sway: 1 });

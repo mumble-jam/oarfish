@@ -768,3 +768,52 @@ export function softBody(soft, palette, swim) {
   Object.defineProperty(material, 'emissiveIntensity', { get: () => struck, set(v) { struck = v; uniforms.uFlash.value = Math.max(0, (v - 0.12) / 0.9); } });
   return { mesh: new THREE.Mesh(boxOf(soft.shape, k), material), material, unit: u };
 }
+
+// ---------------------------------------------------------------- the soft skin
+// What comes in hundreds (plants, what lies on the bed) cannot be drawn the way above: it would cost far too much.
+// It keeps its own model and is shaded softly instead: rounded where its faces meet, a deeper core, a lit rim, the
+// deep's colours in the dark bands as a soft creature has them, and, on solid things, edges that fade out in grain.
+const SKIN = /* glsl */`
+  {
+    float sFac = clamp(abs(dot(normal, normalize(vViewPosition))), 0., 1.), sFres = pow(1. - sFac, 2.2), sAmb = 0.;
+    #if NUM_HEMI_LIGHTS > 0
+      sAmb = .5 * (hemisphereLights[0].skyColor.g + hemisphereLights[0].groundColor.g);
+    #endif
+    float sDeep = 1. - smoothstep(.35, 1.45, sAmb);
+    vec3 sBase = diffuseColor.rgb, sK = vec3(.57735);
+    vec3 sTurned = max(sBase * cos(uSkinTurn) + cross(sK, sBase) * sin(uSkinTurn) + sK * dot(sK, sBase) * (1. - cos(uSkinTurn)), 0.);
+    outgoingLight *= mix(vec3(1.), (sTurned + .03) / (sBase + .03), sDeep);          // in the dark bands its colours turn
+    outgoingLight *= 1. - .25 * sFac * sFac;                                            // a deeper core where it faces you
+    outgoingLight += mix(sBase, sTurned, sDeep) * mix(.05, .22, sDeep);                // a little light of its own, more in the dark
+    outgoingLight += mix(uSkinRim, uSkinAbyss, sDeep) * sFres * mix(.45, .65, sDeep);   // and a lit rim
+  }`;
+// material: a lit three.js material already set up (it may sway, glow, be instanced). look: { rim, deep, turn } as in SOFT.
+// Its geometries need smoothNormals() once each; without, it is shaded by its flat faces as before.
+export function softSkin(material, look) {
+  const before = material.onBeforeCompile, key = material.customProgramCacheKey ? material.customProgramCacheKey() : '', solid = material.side === THREE.FrontSide;
+  const u = { uSkinRim: { value: new THREE.Color(look.rim) }, uSkinAbyss: { value: new THREE.Color(look.deep) }, uSkinTurn: { value: look.turn * Math.PI / 180 } };
+  if (solid) material.alphaHash = true; // a sheet (a blade of kelp) would turn to grain wherever it is not face on, so only solid things fade at the edge
+  material.onBeforeCompile = (sh, renderer) => {
+    if (before) before(sh, renderer);
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = `attribute vec3 softNormal;\n${sh.vertexShader.replace('#include <beginnormal_vertex>', 'vec3 objectNormal = dot(softNormal, softNormal) > 0.0 ? softNormal : normal;')}`;
+    sh.fragmentShader = `uniform vec3 uSkinRim;\nuniform vec3 uSkinAbyss;\nuniform float uSkinTurn;\n${sh.fragmentShader
+      .replace('#include <alphahash_fragment>', `${solid ? 'diffuseColor.a = smoothstep(0.0, 0.42, abs(dot(normalize(vNormal), normalize(vViewPosition))));\n' : ''}#include <alphahash_fragment>`)
+      .replace('#include <opaque_fragment>', `${SKIN}\n#include <opaque_fragment>`)}`;
+  };
+  material.customProgramCacheKey = () => `${key}|skin${solid ? 1 : 0}`;
+  material.userData.softSkin = true;
+  return material;
+}
+// gives a geometry a second set of normals, softNormal: at each corner, the average of the faces that meet there
+export function smoothNormals(geo) {
+  if (geo.attributes.softNormal) return geo;
+  const g = geo.index ? null : geo, pos = geo.attributes.position, n = pos.count, sum = new Map(), out = new Float32Array(n * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), key = (i) => `${Math.round(pos.getX(i) * 1e3)},${Math.round(pos.getY(i) * 1e3)},${Math.round(pos.getZ(i) * 1e3)}`;
+  const tri = (i, j, k) => { a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, j).sub(a); c.fromBufferAttribute(pos, k).sub(a); b.cross(c); // (left unnormalised: a bigger face counts for more)
+    for (const v of [i, j, k]) { const id = key(v), s = sum.get(id); if (s) s.add(b); else sum.set(id, b.clone()); } };
+  if (g) for (let i = 0; i + 2 < n; i += 3) tri(i, i + 1, i + 2); else for (let i = 0; i + 2 < geo.index.count; i += 3) tri(geo.index.getX(i), geo.index.getX(i + 1), geo.index.getX(i + 2));
+  for (let i = 0; i < n; i++) { const s = sum.get(key(i)); if (s && s.lengthSq() > 0) { a.copy(s).normalize(); out[i * 3] = a.x; out[i * 3 + 1] = a.y; out[i * 3 + 2] = a.z; } }
+  geo.setAttribute('softNormal', new THREE.BufferAttribute(out, 3));
+  return geo;
+}

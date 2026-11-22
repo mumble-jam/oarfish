@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { NPC, BANDS, inOrder, make, swarmKit, tweaks, resolve, paintOf, stoneOf, look as theLook } from './npc.js';
 import { shellMaterial } from './shells.js';
-import { softBody } from './soft.js';
+import { softBody, softSkin, smoothNormals } from './soft.js';
 import { alive, growing, tint } from './kit.js';
 import { FLOORS, SWARMS } from './world.js';
 import { buildOarfish } from './oarfish.js';
@@ -79,6 +79,7 @@ export function createLibrary({ renderer, root, onClose }) {
     } else if (spec.kind === 'thing' || spec.kind === 'shell') { // something that stands, lies or drifts: one, or a few of it in its several tints
       const pal = resolve(spec.paletteFrom || S.id).palette, geo = spec.build(pal), show = spec.show || {}, n = show.n || 1, mm = spec.material || {};
       const mat = spec.kind === 'shell' ? shellMaterial() : mm.stone ? new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: mm.double ? THREE.DoubleSide : THREE.FrontSide }) : spec.baked ? alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })) : growing(mm, clock);
+      if (preview.soft && spec.soft?.skin) { softSkin(mat, spec.soft); smoothNormals(geo); } // what comes in hundreds keeps its model and takes a soft skin
       const own = Object.keys(pal).filter((k) => /^tone\d+$/.test(k)).map((k) => pal[k]);
       const tones = spec.tintWith === 'paint' ? [paintOf(S.band)] : spec.tintWith === 'clay' ? [tint('#c98f6c', paintOf(S.band), 0.28)] : spec.tintWith ? stoneOf(S.band) : own.length ? own : ['#ffffff'];
       const mesh = new THREE.InstancedMesh(geo, mat, n), c = new THREE.Color(), rand = rng(11), base = [].concat(show.scale ?? 1), sc3 = base.length === 3 ? base : [base[0], base[0], base[0]], k0 = spec.kind === 'shell' ? preview.scale : 1;
