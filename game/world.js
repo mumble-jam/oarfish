@@ -1053,6 +1053,35 @@ float seaLight(vec2 p, float t) {
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
   }
 
+  // Where a foot comes down (legs.js): on the bed, or on top of whatever low stone is there. A foot that would land inside something too
+  // tall to step up onto is put down beside it. p is changed: its height always, its place only in that last case.
+  function footing(p, step = 1.25) {
+    let base = height(p.x, p.z), y = base;
+    for (const c of colliders) {
+      if (c.off) continue;
+      const dx = wrapD(p.x - c.x), dz = wrapD(p.z - c.z), d2 = dx * dx + dz * dz;
+      if (d2 >= c.r * c.r) continue;
+      const ball = c.top === undefined, h = ball ? Math.sqrt(c.r * c.r - d2) : 0, top = ball ? c.y + h : c.top;
+      if (top <= base || (ball && c.y - h > base + 2)) continue; // sunk in the bed, or overhead like a lintel
+      if (top - base <= step) { y = Math.max(y, top); continue; }
+      const d = Math.sqrt(d2) || 1e-4, k = (c.r + 0.12 - d) / d;
+      p.x += dx * k; p.z += dz * k; base = y = height(p.x, p.z);
+    }
+    p.y = y; return p;
+  }
+  // Keeps a walker's body out of what is too tall for it to climb over. p is moved sideways only.
+  function steer(p, radius, step = 1.25) {
+    for (const c of colliders) {
+      if (c.off) continue;
+      const dx = wrapD(p.x - c.x), dz = wrapD(p.z - c.z), R = c.r + radius, d2 = dx * dx + dz * dz;
+      if (d2 >= R * R) continue;
+      const base = height(c.x, c.z);
+      if (c.top !== undefined ? c.top - base <= step : c.y + c.r - base <= step || c.y - c.r > base + 2) continue;
+      const d = Math.sqrt(d2) || 1e-4, k = (R - d) / d;
+      p.x += dx * k; p.z += dz * k;
+    }
+    return p;
+  }
   function pushOut(p, radius) {
     for (const c of colliders) {
       const dx = wrapD(p.x - c.x), dz = wrapD(p.z - c.z);
@@ -1198,6 +1227,6 @@ float seaLight(vec2 p, float t) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  return { update, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

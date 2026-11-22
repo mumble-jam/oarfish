@@ -305,6 +305,25 @@ const live = await ev(() => { const g = window.__game, m = g.music, rest = m.par
   const sc = g.world.schools.find((x) => x.left > 0), here = g.rig.pos.clone(); g.rig.pos.set(sc.x, g.rig.pos.y, sc.z); const bySwarm = g.activity(); g.rig.pos.copy(here);
   return { rest, quiet, busy, after, bySwarm }; });
 check('the band\'s energy rests where its slider is, climbs with what is going on round the fish and settles again; a swarm close by counts', Math.abs(live.quiet - live.rest) < 0.03 && live.busy > 0.95 && Math.abs(live.after - live.rest) < 0.03 && live.bySwarm > 0.1 && live.bySwarm <= 1, JSON.stringify(live));
+// the Keeper walks on its own legs: feet planted, body riding on them over the ground as it lies
+const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
+  const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, W = R.walker, home = { x: r.x - r.nx * 24, z: r.z - r.nz * 24 };
+  T.put(home.x - r.nx * 36, w.height(home.x - r.nx * 36, home.z - r.nz * 36) + 2, home.z - r.nz * 36, 0); g.run.safe = 1e9; // the fish well away: it has its ground to itself
+  S.ang = 2.75; G.pos.set(home.x + Math.sin(S.ang) * 8.6, 0, home.z + Math.cos(S.ang) * 8.6); G.pos.y = w.height(G.pos.x, G.pos.z) + 0.9; T.idle(0.6); // where the ground falls away
+  const steps0 = W.body.steps; let air = 0, off = 0, lean = 0, want = 0, ride = 0, n = 0, p = new G.pos.constructor();
+  for (let i = 0; i < 50; i++) { T.idle(0.06); air = Math.max(air, W.stepping);
+    for (const l of W.legs) if (l.t < 0) off = Math.max(off, Math.abs(l.foot.y - w.footing(p.copy(l.foot)).y)); // every foot that is down is on the ground, or on a stone
+    const m = G.mesh, c = Math.cos(m.rotation.y), sn = Math.sin(m.rotation.y), h = (x, z) => w.height(G.pos.x + x * c + z * sn, G.pos.z - x * sn + z * c); // the ground under it, across the body and along it
+    const across = Math.atan((h(2.6, 0) - h(-2.6, 0)) / 5.2), along = -Math.atan((h(0, 1.9) - h(0, -1.9)) / 3.8);
+    want = Math.max(want, Math.hypot(across, along)); lean += (m.rotation.z * across + m.rotation.x * along) / (Math.hypot(across, along) + 1e-6); ride += m.position.y - W.body.ground; n++; }
+  const walked = { steps: W.body.steps - steps0, air, off: +off.toFixed(3), slope: +want.toFixed(2), lean: +(lean / n).toFixed(2), ride: +(ride / n).toFixed(2), y: +(G.pos.y - w.height(G.pos.x, G.pos.z)).toFixed(2) };
+  T.put(G.pos.x - r.nx * 6, w.height(G.pos.x - r.nx * 6, G.pos.z - r.nz * 6) + 1.2, G.pos.z - r.nz * 6, Math.atan2(r.nx, r.nz)); g.run.safe = 1e9; S.cool = 99; T.idle(1.6); // a fish comes near, nose first
+  const to = Math.atan2(g.rig.pos.x - G.pos.x, g.rig.pos.z - G.pos.z), turn = Math.abs(Math.atan2(Math.sin(G.mesh.rotation.y - to), Math.cos(G.mesh.rotation.y - to)));
+  const wary = { pose: +R.pose.wary.toFixed(2), claws: +Math.min(...R.claws.map((k) => k.wrist.y)).toFixed(2), turn: +turn.toFixed(2) };
+  G.debug.hurt(1.6); T.idle(0.3); const stun = +R.pose.crouch.toFixed(2); G.debug.fall(); T.idle(2.5);
+  return { walked, wary, stun, down: { roll: +G.mesh.rotation.z.toFixed(2), curled: +Math.max(...W.legs.map((l) => l.tip.distanceTo(l.curl))).toFixed(2) } }; });
+check('the Keeper walks on its legs: its feet stay planted and step in turn, on the ground or on a stone, and its shell rides on them and leans with the slope', crab.walked.steps >= 12 && crab.walked.air >= 1 && crab.walked.air <= 5 && crab.walked.off < 0.05 && crab.walked.slope > 0.1 && crab.walked.lean > 0.04 && Math.abs(crab.walked.ride - 0.44) < 0.15 && Math.abs(crab.walked.y - 0.9) < 0.3, JSON.stringify(crab.walked));
+check('it turns to a fish that comes near and puts its claws up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.6 && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
 const cast = await ev(() => { const g = window.__game, m = g.music, quiet = { speed: 0, coil: 0, danger: 0, low: false, alive: true };
   const feed = (c, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { ...quiet, cast: c }); return m.state.sitting.join(); };
   const none = feed({}, 12), one = feed({ biter: 0.9 }, 4), many = feed({ biter: 0.9, angler: 0.8, hook: 0.7, drifter: 0.6, warden: 0.3 }, 6), names = (m.describe() || { sitting: [] }).sitting.join();

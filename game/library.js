@@ -86,7 +86,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
       S.lift = show.lift || 0;
     } else {
       const actor = make(S.id, { preview });
-      stand.add(actor.object); tris = actor.body.geometry.attributes.position.count / 3;
+      stand.add(actor.object); tris = actor.rig ? actor.rig.triangles : actor.body.geometry.attributes.position.count / 3;
       const extra = [];
       if (actor.segments) actor.segments(11).forEach((s, i) => { const a = (i + 1) * 0.24; s.position.set(4.2 * Math.cos(a) - 4.2, 0, -4.2 * Math.sin(a) - 0.5); s.rotation.y = a; stand.add(s); extra.push(s); }); // trailing from the head, round the ring it swims
       shown = { actor, body: actor.body, extra, dispose() { actor.dispose(); } };
@@ -109,8 +109,8 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     if (S.turn && !S.drag) S.yaw += dt * 0.3;
     if (shown?.actor) {
       const a = shown.actor, o = a.object;
-      a.tick(dt * (state.rate || 1), S.speed);
-      o.rotation.z = state.wobble ? 0.35 * Math.sin(S.t * 14) : 0;
+      if (a.rig) a.rig.show(dt, state, S.speed); // it stands on its own legs
+      else { a.tick(dt * (state.rate || 1), S.speed); o.rotation.z = state.wobble ? 0.35 * Math.sin(S.t * 14) : 0; }
       if (spec.spin) { o.rotation.y += dt * spec.spin[1]; o.rotation.x += dt * spec.spin[0]; }
       if (state.sway) o.rotation.y = Math.sin(S.t * 0.4) * 0.6;
       if (a.parts.glow && state.lure !== undefined) a.parts.glow.scale.setScalar(state.lure * (1 + 0.08 * Math.sin(S.t * 5)));

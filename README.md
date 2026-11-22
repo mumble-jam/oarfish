@@ -30,6 +30,8 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/library.js` | The specimen library: a playground for every component. |
 | `game/foes.js` | How the hunters behave (biters, anglers, hooks, drifters, leeches) and loose tail pieces. |
 | `game/guards.js` | The four keepers of the rifts. |
+| `game/legs.js` | Legs that walk by themselves: feet that plant and step in two groups, and a body that rides on them and leans with the ground. Not tied to any one animal. |
+| `game/crab.js` | The Keeper put together: its shell, eight legs and two claws, and the poses that say what it is about to do. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |

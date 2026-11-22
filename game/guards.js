@@ -27,6 +27,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const glowMap = keep(glowTexture());
   const sprite = (color, size) => { const s = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: glowMap, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }))); s.scale.setScalar(size); root.add(s); return s; };
   const warn = sprite('#ff7f96', 1), lure = actor.parts.glow || null; // the Lamplighter's lamp comes with it
+  const rig = actor.rig || null, was = new THREE.Vector3(); // the Keeper walks on its own legs (crab.js): it is told where it is, and stands there as its feet find the ground
   // the veil: bars of light across the mouth of the rift while its keeper lives
   const lid = new THREE.Mesh(keep(rift.veil()), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   lid.frustumCulled = false; root.add(lid);
@@ -72,6 +73,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     return { kind: 'guard', pos: pos.clone(), food: 0 };
   }
   const tailNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(pos) < reach) return j; return -1; };
+  const tailPoint = (ctx) => { const J = ctx.joints; if (!J) return null; const N = J.length - 1; let best = null, near = 1e9; for (let j = Math.ceil(N * 0.4); j <= N; j++) { const d = J[j].distanceToSquared(pos); if (d < near) { near = d; best = J[j]; } } return best; };
   const baitNear = (ctx, reach) => ctx.pieces.find((p) => p.kind === 'decoy' && !p.dead && p.life > 0.8 && p.pos.distanceTo(pos) < reach) || null;
   const go = (dt, to, speed, turn = 4) => { // swim toward a point
     v.subVectors(to, pos); const d = v.length();
@@ -87,13 +89,22 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
     const fish = ctx.pos, far = Math.hypot(fish.x - W.x, fish.z - W.z), awake = ctx.playing && far < 26;
     let warnSize = 0;
-    if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, pos.y - 1.6 * dt); mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
+    if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, pos.y - 1.6 * dt); if (!rig) mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
     else if (S.stun > 0) { S.stun -= dt; vel.multiplyScalar(Math.exp(-4 * dt)); pos.addScaledVector(vel, dt); }
-    else if (kind === 'keeper') { // round and round the rim; a tail within reach gets snapped at
-      if (S.state === 'snap') { warnSize = 2.4; S.danger = 0.6; if (S.t <= 0) { const j = tailNear(ctx, 2.4); if (j >= 0 && game.bite(2, j, pos)) S.bites++; set('idle'); S.cool = 3; } }
+    else if (kind === 'keeper') { // round and round its ground, sideways, as crabs go; a tail within reach gets snapped at
+      if (S.state === 'snap') { // it turns on the tail as it winds up
+        warnSize = 2.4; S.danger = 0.6; const tail = tailPoint(ctx);
+        if (tail) yaw += wrapPi(Math.atan2(tail.x - pos.x, tail.z - pos.z) - yaw) * (1 - Math.exp(-7 * dt));
+        if (S.t <= 0) { const j = tailNear(ctx, 2.4); if (j >= 0 && game.bite(2, j, pos)) S.bites++; set('idle'); S.cool = 3; S.struck = 0.3; }
+      }
       else if (target.progress > 0.15) vel.multiplyScalar(Math.exp(-6 * dt)); // a body going round it: it pulls into its shell and sits tight
       else {
-        S.ang += dt * 0.17; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1], W.z + Math.cos(S.ang) * HOME[0]); go(dt, aim, 1.5, 2);
+        S.ang += dt * 0.17; aim.set(W.x + Math.sin(S.ang) * HOME[0], 0, W.z + Math.cos(S.ang) * HOME[0]); aim.y = world.height(aim.x, aim.z) + HOME[1]; // over the ground as it lies, not at one height
+        v.subVectors(aim, pos).setY(0); const d = v.length(); if (d > 1e-3) vel.lerp(v.multiplyScalar(1.5 / d), 1 - Math.exp(-2 * dt));
+        pos.addScaledVector(vel, dt); world.steer(pos, 1.2); // round a column, not through it
+        pos.y = damp(pos.y, world.height(pos.x, pos.z) + HOME[1], 3, dt);
+        const face = awake && pos.distanceTo(fish) < 15 ? Math.atan2(fish.x - pos.x, fish.z - pos.z) : Math.atan2(pos.x - W.x, pos.z - W.z); // it watches a fish that is near; otherwise it looks out from its ground
+        yaw += wrapPi(face - yaw) * (1 - Math.exp(-2.4 * dt));
         if (awake && S.cool <= 0 && tailNear(ctx, 2.8) >= 0) set('snap', 0.6);
       }
     } else if (kind === 'shearer') { // circle, aim at the tail, charge through where it was, tire
@@ -133,8 +144,18 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     }
     if (!S.done) pos.y = clamp(pos.y, world.height(pos.x, pos.z) + 0.6, world.ceiling - 0.5);
 
-    mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());
-    if (!S.done) mesh.rotation.z = S.stun > 0 ? 0.35 * Math.sin(ctx.time * 16) : 0;
+    if (rig) {
+      const moved = Math.hypot(pos.x - was.x, pos.z - was.z), k = dt > 1e-5 && moved < 5 ? 1 / dt : 0, near = pos.distanceTo(fish); // how it really moved, whatever moved it
+      S.struck = Math.max(0, (S.struck || 0) - dt);
+      rig.update(dt, { x: pos.x, z: pos.z, yaw, vx: (pos.x - was.x) * k, vz: (pos.z - was.z) * k, ground: world.footing, floor: world.footing(v.set(pos.x, 0, pos.z)).y, time: ctx.time,
+        wary: awake && !S.done ? clamp(1.3 - near / 11, 0, 1) : 0, look: fish, snap: S.done ? -1 : S.state === 'snap' ? clamp(1 - S.t / 0.6, 0, 1) : S.struck > 0 ? 1 : -1, strike: S.done ? null : tailPoint(ctx),
+        tuck: !S.done && target.progress > 0.15, stun: S.stun > 0, limp: S.done });
+      const clear = pos.y - (rig.walker.body.ground + HOME[1]) - 0.7; if (clear > 0 && !S.done) mesh.position.y += clear; // lifted off the ground, it is drawn where it is
+      was.copy(pos);
+    } else {
+      mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());
+      if (!S.done) mesh.rotation.z = S.stun > 0 ? 0.35 * Math.sin(ctx.time * 16) : 0;
+    }
     mat.emissiveIntensity = 0.12 + 0.9 * S.flash;
     warn.position.copy(pos).y += 0.6; warn.scale.setScalar(Math.max(0.01, warnSize * (1 + 0.15 * Math.sin(ctx.time * 30)))); warn.visible = warnSize > 0 && !S.done;
     if (lure) { const lit = !S.done && S.state !== 'dim' && S.stun <= 0; lure.scale.setScalar(damp(lure.scale.x, lit ? (S.state === 'windup' ? 5 : 3) : 0.4, 8, dt)); }
@@ -152,5 +173,5 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (p.y < top && rift.in(p.x, p.z) > rift.ledge - 0.3) p.y = top;
   }
   function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
-  return { update, ram, pushOut, dispose, wrapped: fall, state: S, kind, pos, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt } };
+  return { update, ram, pushOut, dispose, wrapped: fall, state: S, kind, pos, rig, mesh, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt } };
 }

@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { alive } from './kit.js';
 import { glowTexture, lerp } from './geo.js';
 import * as model from './critters.js';
+import { crabRig } from './crab.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -66,10 +67,12 @@ export const NPCS = [
       line.position.y = 0.7; line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
 
-  { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 5, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
+  { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 6, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
     about: 'A great crab under a dome of plates. It keeps the first rift.',
     paintOf: 0, palette: { tone: DISTRICT[0], pale: '#e9dfc0', dark: '#3b2a4d', deep: '#2a1d38', eye: '#eaff7c' },
-    build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD, states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
+    build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD,
+    assemble(a, pal) { crabRig(a, pal); }, // the shell is the model; its legs and claws are hung on it, and walk (crab.js)
+    states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'walk', name: 'Walking', speed: 1.5 }, { id: 'wary', name: 'Claws up', speed: 0 }, { id: 'snap', name: 'Snapping', speed: 0 }, { id: 'tuck', name: 'Shut tight', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0 }, { id: 'down', name: 'Beaten', speed: 0 }] },
   { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 6, role: 'Charges the tail in a straight line, then tires. Ram or wrap it while it is tired.',
     about: 'A sawfish, the saw toothed in the district’s colour. It keeps the second rift.',
     paintOf: 1, palette: { tone: DISTRICT[1], back: '#3b2a4d', flank: '#55406b', belly: '#d9cfe0', saw: '#e9dfc0', eye: '#eaff7c' },
