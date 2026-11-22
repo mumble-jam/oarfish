@@ -319,11 +319,19 @@ const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(
   const walked = { steps: W.body.steps - steps0, air, off: +off.toFixed(3), slope: +want.toFixed(2), lean: +(lean / n).toFixed(2), ride: +(ride / n).toFixed(2), y: +(G.pos.y - w.height(G.pos.x, G.pos.z)).toFixed(2) };
   T.put(G.pos.x - r.nx * 6, w.height(G.pos.x - r.nx * 6, G.pos.z - r.nz * 6) + 1.2, G.pos.z - r.nz * 6, Math.atan2(r.nx, r.nz)); g.run.safe = 1e9; S.cool = 99; T.idle(1.6); // a fish comes near, nose first
   const to = Math.atan2(g.rig.pos.x - G.pos.x, g.rig.pos.z - G.pos.z), turn = Math.abs(Math.atan2(Math.sin(G.mesh.rotation.y - to), Math.cos(G.mesh.rotation.y - to)));
-  const wary = { pose: +R.pose.wary.toFixed(2), claws: +Math.min(...R.claws.map((k) => k.wrist.y)).toFixed(2), turn: +turn.toFixed(2) };
-  G.debug.hurt(1.6); T.idle(0.3); const stun = +R.pose.crouch.toFixed(2); G.debug.fall(); T.idle(2.5);
-  return { walked, wary, stun, down: { roll: +G.mesh.rotation.z.toFixed(2), curled: +Math.max(...W.legs.map((l) => l.tip.distanceTo(l.curl))).toFixed(2) } }; });
+  const big = R.claws.find((k) => k.big), small = R.claws.find((k) => !k.big);
+  const wary = { pose: +R.pose.wary.toFixed(2), claws: +big.wrist.y.toFixed(2), turn: +turn.toFixed(2) };
+  // its tail left in reach: the strike is the big claw's, the one on its right
+  T.put(G.pos.x - r.nx * 5.4, w.height(G.pos.x - r.nx * 5.4, G.pos.z - r.nz * 5.4) + 1.1, G.pos.z - r.nz * 5.4, Math.atan2(r.nx, r.nz) + Math.PI); g.run.safe = 1e9; T.idle(0.3); G.debug.set('snap', 0.6);
+  const tip = (k) => k.hand.localToWorld(p.set(0, -0.2 * k.stout, k.l2 + k.span * 0.8)).clone(), reach = { big: 9, small: 9 };
+  for (let i = 0; i < 16; i++) { T.idle(0.05); G.mesh.updateMatrixWorld(true); const J = g.rig.joints; let tail = J[J.length - 1], near = 1e9; for (let j = Math.ceil((J.length - 1) * 0.4); j < J.length; j++) { const d = J[j].distanceTo(G.pos); if (d < near) { near = d; tail = J[j]; } }
+    reach.big = Math.min(reach.big, tip(big).distanceTo(tail)); reach.small = Math.min(reach.small, tip(small).distanceTo(tail)); }
+  const claws = { right: big.shoulder.x < 0, longer: +((big.l1 + big.l2 + big.span) / (small.l1 + small.l2 + small.span)).toFixed(2), big: +reach.big.toFixed(2), small: +reach.small.toFixed(2) };
+  S.cool = 99; T.idle(0.5); G.debug.hurt(1.6); T.idle(0.3); const stun = +R.pose.crouch.toFixed(2); G.debug.fall(); T.idle(2.5);
+  return { walked, wary, claws, stun, down: { roll: +G.mesh.rotation.z.toFixed(2), curled: +Math.max(...W.legs.map((l) => l.tip.distanceTo(l.curl))).toFixed(2) } }; });
 check('the Keeper walks on its legs: its feet stay planted and step in turn, on the ground or on a stone, and its shell rides on them and leans with the slope', crab.walked.steps >= 12 && crab.walked.air >= 1 && crab.walked.air <= 5 && crab.walked.off < 0.05 && crab.walked.slope > 0.1 && crab.walked.lean > 0.04 && Math.abs(crab.walked.ride - 0.44) < 0.15 && Math.abs(crab.walked.y - 0.9) < 0.3, JSON.stringify(crab.walked));
-check('it turns to a fish that comes near and puts its claws up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.6 && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
+check('it turns to a fish that comes near and puts its big claw up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.6 && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
+check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.35 && crab.claws.big < 1.1 && crab.claws.small > crab.claws.big + 0.5, JSON.stringify(crab.claws));
 const cast = await ev(() => { const g = window.__game, m = g.music, quiet = { speed: 0, coil: 0, danger: 0, low: false, alive: true };
   const feed = (c, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { ...quiet, cast: c }); return m.state.sitting.join(); };
   const none = feed({}, 12), one = feed({ biter: 0.9 }, 4), many = feed({ biter: 0.9, angler: 0.8, hook: 0.7, drifter: 0.6, warden: 0.3 }, 6), names = (m.describe() || { sitting: [] }).sitting.join();

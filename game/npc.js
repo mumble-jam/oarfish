@@ -68,7 +68,7 @@ export const NPCS = [
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
 
   { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 6, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
-    about: 'A great crab under a dome of plates. It keeps the first rift.',
+    about: 'A great crab under a dome of plates, its right claw far bigger than its left. It keeps the first rift.',
     paintOf: 0, palette: { tone: DISTRICT[0], pale: '#e9dfc0', dark: '#3b2a4d', deep: '#2a1d38', eye: '#eaff7c' },
     build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD,
     assemble(a, pal) { crabRig(a, pal); }, // the shell is the model; its legs and claws are hung on it, and walk (crab.js)

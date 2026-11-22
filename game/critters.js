@@ -141,8 +141,13 @@ export const KEEPER = {
   legs: side4((s, i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 1.3, l2: 1.6,
     hip: [s * [1.2, 1.33, 1.29, 1.04][i], 0.3, [0.62, 0.1, -0.42, -0.94][i]], rest: [s * [2.5, 3.15, 3.1, 2.4][i], [1.8, 0.58, -0.72, -2.0][i]],
     curl: [s * [0.75, 0.9, 0.9, 0.7][i], -0.55, [0.75, 0.2, -0.4, -0.85][i]] })), // drawn up under the belly, when it is done for
-  // a claw: an arm from the shoulder to the elbow, then the hand, which is the forearm and the lower finger in one piece; the upper finger hinges on it
-  claws: [1, -1].map((s) => ({ side: s, shoulder: [s * 1.0, 0.3, 1.05], l1: 0.9, l2: 0.76, hinge: [0, 0.1, 0.74] })),
+  // Two claws, and not a pair. On its right the crusher: big, slow, and the one it strikes with. On its left the cutter: small and quick, the one it feeds with.
+  // A claw is an arm from the shoulder to the elbow, then the hand, which is the forearm and the lower finger in one piece; the upper finger hinges on it.
+  // l1, l2: arm and forearm; span: how far the fingers reach past the hinge; stout: how thick it all is
+  claws: [
+    { side: -1, big: true, shoulder: [-1.02, 0.32, 1.02], l1: 1.05, l2: 0.95, hinge: [0, 0.16, 0.9], span: 0.95, stout: 1.5 },
+    { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 0.78, l2: 0.62, hinge: [0, 0.07, 0.6], span: 0.6, stout: 0.72 },
+  ],
 };
 export function keeper(pal) {
   const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8);
@@ -154,9 +159,9 @@ export function keeper(pal) {
   both((s) => {
     m.limb([s * 0.32, 0.33, 1.45], [s * 0.44, 0.74, 1.74], 0.08, 0.06, 4, dark).eye([s * 0.44, 0.8, 1.78], [s * 0.35, 0.3, 1], 0.14, { iris: pal.eye, glow: true });
     for (let i = 0; i < 2; i++) m.limb([s * 0.14, 0.12, 1.6], [s * (0.2 + i * 0.16), -0.05, 1.95 - i * 0.1], 0.05, 0.02, 3, pale); // mouth parts
-    m.limb([s * 0.78, 0.3, 0.95], [s * 1.02, 0.3, 1.07], 0.24, 0.2, 5, deep); // the socket a claw turns in
     for (const leg of KEEPER.legs) if (leg.side === s) m.limb([leg.hip[0] * 0.8, 0.3, leg.hip[2] * 0.9], leg.hip, 0.2, 0.16, 4, deep); // and one for each leg
   });
+  for (const c of KEEPER.claws) m.limb([c.shoulder[0] * 0.76, c.shoulder[1], c.shoulder[2] - 0.1], c.shoulder, 0.24 * c.stout, 0.2 * c.stout, 5, deep); // the socket each claw turns in
   return m.geometry();
 }
 // the two lengths of a walking leg: from the shell up to the knee, and from the knee down to a point
@@ -167,14 +172,19 @@ export function keeperLeg(pal) {
   const lower = mesher().limb([0, 0, -0.05], [0, 0, l2 * 0.6], 0.165, 0.11, 4, [deep, dark]).limb([0, 0, l2 * 0.6], [0, 0, l2], 0.11, 0.015, 4, [dark, pale]);
   return { upper: upper.geometry(), lower: lower.geometry() };
 }
-// the three pieces of a claw. The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge
-export function keeperClaw(pal) {
-  const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.claws[0];
-  const arm = mesher().limb([0, 0, 0], [0, 0, l1], 0.2, 0.18, 5, [dark, deep]);
-  const hand = mesher().limb([0, 0, -0.05], [0, 0, l2], 0.2, 0.31, 5, [deep, dark]);
-  hand.cap(hand.last, [0, 0, 1], dark, 0.1).limb([0, -0.1, l2 - 0.06], [0, -0.3, l2 + 0.74], 0.21, 0.03, 5, [dark, pale]);
-  const finger = mesher().limb([0, 0, -0.05], [0, 0.07, 0.8], 0.27, 0.035, 5, [dark, pale]);
-  return { arm: arm.geometry(), hand: hand.geometry(), finger: finger.geometry() };
+// the three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge
+export function keeperClaw(pal, c) {
+  const { pale, dark, deep } = pal, { l1, l2, span: f, stout: w } = c;
+  const arm = mesher().limb([0, 0, 0], [0, 0, l1], 0.2 * w, 0.18 * w, 5, [dark, deep]);
+  const hand = mesher().limb([0, 0, -0.05], [0, 0, l2], 0.2 * w, 0.31 * w, 5, [deep, dark]);
+  const low = [[0, -0.1 * w, l2 - 0.06], [0, -0.3 * w, l2 + f * 0.92]], up = [[0, 0, -0.05], [0, 0.07 * w, f]]; // the lower finger, in the hand's space; the upper, in its own
+  hand.cap(hand.last, [0, 0, 1], dark, 0.1 * w).limb(low[0], low[1], 0.21 * w, 0.03, 5, [dark, pale]);
+  const top = mesher().limb(up[0], up[1], 0.27 * w, 0.035, 5, [dark, pale]);
+  if (c.big) for (const t of [0.3, 0.5, 0.7]) { // the crusher's teeth: blunt knobs down the inside of both fingers
+    const on = (m, [p, q], r0, r1, sign) => { const y = p[1] + (q[1] - p[1]) * t, z = p[2] + (q[2] - p[2]) * t, r = r0 + (r1 - r0) * t; m.limb([0, y + sign * r * 0.55, z], [0, y + sign * (r + 0.1), z + 0.02], 0.1, 0.045, 4, pale); };
+    on(hand, low, 0.21 * w, 0.03, 1); on(top, up, 0.27 * w, 0.035, -1);
+  }
+  return { arm: arm.geometry(), hand: hand.geometry(), finger: top.geometry() };
 }
 
 // ---------------------------------------------------------------- the Shearer: a sawfish, the saw toothed in the district's colour
