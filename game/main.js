@@ -1030,7 +1030,7 @@ export async function start(saved = {}) {
     const P = pad.poll();
     if (P.active) setDev('pad');
     const text = P.blocked ? 'Controllers are blocked in this view of the page.' : !P.connected ? 'No controller seen yet. To use one, click the page once, then press any button on it.'
-      : `${pad.title()} is connected${pad.motors ? ', and says it can vibrate' : ', but the browser reports no vibration motors for it'}.${P.standard ? '' : ' The browser does not recognise its layout, so buttons may be mixed up. Chrome and Edge read a DualSense properly.'}`;
+      : `${pad.title()} is connected${pad.motors ? ', and can vibrate' : `, but the browser reports no vibration motors for it${!/dualsense|054c/i.test(P.name) ? '' : pad.direct.supported ? ': press “Connect DualSense motors” below' : ': Chrome and Edge can get round that'}`}.${P.standard ? '' : ' The browser does not recognise its layout, so buttons may be mixed up. Chrome and Edge read a DualSense properly.'}`;
     if (text !== padText) { padText = text; $('pad-note').textContent = text; }
     if (P.connected && wait && wait.p) { // the binding menu is listening for a button
       const i = pad.anyPressed();
@@ -1089,7 +1089,7 @@ export async function start(saved = {}) {
   $('btn-keys').addEventListener('click', () => setFull(!ui.full, true));
   // ---- testing tools: in the pause menu, and only while the keys and tools are on screen. Straight to any band, a longer body, the keeper out of the way
   $('dev-bands').innerHTML = FLOORS.map((f, i) => `<button type="button" data-band="${i}" title="${f.name}" aria-pressed="false">${i + 1}</button>`).join('');
-  const DEV_NOTE = 'Shown only while keys and tools are on screen. A band starts fresh, at the length you have.';
+  const DEV_NOTE = 'For trying things out. A band starts fresh, at the length you have.';
   function showDev(msg) { for (const b of $('dev-bands').children) b.setAttribute('aria-pressed', String(+b.dataset.band === run.floor)); $('dev-keeper').disabled = !guard || guard.done; $('dev-grow').disabled = run.segs >= MAX_SEGS; $('dev-msg').textContent = msg || DEV_NOTE; }
   $('dev-bands').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || ended()) return; enterFloor(+b.dataset.band, false); setPaused(false); if (e.isTrusted) grab(true); });
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });

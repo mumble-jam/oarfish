@@ -283,7 +283,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 .keys.menu li.key { display: flex; }
 /* The game as it is meant to be seen: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
    H (or the pause menu) turns on the full view, which adds the key list, the tuning drawer and the model tools. */
-#stage:not(.full) #pause .dev { display: none; } /* the testing tools are for whoever has the keys and tools on screen */
 #stage:not(.full) > .keys, #stage:not(.full) > .tools, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
 #stage:not(.full):not(.paused) > .top > #btn-fs, #stage:not(.full):not(.paused) > .top > #music-tab { display: none; }
 #stage:not(.full):not(.paused) > .top > button { opacity: 0.72; transition: opacity 0.2s; }

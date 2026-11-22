@@ -36,7 +36,7 @@ Two people work on this, both through Claude. They are designers, not engineers.
 - **The nursery** (the tutorial opening) rebuilds the start of band 1. The checks turn it off with `window.__noNursery = true`; `tools/test_teach.mjs` is the one suite that runs it.
 - **Browser features need a click and may be refused**: pointer lock, full screen, clipboard, audio. Every call is in a click handler and catches refusal. Storage is wrapped in try/catch and may come back empty.
 - **Feedback is copied, never sent.** "Leave feedback" (pause menu, and the end of a dive) opens a sheet in the pause menu's place (`#pause.noting`, `openNote` in `main.js`). The note, with a few lines on how the dive went that the player can read and leave out, goes to the clipboard or to the device's share sheet for them to send themselves. The site has no server and collects nothing; keep it that way unless the owner asks for a form or an address to send to.
-- **Testing tools** are a section of the pause menu that shows only in the full view (`#pause .dev`): go straight to any band, grow four segments, beat the band's keeper. Add to it when something new needs a shortcut to be tested by hand; never show it in the plain view.
+- **Testing tools** are a section of the pause menu (`#pause .dev`), shown in either view: go straight to any band, grow four segments, beat the band's keeper. Add to it when something new needs a shortcut to be tested by hand. (They were first hidden in the plain view, and George could not find them.)
 - **`window.__game`** is the hook the checks drive. `sim(seconds, forced)` advances the dive without real time. Keep it working when you change `main.js`.
 
 ## Words on screen
