@@ -10,6 +10,9 @@
     "shots": "node tools/shot_models.mjs now"
   },
   "devDependencies": {
+    "@fontsource/alegreya-sans": "^5.3.0",
+    "@fontsource/im-fell-english": "^5.3.0",
+    "@fontsource/im-fell-english-sc": "^5.3.0",
     "playwright": "^1.63.0",
     "three": "0.170.0"
   }

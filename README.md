@@ -65,7 +65,7 @@ npx playwright install chromium
 npm test
 ```
 
-Five suites drive the real game in a headless browser: the dive itself, the Sum and the endings, controls, the teaching, and the library. `npm run shots` photographs every model into `out/shots/`; `node tools/shot_rift.mjs` photographs each band's rift.
+Five suites drive the real game in a headless browser: the dive itself, the Sum and the endings, controls, the teaching, and the library. `npm run shots` photographs every model into `out/shots/`; `node tools/shot_rift.mjs` photographs each band's rift. `thumbnail.jpg` is the picture a shared link shows; `node tools/shot_thumbnail.mjs && python3 tools/thumbnail.py out/shots/thumbnail.png thumbnail.jpg` takes it again from the running game.
 
 If you already have Chrome, `CHROME=/path/to/chrome npm test` uses it instead of downloading one.
 
