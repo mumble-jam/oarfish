@@ -1040,7 +1040,7 @@ float seaLight(vec2 p, float t) {
     }
     // the goal sits on the nearest copy of the world; its beam turns to face the camera
     const ox = T * Math.round((focus.x - goal.x) / T), oz = T * Math.round((focus.z - goal.z) / T);
-    mists.forEach((m, i) => { m.mesh.position.set(ox, Math.sin(t * 0.35 + i * 1.3) * 0.2, oz); m.mesh.material.opacity = m.opacity * (0.88 + 0.12 * Math.sin(t * 0.5 + i * 2.1)); }); // it breathes
+    clouds.forEach((c, i) => { const slide = c.flock ? Math.sin(t * 0.07 + i * 2.1) * 0.7 : 0; c.mesh.position.set(ox + rift.tx * slide, c.flock ? Math.sin(t * 0.3 + i * 1.9) * 0.22 : 0, oz + rift.tz * slide); }); // the bank is never quite still
     for (const b of beacons) {
       b.position.x = goal.x + ox; b.position.z = goal.z + oz;
       b.rotation.y = Math.atan2(camera.position.x - b.position.x, camera.position.z - b.position.z);
@@ -1080,25 +1080,53 @@ float seaLight(vec2 p, float t) {
     fishMesh.instanceMatrix.needsUpdate = true;
     return at;
   }
-  // Mist in the rift: sheets of it lying one under another between the walls, pale above and dark below, so that looking
-  // in there is no bottom to see, only the next band's water rising to meet this one. The fish sinks into it and is gone.
-  const mists = [], murk = rift ? pit.clone().multiplyScalar(0.8) : null;
+  // Cloud in the rift: a bank of faceted puffs packed between the walls just under the ledges, lit like the stone, with a
+  // pale floor under them so that no bed shows through the gaps. The fish drops into it and is gone (main.js closes the
+  // water in round it, in the cloud's colour). The puffs are in three flocks that rise, fall and slide a little apart.
+  const clouds = [], murk = rift ? new THREE.Color('#eef7f3').lerp(new THREE.Color(FLOORS[floor + 1].water), 0.2) : null; // the cloud's colour, from inside it
   if (rift) {
-    const pale = new THREE.Color(FLOORS[floor + 1].water).lerp(new THREE.Color(F.sky), 0.22);
+    const pale = new THREE.Color('#f3faf6').lerp(new THREE.Color(F.water), 0.08), shade = pale.clone().lerp(new THREE.Color(FLOORS[floor + 1].water), 0.42);
     const back = (t) => 0.5 - Math.sin(Math.asin(1 - 2 * clamp(t, 0, 1)) / 3); // smooth(), the other way round: how far in the wall is at a given depth
-    for (let k = 0; k < 7; k++) {
-      const depth = rift.step + 0.7 + k * 1.45, inset = rift.ledge + (rift.wall - rift.ledge) * back((depth - rift.step) / (rift.deep - rift.step)) - 0.8;
-      const m = mesher(), y = rift.y - depth, P = (u, a) => { const c = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * c, y, rift.z + rift.tz * u + rift.nz * c]; };
-      for (let u = -rift.half; u < rift.half; u += 2) {
-        const s0 = riftW(u) - inset, s1 = riftW(u + 2) - inset;
-        if (s0 < 0.3 && s1 < 0.3) continue;
-        m.quad(P(u, -Math.max(s0, 0.05)), P(u, Math.max(s0, 0.05)), P(u + 2, Math.max(s1, 0.05)), P(u + 2, -Math.max(s1, 0.05)), '#ffffff');
+    const room = (u, depth) => riftW(u) - rift.ledge - (rift.wall - rift.ledge) * back((depth - rift.step) / (rift.deep - rift.step)); // half the width between the walls, that far below the shelf
+    const P = (u, a, y) => { const c = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * c, y, rift.z + rift.tz * u + rift.nz * c]; };
+    // a puff: twenty flat faces, squashed, no two corners quite where a ball would have them
+    const puff = (salt) => {
+      const g = new THREE.IcosahedronGeometry(1, 0), pos = g.attributes.position, moved = new Map();
+      for (let i = 0; i < pos.count; i++) {
+        const key = `${pos.getX(i).toFixed(2)},${pos.getY(i).toFixed(2)},${pos.getZ(i).toFixed(2)}`;
+        if (!moved.has(key)) { const h = (n) => hash2(moved.size * 7 + n, salt * 13 + n) - 0.5; moved.set(key, [1 + h(1) * 0.5, 1 + h(2) * 0.5, 1 + h(3) * 0.5]); }
+        const k = moved.get(key); pos.setXYZ(i, pos.getX(i) * k[0], pos.getY(i) * k[1] * 0.62, pos.getZ(i) * k[2]);
       }
-      const geo = m.geometry(), opacity = k === 6 ? 0.72 : 0.2 + k * 0.03;
-      const mesh = add(new THREE.Mesh(geo, mat(new THREE.MeshBasicMaterial({ color: pale.clone().lerp(murk, k / 6), transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }))));
-      mesh.frustumCulled = false; mesh.renderOrder = k - 7; // the deepest first, and all of them before the light that lies over them
-      owned.push({ dispose: () => geo.dispose() });
-      mists.push({ mesh, opacity });
+      g.computeVertexNormals(); owned.push({ dispose: () => g.dispose() }); return g;
+    };
+    const flocks = [[], [], []];
+    for (const [n, top, low, small, big] of [[230, 0.55, 1.5, 1.3, 2.8], [130, 2.0, 3.2, 2.2, 3.9]]) { // an upper layer of smaller puffs, and bigger ones below to close the gaps
+      for (let i = 0, made = 0; i < n * 3 && made < n; i++) {
+        const u = dr(-rift.half, rift.half), down = rift.step + dr(top, low), half = room(u, down) + 0.5;
+        if (half < 0.9) continue;
+        const r = dr(small, big) * clamp(half / 3, 0.55, 1), [x, y, z] = P(u, dr(-half, half) * 0.96, rift.y - down);
+        flocks[made % 3].push({ x, y, z, q: qY(drand() * 6.28, dr(-0.25, 0.25), dr(-0.25, 0.25)), s: S(r * dr(0.85, 1.25), r * dr(0.8, 1.1), r * dr(0.85, 1.25)), tone: pale.clone().lerp(shade, clamp((down - rift.step - top) / 3 + dr(-0.12, 0.16), 0, 1)) });
+        made++;
+      }
+    }
+    const lit = mat(new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true, emissive: pale, emissiveIntensity: lerp(0.16, 0.5, floor / 3) })); // lit like the stone, and holding a little light of its own where there is none
+    const m4 = new THREE.Matrix4();
+    flocks.forEach((list, k) => {
+      const mesh = add(new THREE.InstancedMesh(puff(k + 1), lit, list.length));
+      list.forEach((c, i) => { mesh.setMatrixAt(i, m4.compose(new THREE.Vector3(c.x, c.y, c.z), c.q, c.s)); mesh.setColorAt(i, c.tone); });
+      mesh.frustumCulled = false; mesh.receiveShadow = true;
+      clouds.push({ mesh, flock: true });
+    });
+    { // the floor of the bank
+      const m = mesher(), down = rift.step + 3.3, y = rift.y - down;
+      for (let u = -rift.half; u < rift.half; u += 2) {
+        const s0 = room(u, down) + 0.9, s1 = room(u + 2, down) + 0.9;
+        if (s0 < 0.3 && s1 < 0.3) continue;
+        m.quad(P(u, -Math.max(s0, 0.05), y), P(u, Math.max(s0, 0.05), y), P(u + 2, Math.max(s1, 0.05), y), P(u + 2, -Math.max(s1, 0.05), y), '#ffffff');
+      }
+      const geo = m.geometry(), mesh = add(new THREE.Mesh(geo, mat(new THREE.MeshBasicMaterial({ color: shade.clone().lerp(pale, 0.35), side: THREE.DoubleSide }))));
+      mesh.frustumCulled = false; owned.push({ dispose: () => geo.dispose() });
+      clouds.push({ mesh, flock: false });
     }
   }
   // light across the mouth of the rift, for whoever keeps it (guards.js): bars from wall to wall, and a line along each wall
@@ -1116,7 +1144,7 @@ float seaLight(vec2 p, float t) {
   // has the fish gone down the rift, or through the palace gate?
   function atGoal(p) {
     const dx = wrapD(p.x - goal.x), dz = wrapD(p.z - goal.z), d = Math.hypot(dx, dz);
-    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : riftIn(p.x, p.z) > rift.ledge + 2 && p.y < rift.y - rift.step - 6; // through the gate, or down in the mist between the walls of the rift, long before its bed
+    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : riftIn(p.x, p.z) > rift.ledge + 2 && p.y < rift.y - rift.step - 4.6; // through the gate, or down in the cloud between the walls of the rift, long before its bed
   }
   // a clear spot on the open seabed, for placing hunters and hooks
   function openSpot(minFromSpawn = 24) {

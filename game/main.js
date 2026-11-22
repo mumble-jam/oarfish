@@ -1259,9 +1259,9 @@ export async function start(saved = {}) {
     const F = world.floor;
     scene.fog.near = d * F.fog[0];
     scene.fog.far = d + F.fog[1] + end.vista * 80; // the closed circle is seen whole, from far above
-    // sinking into the rift, its mist closes round: sight comes in to a few metres and takes the mist's colour.
+    // sinking into the rift's cloud, it closes round: sight comes in to a few metres and takes the cloud's colour.
     // A new band is arrived at the same way, out of it.
-    const R = world.rift, into = R && R.in(rig.pos.x, rig.pos.z) > R.ledge - 1.5 ? clamp((R.ledgeY - 0.4 - rig.pos.y) / 5, 0, 1) : 0;
+    const R = world.rift, into = R && R.in(rig.pos.x, rig.pos.z) > R.ledge - 1.5 ? clamp((R.ledgeY - 0.9 - rig.pos.y) / 3, 0, 1) : 0;
     cam.murk = dt ? damp(cam.murk || 0, into * into * (3 - 2 * into), 3.5, dt) : (cam.murk || 0);
     if (cam.murk > 0.002 || cam.murky) {
       scene.fog.near = lerp(scene.fog.near, 0.4, cam.murk); scene.fog.far = lerp(scene.fog.far, d + 6, cam.murk);
