@@ -249,6 +249,19 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause > .binds { display: none; width: min(540px, 100%); }
 #pause.binding > .binds { display: flex; }
 #pause.binding > .in:not(.binds) { display: none; }
+/* so does the feedback sheet, which can also be opened over the end of a dive */
+#pause > .note { display: none; width: min(460px, 100%); }
+#pause.noting { z-index: 8; }
+#pause.noting > .note { display: flex; }
+#pause.noting > .in:not(.note) { display: none; }
+#note-text, #note-out { width: 100%; box-sizing: border-box; font: 400 15px/1.4 var(--font-body); color: var(--foam); background: color-mix(in srgb, var(--ink) 80%, transparent); border: 1px solid color-mix(in srgb, var(--foam) 26%, transparent); border-radius: 8px; padding: 10px 12px; resize: vertical; }
+#note-text { min-height: 130px; }
+#note-text::placeholder { color: color-mix(in srgb, var(--foam) 50%, transparent); }
+#note-out { font-size: 12.5px; }
+#note-out[hidden], #note-share[hidden] { display: none; }
+#note-facts-text { display: block; white-space: pre-line; font-size: 12.5px; }
+#pause .note .main { flex: 1 1 0; }
+#end button.quiet { margin-top: 0; font-size: 14px; padding: 9px 16px; background: none; border-color: color-mix(in srgb, var(--foam) 40%, transparent); color: var(--foam); }
 #bind-preset { flex: 1 1 auto; min-width: 0; font: 400 14px/1 var(--font-body); color: var(--foam); background: color-mix(in srgb, var(--ink) 70%, transparent); border: 1px solid color-mix(in srgb, var(--foam) 26%, transparent); border-radius: 8px; padding: 8px 10px; }
 #bind-grid { display: grid; grid-template-columns: minmax(0, 1fr) 82px 82px 116px; gap: 6px; align-items: center; font-size: 13.5px; }
 #bind-grid b { font: 400 13px/1 var(--font-caps); letter-spacing: 0.12em; padding-bottom: 2px; }
@@ -408,6 +421,7 @@ button:disabled { opacity: 0.4; cursor: default; }
       <button type="button" id="btn-full" aria-pressed="false">Full screen</button>
       <button type="button" id="btn-new">New dive</button>
     </div>
+    <button type="button" id="btn-note">Leave feedback</button>
     <p id="pause-msg" aria-live="polite"></p>
     <div class="set">
       <span class="cap">Shells</span>
@@ -441,12 +455,22 @@ button:disabled { opacity: 0.4; cursor: default; }
     </div>
     <div id="bind-grid"></div>
     <div class="row foot"><button type="button" id="bind-reset">Back to the defaults</button><button type="button" class="main" id="bind-back">Done</button></div>
+  </div>
+  <div class="in note">
+    <h2>Leave feedback</h2>
+    <p>What worked, what did not, where you got stuck: a line is plenty. Nothing is sent from this page. Your note is copied, or handed to your own apps, for you to send to whoever gave you the link.</p>
+    <textarea id="note-text" rows="6" maxlength="4000" placeholder="I liked… I got stuck when… I expected…" aria-label="Your feedback"></textarea>
+    <label class="check"><input type="checkbox" id="note-facts" checked><span><b>Add how the dive went</b><span id="note-facts-text"></span></span></label>
+    <div class="row foot"><button type="button" id="note-back">Back</button><button type="button" id="note-share" hidden>Share…</button><button type="button" class="main" id="note-copy">Copy</button></div>
+    <p id="note-msg" aria-live="polite"></p>
+    <textarea id="note-out" rows="6" readonly hidden aria-label="Your note, to copy"></textarea>
   </div></div>
   <div id="end" role="dialog" aria-labelledby="end-title"><div class="in">
     <h2 id="end-title"></h2>
     <p id="end-text"></p>
     <small id="end-best"></small>
     <button type="button" id="btn-again">Dive again</button>
+    <button type="button" class="quiet" id="btn-note-end">Leave feedback</button>
   </div></div>
   <div id="error"><p>The dive could not start in this browser: WebGL is unavailable or the 3D library did not load. Try a current version of Chrome, Safari or Firefox.</p></div>
 </div>

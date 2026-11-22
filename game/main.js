@@ -205,6 +205,8 @@ export async function start(saved = {}) {
     if (s > 0.012 || w > 0.012) { if (hap.sent <= 0 || Math.abs(s - hap.last[0]) > 0.05 || Math.abs(w - hap.last[1]) > 0.05) { pad.rumble(s, w, 140); hap.sent = 0.08; hap.last = [s, w]; } }
     else if (hap.last[0] || hap.last[1]) { pad.still(); hap.last = [0, 0]; }
   }
+  const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
+  const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
   const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
@@ -287,6 +289,7 @@ export async function start(saved = {}) {
     if (index === FLOORS.length - 1) say('palace', 'The palace gate is near. Swim through it.', 9);
   }
   function startRun(seed = (Math.random() * 1e6) | 0) {
+    session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
     Object.assign(run, { seed, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
@@ -731,7 +734,7 @@ export async function start(saved = {}) {
     $('btn-pause').setAttribute('aria-pressed', String(on)); $('btn-pause').setAttribute('aria-label', on ? 'Resume' : 'Pause');
     music.duck(on ? 0.5 : 1);
     keys.clear(); held.rise = held.dive = held.dash = false; look.buttons = 0; steerId = null; pointers.clear(); gesture = null;
-    newDive(false); $('pause-msg').textContent = ''; openBinds(false);
+    newDive(false); $('pause-msg').textContent = ''; openBinds(false); openNote(false);
     if (on) {
       if (look.locked) { look.mine = true; document.exitPointerLock?.(); }
       showMode(); renderLegend();
@@ -840,6 +843,48 @@ export async function start(saved = {}) {
     showBinds(setKey(w.a, Math.min(w.k, binds.keys[w.a].length), e.code));
   }, true);
   $('btn-binds').addEventListener('click', () => openBinds(true));
+  // ---- feedback. Nothing leaves the page by itself: the note is put on the clipboard, or handed to the device's own share sheet,
+  // and the player sends it to whoever gave them the link. With it goes a few lines on how the dive went, which they can read first and leave out.
+  function noteFacts() {
+    const mins = (s) => (s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`), ua = navigator.userAgent;
+    const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'a browser';
+    const system = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux|CrOS/.test(ua) ? 'Linux' : 'an unknown system';
+    const hands = dev === 'pad' ? `a controller (${pad.report()[0] || pad.title()})` : matchMedia('(pointer: coarse)').matches ? 'touch' : 'keyboard and mouse';
+    const built = new Date(document.lastModified), when = Number.isNaN(+built) ? '' : ` · build of ${built.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+    return [
+      `Band ${run.floor + 1} of ${FLOORS.length}, ${world.floor.name.replace(/^The /, 'the ')}: ${run.state === 'won' ? 'finished' : run.state === 'dead' ? 'died there' : 'still diving'}`,
+      `This dive ${mins(run.time)}; ${mins(session.played)} played in ${session.dives} ${session.dives === 1 ? 'dive' : 'dives'}. Longest body ${(run.longest * 0.312 + 0.5).toFixed(1)} m, ${run.caught} caught`,
+      `${feel.mode === 'look' ? 'Adventure camera' : 'Point and swim'}, ${hands}, ${ui.full ? 'keys and tools shown' : 'plain view'}`,
+      `${browser} on ${system}, ${innerWidth}×${innerHeight}${session.clock > 2 ? `, ${Math.round(session.frames / session.clock)} frames a second` : ''}${when}`,
+    ].join('\n');
+  }
+  const noteBody = () => `Oarfish dive: feedback\n\n${$('note-text').value.trim()}${$('note-facts').checked ? `\n\nHow the dive went\n${noteFacts()}` : ''}\n\n${location.origin}${location.pathname}`;
+  function openNote(on) {
+    if (on === fb.open) return;
+    const p = $('pause'); fb.open = on;
+    if (on) { fb.own = !paused; if (fb.own) p.classList.add('on'); $('note-facts-text').textContent = noteFacts(); $('note-msg').textContent = ''; $('note-out').hidden = true; $('note-share').hidden = typeof navigator.share !== 'function'; }
+    else if (fb.own) p.classList.remove('on');
+    p.classList.toggle('noting', on); p.scrollTop = 0;
+    (on ? $('note-text') : fb.own ? $('btn-again') : $('btn-note')).focus({ preventScroll: true });
+  }
+  const noteReady = () => { if ($('note-text').value.trim()) return true; $('note-msg').textContent = 'Write a line first, even a short one.'; $('note-text').focus({ preventScroll: true }); return false; };
+  const noteByHand = (text, why) => { const o = $('note-out'); o.hidden = false; o.value = text; o.focus({ preventScroll: true }); o.select(); $('note-msg').textContent = `${why} The whole note is in the box below, selected: copy it from there.`; };
+  $('btn-note').addEventListener('click', () => openNote(true));
+  $('btn-note-end').addEventListener('click', () => openNote(true));
+  $('note-back').addEventListener('click', () => openNote(false));
+  $('note-facts').addEventListener('change', () => { $('note-out').hidden = true; });
+  $('note-copy').addEventListener('click', async () => {
+    if (!noteReady()) return;
+    const text = noteBody();
+    try { await navigator.clipboard.writeText(text); $('note-out').hidden = true; $('note-msg').textContent = 'Copied. Paste it into a message to whoever sent you the link.'; }
+    catch { noteByHand(text, 'Copying was blocked here.'); }
+  });
+  $('note-share').addEventListener('click', async () => {
+    if (!noteReady()) return;
+    const text = noteBody();
+    try { await navigator.share({ title: 'Oarfish dive: feedback', text }); $('note-msg').textContent = 'Handed over. Thank you.'; }
+    catch (e) { if (e?.name !== 'AbortError') noteByHand(text, 'Sharing was refused here.'); }
+  });
   $('bind-back').addEventListener('click', () => { openBinds(false); $('btn-resume').focus({ preventScroll: true }); });
   $('bind-reset').addEventListener('click', () => { binds = cleanBinds(DEFAULT_BINDS); saveBinds(); showBinds('Back to the defaults.'); });
   $('bind-preset').addEventListener('change', (e) => {
@@ -861,6 +906,7 @@ export async function start(saved = {}) {
       if (e.code === 'Escape') { e.preventDefault(); lib.close(); } else if ((e.code === 'ArrowDown' || e.code === 'ArrowUp') && !typing(e)) { e.preventDefault(); lib.step(e.code === 'ArrowDown' ? 1 : -1); }
       return;
     }
+    if (fb.open) { if (e.code === 'Escape') { e.preventDefault(); openNote(false); } return; } // so has the feedback sheet
     music.unlock();
     if (e.metaKey || e.ctrlKey || e.altKey || (typing(e) && e.target.type !== 'range' && e.target.type !== 'checkbox')) return; // text being typed is not for the game
     setDev('keys');
@@ -965,7 +1011,7 @@ export async function start(saved = {}) {
         const nudge = (pad.pressed(BTN.right) ? 1 : 0) - (pad.pressed(BTN.left) ? 1 : 0);
         if (nudge && at?.type === 'range') { at.value = +at.value + nudge * 5; at.dispatchEvent(new Event('input')); }
         if (pad.pressed(BTN.cross)) (at?.tagName === 'BUTTON' ? at : menu.querySelector('button')).click();
-        if (paused && pad.pressed(BTN.circle)) { if ($('pause').classList.contains('binding')) openBinds(false); else setPaused(false); }
+        if (paused && pad.pressed(BTN.circle)) { if (fb.open) openNote(false); else if ($('pause').classList.contains('binding')) openBinds(false); else setPaused(false); }
       } else {
         if (pp('hide')) setFull(!ui.full);
         if (pp('shed')) shed();
@@ -1477,6 +1523,7 @@ export async function start(saved = {}) {
   if (/^#library/.test(location.hash)) openLibrary(location.hash.split('/')[1]);
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.05);
+    if (!paused && !lib.isOpen && run.state === 'play' && !window.__hold) { session.played += dt; session.frames++; session.clock += Math.min((now - last) / 1000, 0.5); }
     last = now;
     if (lib.isOpen) { if (!window.__hold) lib.frame(dt); return renderer.render(lib.scene, lib.camera); }
     if (!window.__hold) tick(dt);
@@ -1489,7 +1536,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

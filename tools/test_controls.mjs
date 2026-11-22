@@ -19,7 +19,7 @@ fs.mkdirSync(path.resolve(import.meta.dirname, '../out/shots'), { recursive: tru
 const shots = process.argv.includes('--shots');
 let failures = 0;
 const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
-const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 }, permissions: ['clipboard-read', 'clipboard-write'] })).newPage();
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
 await page.addInitScript(() => { window.__noNursery = true; });
@@ -276,6 +276,33 @@ if (shots) {
   await ev(() => { const g = window.__game; g.cam.pitch = 1.1; g.sim(0.6); }); await snap('c-look-high');
   await ev(() => { const g = window.__game; g.setMode('point'); g.sim(2); }); await snap('c-point-after');
 }
+// ---- feedback: a sheet in the pause menu and at the end of a dive; the note is copied, never sent
+await ev(() => { const g = window.__game; g.startRun(4242); g.sim(3); g.setPaused(true); });
+await page.click('#btn-note'); await frame(page);
+s = await ev(() => { const p = document.getElementById('pause'), vis = (id) => document.getElementById(id).getClientRects().length > 0; // drawn at all, whatever hides it
+  return { noting: p.classList.contains('noting'), sheet: vis('note-text'), menu: vis('btn-resume'), facts: document.getElementById('note-facts-text').textContent, focus: document.activeElement.id }; });
+check('Leave feedback, in the pause menu, opens a sheet in its place that says what will go with the note', s.noting && s.sheet && !s.menu && /Band 1 of 5/.test(s.facts) && /plain view|keys and tools/.test(s.facts) && s.focus === 'note-text', JSON.stringify(s));
+await page.click('#note-copy');
+const empty = await ev(() => document.getElementById('note-msg').textContent);
+await page.click('#note-text'); await page.keyboard.type('the crab is great, hp wasd'); await ev(() => window.__game.sim(0.2));
+s = await ev(() => ({ paused: window.__game.paused, state: window.__game.run.state, full: window.__game.ui.full, text: document.getElementById('note-text').value }));
+check('typing in it is not for the game: nothing unpauses, hides or moves', /Write a line first/.test(empty) && s.paused && s.text === 'the crab is great, hp wasd', JSON.stringify({ empty, ...s }));
+await page.click('#note-copy'); await page.waitForFunction(() => document.getElementById('note-msg').textContent !== '');
+s = await ev(async () => { const g = window.__game, out = document.getElementById('note-out'); let clip = null; try { clip = await navigator.clipboard.readText(); } catch {}
+  return { msg: document.getElementById('note-msg').textContent, clip, byHand: out.hidden ? null : out.value, body: g.noteBody() }; });
+const got = s.clip ?? s.byHand ?? '';
+check('Copy puts the note and how the dive went on the clipboard, or lays it out to be copied by hand where that is blocked', (/Copied/.test(s.msg) || /selected: copy it/.test(s.msg)) && got === s.body && /the crab is great/.test(got) && /How the dive went\nBand 1 of 5/.test(got) && /frames a second|Chrome on/.test(got), JSON.stringify({ msg: s.msg, got: got.slice(0, 260) }));
+await page.click('#note-facts'); s = await ev(() => window.__game.noteBody());
+check('the lines about the dive can be left out', !/How the dive went/.test(s) && /the crab is great/.test(s), s.slice(0, 120));
+await page.keyboard.press('Escape'); await frame(page);
+s = await ev(() => ({ noting: document.getElementById('pause').classList.contains('noting'), paused: window.__game.paused }));
+check('Esc closes the sheet and leaves the dive paused', !s.noting && s.paused, JSON.stringify(s));
+await ev(() => { const g = window.__game; g.setPaused(false); g.die(); g.sim(0.5); }); await frame(page);
+await page.click('#btn-note-end'); await frame(page);
+s = await ev(() => { const p = document.getElementById('pause'); return { noting: p.classList.contains('noting'), over: +getComputedStyle(p).zIndex > +getComputedStyle(document.getElementById('end')).zIndex, kept: document.getElementById('note-text').value, facts: document.getElementById('note-facts-text').textContent }; });
+await page.click('#note-back'); await frame(page);
+const after = await ev(() => ({ on: document.getElementById('pause').classList.contains('on'), end: document.getElementById('end').classList.contains('on'), state: window.__game.run.state }));
+check('the same sheet opens over the end of a dive, with what was written still in it, and Back returns to the end', s.noting && s.over && /the crab is great/.test(s.kept) && /died there/.test(s.facts) && !after.on && after.end && after.state === 'dead', JSON.stringify({ ...s, after }));
 await ev(() => { try { localStorage.clear(); } catch {} });
 await browser.close(); server.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall control checks passed');
