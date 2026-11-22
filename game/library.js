@@ -9,11 +9,12 @@ import { alive, growing, tint } from './kit.js';
 import { FLOORS, SWARMS } from './world.js';
 import { buildOarfish } from './oarfish.js';
 import { clamp, rng } from './geo.js';
+import { CAST } from './music.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const words = (k) => k.replace(/([a-z])([A-Z0-9])/g, '$1 $2').toLowerCase();
 
-export function createLibrary({ renderer, root, onClose }) {
+export function createLibrary({ renderer, root, onClose, onHear }) {
   const $ = (sel) => root.querySelector(sel);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
   scene.background = new THREE.Color(); scene.fog = new THREE.Fog(0x000000, 14, 70);
@@ -148,6 +149,7 @@ export function createLibrary({ renderer, root, onClose }) {
     if (all) {
       $('#lib-name').textContent = spec.name; $('#lib-role').textContent = spec.role; $('#lib-about').textContent = spec.about;
       $('#lib-where').textContent = `${spec.bands.map((b) => BANDS[b]).join(', ')} · ${spec.swarm ? `${spec.length} m each` : spec.run ? `${spec.length} m to a length` : `${spec.length} m long`}`;
+      { const hear = $('#lib-hear'), voice = CAST[spec.id]; hear.hidden = !voice; hear.textContent = voice ? `In the band: ${voice.name}. Hear it` : ''; } // its instrument, where it has one
       $('#lib-play').innerHTML = `<label>Light of</label>${seg('band', BANDS.map((b, i) => [i, i + 1, b, spec.bands.includes(i)]), S.band)}`
         + (spec.states.length > 1 ? `<label>State</label>${seg('state', spec.states.map((s, i) => [i, s.name]), S.state)}` : '')
         + (spec.swarm ? `<label>Swarm</label>${seg('tier', Object.entries(SWARMS).map(([k, s]) => [k, s.n]), S.tier)}` : '')
@@ -168,6 +170,7 @@ export function createLibrary({ renderer, root, onClose }) {
   }
   function pick(id) { if (!NPC[id]) return; $('#lib-text').hidden = true; S.id = id; S.state = NPC[id].kind === 'fish' ? 1 : 0; S.tone = 0; S.dirty = false; const spec = NPC[id]; if (spec.kind === 'thing' || spec.kind === 'shell') S.dist = clamp(Math.max(spec.length, (spec.show?.spread || 0) * 2.4) * 2.2 + 2, 2.4, 22); if (!spec.bands.includes(S.band)) S.band = spec.bands[0]; if (spec.kind !== 'thing' && spec.kind !== 'shell') S.dist = clamp(spec.length * 2.4 + 2.2, 2.6, 26); if (spec.run) S.dist = 16; if (spec.id === 'warden') S.dist = 17; if (spec.swarm) S.dist = SWARMS[S.tier].r * 9 + 3; S.yaw = 0.85; S.pitch = 0.2; light(); mount(); list(); panel(); try { history.replaceState(null, '', `#library/${id}`); } catch { /* not allowed here */ } }
 
+  $('#lib-hear').addEventListener('click', () => onHear?.(S.id));
   root.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.id) return pick(b.dataset.id);

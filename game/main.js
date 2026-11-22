@@ -569,12 +569,24 @@ export async function start(saved = {}) {
     if (sum) a += sum.state.awake ? 0.9 : 0.25 * nearBy(world.hall, 40);
     return clamp(a, 0, 1);
   }
+  // Who is close enough to sit in with the band (music.js, CAST): each kind of hunter by its nearest, this band's keeper, the Sum
+  function castNear() {
+    const c = {}, most = (id, v) => { if (v > (c[id] || 0)) c[id] = v; };
+    for (const b of foes.biters) if (b.alive) most('biter', nearBy(b.pos, 22) * (b.state === 'hunt' ? 1 : 0.75));
+    for (const f of foes.anglers) if (f.alive) most('angler', nearBy(f.pos, 22));
+    for (const l of foes.leeches) if (l.alive !== false) most('leech', nearBy(l.pos, 18));
+    for (const m of foes.mines) if (m.alive) most('drifter', nearBy(m.pos, 14));
+    for (const h of foes.hooks) most('hook', nearBy(h, 14));
+    if (guard && !guard.done) most(guard.kind, nearBy(guard.pos, 30));
+    if (sum) most('sum', sum.state.awake ? 1 : 0.35 * nearBy(world.hall, 40));
+    return c;
+  }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
     nowT -= dt;
     if (nowT > 0 || !$('drawer').classList.contains('open')) return;
     nowT = 0.3;
     const d = music.describe();
-    $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, energy ${Math.round(d.energy * 100)}%, intensity ${Math.round(d.intensity * 100)}%.` : 'Press any key or click to start the sound.';
+    $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, energy ${Math.round(d.energy * 100)}%, intensity ${Math.round(d.intensity * 100)}%.${d.sitting.length ? ` Sitting in: ${d.sitting.join(', ')}.` : ''}` : 'Press any key or click to start the sound.';
     $('energy-live').style.width = `${Math.round(music.energy * 100)}%`;
   }
   function hud(dt) {
@@ -1435,7 +1447,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(),
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(),
     });
   }
 
@@ -1459,7 +1471,7 @@ export async function start(saved = {}) {
   world.update(0, focus, rig.pos, camera);
   let last = performance.now();
   // the specimen library borrows the renderer: while it is open the dive is held and its own scene is drawn
-  const lib = createLibrary({ renderer, root: $('library'), onClose(changed) { stage.classList.remove('lib'); if (changed) { paintFish(); kit.refresh(); shellsChanged(); $('pause-msg').textContent = 'The oarfish and the shells have changed already. Everything else shows from the next band or dive.'; } $('btn-library').focus({ preventScroll: true }); } });
+  const lib = createLibrary({ renderer, root: $('library'), onHear: (id) => music.audition(id), onClose(changed) { stage.classList.remove('lib'); if (changed) { paintFish(); kit.refresh(); shellsChanged(); $('pause-msg').textContent = 'The oarfish and the shells have changed already. Everything else shows from the next band or dive.'; } $('btn-library').focus({ preventScroll: true }); } });
   function openLibrary(id) { if (!paused && !ended()) setPaused(true); stage.classList.add('lib'); lib.open(id); }
   $('btn-library').addEventListener('click', () => openLibrary());
   if (/^#library/.test(location.hash)) openLibrary(location.hash.split('/')[1]);
@@ -1477,7 +1489,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

@@ -1,4 +1,5 @@
 // A small jazz trio that plays the game: drummer, upright bass, electric piano, with a pad underneath.
+// Every hunter and every keeper has an instrument of its own (CAST, below) and sits in while it is near the fish.
 // Nothing is sampled; every sound is synthesised with Web Audio. The band reads the game state each
 // tick (speed, coiling, danger, depth) and answers events at once with cymbals, stabs and fills.
 //
@@ -33,10 +34,16 @@ const KEYS = [2, 0, 10, 9, 7]; // the key sinks as the dive goes down: D, C, B f
 // where the piano may land in a bar, in swung-eighth ticks (12 to the bar), from sparse to busy
 const COMPS = [[[0]], [[0, 5], [5], [2, 8]], [[0, 5, 9], [2, 8], [5, 11], [3, 8]], [[0, 2, 5, 8, 11], [2, 5, 9, 11], [0, 3, 5, 8]]];
 const RIDE = [0, 3, 5, 6, 9, 11];
+// The cast: who plays what. A creature sits in with the band while it is near the fish, louder and busier the nearer it is.
+// The four keepers and the Sum come before the hunters when more than three are near.
+export const CAST = {
+  biter: { name: 'muted trumpet' }, angler: { name: 'vibraphone' }, hook: { name: 'plucked string' }, drifter: { name: 'woodblock' }, leech: { name: 'bass clarinet' },
+  keeper: { name: 'tuba', lead: true }, shearer: { name: 'tenor saxophone', lead: true }, lamplighter: { name: 'celesta', lead: true }, warden: { name: 'bowed cello', lead: true }, sum: { name: 'organ', lead: true },
+};
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -45,7 +52,7 @@ export function createMusic({ context = null } = {}) {
   // ---------------------------------------------------------------- the room: buses, reverb, the water itself
   function build() {
     const g = (v) => { const x = ctx.createGain(); x.gain.value = v; return x; };
-    n = { drums: g(1), bass: g(1), keys: g(1), pad: g(1), dry: g(1), send: g(1), wet: g(0.4), master: g(0), sendOf: {} };
+    n = { drums: g(1), bass: g(1), keys: g(1), pad: g(1), cast: g(0.9), dry: g(1), send: g(1), wet: g(0.4), master: g(0), sendOf: {} };
     n.water = ctx.createBiquadFilter(); n.water.type = 'lowpass'; n.water.frequency.value = 9000; n.water.Q.value = 0.4;
     n.comp = ctx.createDynamicsCompressor();
     n.comp.threshold.value = -16; n.comp.ratio.value = 5; n.comp.attack.value = 0.004; n.comp.release.value = 0.2;
@@ -70,7 +77,7 @@ export function createMusic({ context = null } = {}) {
     n.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : g(1);
     if (n.pan.pan) { const p = ctx.createOscillator(); n.panDepth = g(0.4); p.frequency.value = 0.19; p.connect(n.panDepth); n.panDepth.connect(n.pan.pan); p.start(); }
     n.keysIn.connect(n.pan); n.keysIn.connect(n.chorus); n.chorus.connect(n.chorusMix); n.chorusMix.connect(n.pan); n.pan.connect(n.keys);
-    for (const [name, amt] of [['drums', 0.22], ['bass', 0.08], ['keys', 0.6], ['pad', 0.9]]) {
+    for (const [name, amt] of [['drums', 0.22], ['bass', 0.08], ['keys', 0.6], ['pad', 0.9], ['cast', 0.5]]) {
       n[name].connect(n.dry);
       n.sendOf[name] = g(amt); n[name].connect(n.sendOf[name]); n.sendOf[name].connect(n.send);
     }
@@ -205,6 +212,59 @@ export function createMusic({ context = null } = {}) {
     midis.forEach((m, i) => tone(t + i * 0.06, { f0: mtof(m + 12), f1: mtof(m + 12) * 1.5, glide: 0.07, decay: 0.09, gain: 0.14 * v, out: n.keysIn }));
   }
 
+  // ---------------------------------------------------------------- the cast's instruments
+  const osc = (type, f, t, stop) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; };
+  const lowpass = (f, q = 0.8) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; b.Q.value = q; return b; };
+  const held = (t, attack, level, dur) => { const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(level, 0.0002), t + attack); g.gain.setValueAtTime(Math.max(level, 0.0002), t + Math.max(dur, attack + 0.01)); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01) + 0.14); g.connect(n.cast); return g; };
+  const voices = {
+    trumpet(t, m, dur, v) { // muted: a saw through a narrow nose
+      const o = osc('sawtooth', mtof(m) * 0.985, t, t + dur + 0.2), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.03);
+      f.type = 'bandpass'; f.Q.value = 5; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(1900, t + 0.04); f.frequency.exponentialRampToValueAtTime(1200, t + dur + 0.05);
+      env(g.gain, t, 0.012, 0.6 * v, dur + 0.06); o.connect(f); f.connect(g); g.connect(n.cast);
+    },
+    vibes(t, m, dur, v) { // a metal bar struck soft, with the motor turning
+      const g = ctx.createGain(), trem = ctx.createGain(), lfo = osc('sine', 5.2, t, t + dur + 0.3), lg = ctx.createGain();
+      for (const [k, level] of [[1, 0.5], [4, 0.14], [10, 0.03]]) { const og = ctx.createGain(); og.gain.value = level; osc('sine', mtof(m) * k, t, t + dur + 0.3).connect(og); og.connect(g); }
+      env(g.gain, t, 0.004, 0.5 * v, dur); lg.gain.value = 0.35; trem.gain.value = 0.65; lfo.connect(lg); lg.connect(trem.gain); g.connect(trem); trem.connect(n.cast);
+    },
+    pluck(t, m, dur, v) { // a string pulled and let go
+      const len = Math.max(dur, 0.35), o = osc('sawtooth', mtof(m) * 1.03, t, t + len + 0.2), f = lowpass(3200, 2), g = ctx.createGain();
+      o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.05); f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(500, t + 0.25);
+      env(g.gain, t, 0.002, 0.55 * v, len); o.connect(f); f.connect(g); g.connect(n.cast);
+    },
+    block(t, m, dur, v) { tone(t, { f0: mtof(m), decay: 0.05, gain: 0.4 * v, out: n.cast }); tone(t, { type: 'triangle', f0: mtof(m) * 2.76, decay: 0.03, gain: 0.14 * v, out: n.cast }); }, // wood, struck
+    clarinet(t, m, dur, v, to = 0) { // hollow and low, sliding to its next note
+      const o = osc('square', mtof(m), t, t + dur + 0.3), f = lowpass(700 + 700 * v);
+      if (to) o.frequency.exponentialRampToValueAtTime(mtof(to), t + dur * 0.85);
+      o.connect(f); f.connect(held(t, 0.07, 0.2 * v, dur));
+    },
+    tuba(t, m, dur, v) { // the bottom of the brass: round, slow to speak
+      const f = lowpass(180, 1.5), g = held(t, 0.05, 0.42 * v, dur);
+      f.frequency.setValueAtTime(180, t); f.frequency.exponentialRampToValueAtTime(520 + 300 * v, t + 0.09); f.frequency.exponentialRampToValueAtTime(260, t + dur);
+      for (const cents of [-6, 6]) { const o = osc('sawtooth', mtof(m), t, t + dur + 0.3); o.detune.value = cents; o.connect(f); }
+      osc('sine', mtof(m), t, t + dur + 0.3).connect(f); f.connect(g);
+    },
+    sax(t, m, dur, v) { // reedy, with a shake in it and breath on the front
+      const o = osc('sawtooth', mtof(m) * 0.97, t, t + dur + 0.3), f = lowpass(1500 + 1400 * v, 2.5), vib = osc('sine', 5.6, t, t + dur + 0.3), vg = ctx.createGain();
+      o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.04); vg.gain.value = mtof(m) * 0.008; vib.connect(vg); vg.connect(o.frequency);
+      o.connect(f); f.connect(held(t, 0.03, 0.26 * v, dur)); noise(t, { bp: 2200, q: 0.9, attack: 0.01, decay: 0.07, gain: 0.1 * v, out: n.cast });
+    },
+    celesta(t, m, dur, v) { // small bells, very high, a long time dying
+      const g = ctx.createGain(); env(g.gain, t, 0.003, 0.34 * v, dur); g.connect(n.cast);
+      for (const [k, level, cents] of [[1, 0.6, 0], [1, 0.3, 9], [3, 0.1, 0], [5.4, 0.04, 0]]) { const og = ctx.createGain(); og.gain.value = level; const o = osc('sine', mtof(m) * k, t, t + dur + 0.2); o.detune.value = cents; o.connect(og); og.connect(g); }
+    },
+    cello(t, m, dur, v, to = 0) { // bowed: it leans into the note and slides off it
+      const f = lowpass(520 + 500 * v, 1.2), g = held(t, 0.28, 0.24 * v, dur);
+      for (const cents of [-5, 5]) { const o = osc('sawtooth', mtof(m), t, t + dur + 0.4); o.detune.value = cents; if (to) { o.frequency.setValueAtTime(mtof(m), t + dur * 0.45); o.frequency.exponentialRampToValueAtTime(mtof(to), t + dur * 0.95); } o.connect(f); }
+      f.connect(g);
+    },
+    organ(t, midis, dur, v) { // every stop out: the whole chord, swelling
+      const g = held(t, 0.35, 0.11 * v, dur);
+      for (const m of midis) for (const [k, level] of [[1, 1], [2, 0.5], [3, 0.3], [4, 0.18]]) { const og = ctx.createGain(); og.gain.value = level; osc('sine', mtof(m) * k, t, t + dur + 0.4).connect(og); og.connect(g); }
+    },
+  };
+
   // ---------------------------------------------------------------- harmony
   const tonic = () => KEYS[Math.min(st.floor, KEYS.length - 1)];
   function chordAt(bar) {
@@ -221,6 +281,34 @@ export function createMusic({ context = null } = {}) {
   function pickMood() {
     const depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0;
     return clamp(Math.round(params.menace * 2.4 + depth * 1.1 + (st.low ? 0.4 : 0) - 0.3), 0, MOODS.length - 1);
+  }
+
+  // what a member of the cast plays on this tick, if anything: p is how near it is (0 to 1); `sure` plays every chance it has
+  function playCast(id, p, bar, tick, t, sure = false) {
+    const ch = chordAt(bar), rnd = Math.random, beat = st.beatDur, v = 0.45 + 0.55 * p;
+    const may = (chance) => sure || rnd() < chance;
+    const deg = (d, base) => base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7); // a step of the chord's scale, above `base`
+    if (id === 'biter') { // two quick bites off the beat
+      if ((tick === 2 || tick === 5 || tick === 8 || tick === 11) && may(0.2 + 0.5 * p)) { const d = 4 + Math.floor(rnd() * 5); voices.trumpet(t, deg(d, 60), 0.09, v); if (may(0.5)) voices.trumpet(t + st.tickLen * 0.5, deg(d - 1, 60), 0.12, v * 0.85); }
+    } else if (id === 'angler') { // the lure: two notes of the chord left hanging
+      if ((tick === 0 || tick === 6) && may(0.45 + 0.4 * p)) { const vo = voicing(ch, 67), i = (bar + tick / 6) % vo.length | 0; voices.vibes(t, vo[i], beat * 2.6, v); voices.vibes(t + 0.11, vo[(i + 2) % vo.length], beat * 2.4, v * 0.8); }
+    } else if (id === 'hook') { // a twang, and the octave under it
+      if ((tick === 3 || tick === 9) && may(0.3 + 0.45 * p)) { const m = bassPitch(ch.root + (tick === 3 ? 0 : 7), 46) + 12; voices.pluck(t, m, 0.4, v); voices.pluck(t + 0.13, m - 12, 0.5, v * 0.8); }
+    } else if (id === 'drifter') { // tick, tock
+      if (tick % 3 === 1 && may(0.18 + 0.42 * p)) voices.block(t, (tick === 1 || tick === 7) ? 86 : 81, 0.05, v);
+    } else if (id === 'leech') { // a low note that slides to the one beside it
+      if ((tick === 0 || tick === 6) && may(0.5 + 0.3 * p)) { const m = deg(tick === 0 ? 2 : 4, 43); voices.clarinet(t, m, beat * 1.7, v, m + (rnd() < 0.5 ? 1 : -1)); }
+    } else if (id === 'keeper') { // oom, pah: the root and its fifth, slow and heavy
+      if (tick === 0 || tick === 6) voices.tuba(t, bassPitch(ch.root + (tick === 0 ? 0 : 7), 36), beat * 1.25, v);
+    } else if (id === 'shearer') { // a run up the scale, then two jabs
+      if (tick <= 3 ? may(0.45 + 0.5 * p) : (tick === 8 || tick === 9) && may(0.3 + 0.5 * p)) voices.sax(t, deg(tick <= 3 ? tick + (bar % 2) * 2 : 6 - (tick - 8), 55), tick === 3 ? beat * 0.9 : 0.16, v);
+    } else if (id === 'lamplighter') { // the chord, let fall a note at a time from the top
+      if (tick % 3 === 0 && may(0.6 + 0.35 * p)) { const vo = voicing(ch, 79); voices.celesta(t, vo[3 - tick / 3] + (bar % 2 ? 0 : 12 * (tick === 0)), 1.5, v); }
+    } else if (id === 'warden') { // one long bowed note to the bar, sliding as it circles
+      if (tick === 0) { const m = bassPitch(ch.root + ch.q.tones[bar % 2 ? 2 : 0], 45); voices.cello(t, m, beat * 3.7, v, m + (bar % 4 < 2 ? 2 : -1)); }
+    } else if (id === 'sum') { // all of it at once
+      if (tick === 0) voices.organ(t, [bassPitch(ch.root, 40), ...voicing(ch, 55)], beat * 3.8, v);
+    }
   }
 
   // ---------------------------------------------------------------- one bar of decisions, then twelve ticks of playing
@@ -291,6 +379,8 @@ export function createMusic({ context = null } = {}) {
       voicing(ch).forEach((m, i) => pianoNote(t + i * (long ? 0.018 : 0.004) + human(), m, long ? st.beatDur * 2.5 : 0.16 + 0.2 * rnd(), v));
       if (P.menace > 0.6 && I > 0.75 && rnd() < 0.35) brass(t, [bassPitch(ch.root, 40) + 12, bassPitch(ch.root + 6, 46) + 12], 0.22, 0.7);
     }
+    // --- the cast: whoever is near sits in
+    for (const id of st.sitting) playCast(id, st.cast[id], bar, tick, t);
   }
 
   // ---------------------------------------------------------------- the clock
@@ -325,7 +415,9 @@ export function createMusic({ context = null } = {}) {
   const api = {
     params, state: st,
     // what the band is doing right now, for the drawer
-    describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow() } : null; },
+    describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow(), sitting: st.sitting.map((id) => CAST[id].name) } : null; },
+    // one creature's instrument on its own, two bars of it, for the library
+    audition(id) { if (!CAST[id] || !api.unlock() || !n) return false; const t0 = now() + 0.06; for (let bar = 0; bar < 2; bar++) for (let tick = 0; tick < 12; tick++) playCast(id, 1, st.bar + bar, tick, t0 + (bar * 12 + tick) * st.tickLen, true); return true; },
     get energy() { return energyNow(); },
     get muted() { return st.muted; },
     get running() { return st.started && ctx?.state === 'running'; },
@@ -347,6 +439,10 @@ export function createMusic({ context = null } = {}) {
       if (s.alive !== st.alive) { st.alive = s.alive; applyParams(s.alive ? 0.3 : 1.2); }
       const P = params, a = clamp(s.activity || 0, 0, 1);
       st.life += (a - st.life) * (1 - Math.exp(-dt * (a > st.life ? 0.7 : 0.2))); // it gathers in a couple of seconds and lets go over several: a tempo should not flinch
+      // the cast: each one's nearness, smoothed; the three nearest sit in, a keeper or the Sum ahead of the hunters
+      const near = s.cast || {};
+      for (const id of Object.keys(CAST)) { const to = clamp(near[id] || 0, 0, 1), was = st.cast[id] || 0; st.cast[id] = was + (to - was) * (1 - Math.exp(-dt * (to > was ? 1.6 : 0.5))); }
+      st.sitting = Object.keys(CAST).filter((id) => st.cast[id] > 0.12).sort((a, b) => (st.cast[b] + (CAST[b].lead ? 1 : 0)) - (st.cast[a] + (CAST[a].lead ? 1 : 0))).slice(0, 3);
       st.pulse *= Math.exp(-dt / 1.6);
       const target = clamp(0.02 + 0.36 * energyNow() + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse), 0, 1);
       st.intensity += (target - st.intensity) * (1 - Math.exp(-dt * (target > st.intensity ? 3.2 : 0.55)));

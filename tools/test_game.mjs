@@ -303,6 +303,13 @@ const live = await ev(() => { const g = window.__game, m = g.music, rest = m.par
   const sc = g.world.schools.find((x) => x.left > 0), here = g.rig.pos.clone(); g.rig.pos.set(sc.x, g.rig.pos.y, sc.z); const bySwarm = g.activity(); g.rig.pos.copy(here);
   return { rest, quiet, busy, after, bySwarm }; });
 check('the band\'s energy rests where its slider is, climbs with what is going on round the fish and settles again; a swarm close by counts', Math.abs(live.quiet - live.rest) < 0.03 && live.busy > 0.95 && Math.abs(live.after - live.rest) < 0.03 && live.bySwarm > 0.1 && live.bySwarm <= 1, JSON.stringify(live));
+const cast = await ev(() => { const g = window.__game, m = g.music, quiet = { speed: 0, coil: 0, danger: 0, low: false, alive: true };
+  const feed = (c, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { ...quiet, cast: c }); return m.state.sitting.join(); };
+  const none = feed({}, 12), one = feed({ biter: 0.9 }, 4), many = feed({ biter: 0.9, angler: 0.8, hook: 0.7, drifter: 0.6, warden: 0.3 }, 6), names = (m.describe() || { sitting: [] }).sitting.join();
+  const heard = Object.keys(g.castNear()).length >= 0 && ['biter', 'angler', 'hook', 'drifter', 'leech', 'keeper', 'shearer', 'lamplighter', 'warden', 'sum'].every((id) => m.audition(id) === true);
+  const gone = feed({}, 14); const G = g.guard, here = g.rig.pos.clone(); let byKeeper = 1; if (G && !G.done) { g.rig.pos.copy(G.pos); byKeeper = g.castNear()[G.kind]; g.rig.pos.copy(here); } // a keeper, where this band still has one
+  return { none, one, many, names, heard, gone, kind: G ? G.kind : null, byKeeper }; });
+check('every hunter and keeper has an instrument: it sits in while the creature is near, three at most with the keeper first, and each can be heard alone', cast.none === '' && cast.one === 'biter' && cast.many === 'warden,biter,angler' && /bowed cello/.test(cast.names) && cast.heard && cast.gone === '' && cast.byKeeper > 0.9, JSON.stringify(cast));
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; const code = g.presetCode(); const r1 = g.applyCode('hey try this one oarfish-music:1:dream=90,energy=20,menace=10,react=40,swing=75,band=80 :)'); const p1 = { ...g.music.params };
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);

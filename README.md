@@ -34,7 +34,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |
 | `game/kit.js`, `game/geo.js` | Shared tools for building flat-shaded models, and small maths. |
-| `game/music.js` | The band: generated jazz that follows the play. |
+| `game/music.js` | The band: generated jazz that follows the play. Each hunter and keeper has an instrument of its own (`CAST`) that sits in while it is near. |
 | `game/pad.js` | Controllers. |
 | `game/surface.js` | The sea surface, for the ending. |
 | `tools/` | Scripted checks and screenshot tools. Not part of the game. |
