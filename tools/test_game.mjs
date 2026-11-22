@@ -191,12 +191,12 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.id
   T.put(it.x, it.y + 0.4, it.z, 0); T.idle(0.2);
   const took = { worn: g.run.shells.map((x) => `${x.type}@${x.seg}`), taken: it.taken, dots: document.querySelectorAll('#scale-shells i').length, onBone: g.rig.spine[8].children.some((c) => c.isMesh), hint: document.getElementById('hint').textContent.slice(0, 40), list: document.getElementById('shell-list').textContent.length };
   const more = [g.giveShell('fan'), g.giveShell('pearl'), g.giveShell('ring')], segsOf = g.run.shells.map((x) => x.seg).sort((a, b) => a - b).join();
-  const m = { stamina: g.mods.stamina, food: g.mods.foodPerSeg }; const before = g.run.segs; g.addFood(4); const grew = g.run.segs - before;
+  const m = { stamina: g.mods.stamina, food: g.mods.food }; const before = g.run.segs; g.addFood(4); const grew = g.run.segs - before;
   g.run.safe = 0; const n0 = g.run.shells.length; g.bite(3, g.rig.spine.length, null, 'angler'); // three tail segments go, and whatever rode on them
   return { lay, took, more, segsOf, m, grew, segs: g.run.segs, lost: n0 - g.run.shells.length, left: g.run.shells.map((x) => x.seg).sort((a, b) => a - b).join() }; });
 check('three shells lie about a band; the head takes one onto the rearmost free third segment, and it shows on the body and the scale bar', s.lay.n === 3 && s.lay.kinds === 3 && s.lay.firstNear < 19 && s.took.worn.length === 1 && /@9$/.test(s.took.worn[0]) && s.took.taken && s.took.dots === 1 && s.took.onBone && s.took.list > 30, JSON.stringify({ lay: s.lay, took: s.took }));
 await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.idle(0.3); g.giveShell('spire'); g.giveShell('fan'); g.giveShell('spine'); const it = g.field.items[1]; T.put(it.x - 2.2, it.y + 0.5, it.z - 1.2, 1.1); g.cam.zoom = 0.55; g.cam.pitch = 0.4; g.snap(); T.idle(0.2); }); await snap(page, 'g-shells'); await ev(() => { window.__game.cam.zoom = 1; window.__game.cam.pitch = 0.56; });
-check('every third segment carries one shell, worn shells change the rules, and a bite takes the shell with the segment', JSON.stringify(s.more) === '[true,true,false]' && s.segsOf === '3,6,9' && s.m.stamina === 1.5 && s.m.food === 4 && s.grew === 1 && s.segs === 8 && s.lost === 1 && s.left === '3,6', JSON.stringify(s));
+check('every third segment carries one shell, worn shells change the rules, and a bite takes the shell with the segment', JSON.stringify(s.more) === '[true,true,false]' && s.segsOf === '3,6,9' && s.m.stamina === 1.5 && s.m.food === 0.8 && s.grew === 1 && s.segs === 8 && s.lost === 1 && s.left === '3,6', JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); g.run.segs = 12; g.buildFish(12); g.enterFloor(1, false); T.idle(1.6); for (const h of g.foes.hooks) h.pos.y += 500;
   const bs = g.foes.biters.slice(0, 3); for (const o of g.foes.biters) if (!bs.includes(o)) { o.alive = false; o.mesh.visible = false; }
   T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; g.giveShell('spire'); const at = g.run.shells[0].seg;
@@ -305,6 +305,28 @@ const live = await ev(() => { const g = window.__game, m = g.music, rest = m.par
   const sc = g.world.schools.find((x) => x.left > 0), here = g.rig.pos.clone(); g.rig.pos.set(sc.x, g.rig.pos.y, sc.z); const bySwarm = g.activity(); g.rig.pos.copy(here);
   return { rest, quiet, busy, after, bySwarm }; });
 check('the band\'s energy rests where its slider is, climbs with what is going on round the fish and settles again; a swarm close by counts', Math.abs(live.quiet - live.rest) < 0.03 && live.busy > 0.95 && Math.abs(live.after - live.rest) < 0.03 && live.bySwarm > 0.1 && live.bySwarm <= 1, JSON.stringify(live));
+// length is the dive's money: growing costs more the longer the fish is, a rift takes a toll, and a full-grown fish eats into its crest
+const len = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); for (const h of g.foes.hooks) h.pos.y += 500;
+  const costs = Array.from({ length: 16 }, (_, i) => g.growCost(10 + i)), fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } };
+  const grow = { first: costs[0], last: costs[15], total: costs.reduce((a, b) => a + b, 0), rising: costs.every((c, i) => !i || c >= costs[i - 1]), bitten: g.growCost(6), pearl: g.growCost(10, 0.8) };
+  const b0 = g.run.segs; g.addFood(5); grow.five = g.run.segs - b0; g.run.segs = 25; g.buildFish(25); g.run.food = 0; g.addFood(16); grow.sixteen = g.run.segs; g.addFood(1); grow.seventeen = g.run.segs;
+  // full grown: thirty more fish fill the crest; charged, a dash carries further and the ram that lands counts double and spends it
+  g.addFood(15); const half = g.run.charge; g.addFood(15); const G = g.guard, hp0 = G.state.hp;
+  T.put(G.pos.x, G.pos.y, G.pos.z - 2.9, 0); g.run.safe = 5; g.run.dashCool = 0; g.sim(1 / 60, { ...fwd, dashNow: true }); const reach = g.rig.dashT; g.sim(0.35, fwd);
+  const crest = { half, full: 1, reach: +reach.toFixed(2), blows: hp0 - G.state.hp, after: g.run.charge, segs: g.run.segs };
+  // the toll: a body of twenty goes down the rift and comes out fifteen, and the shells that rode on what was taken move up it
+  const dive = () => { const r = g.world.rift, w = g.world.goal; T.put(w.x + r.tx * 14 + r.nx * r.mid(14), r.y - r.step - 5.2, w.z + r.tz * 14 + r.nz * r.mid(14), 0); T.idle(0.1); const at = g.run.state; T.idle(2.6); return at; };
+  G.debug.fall(); T.idle(0.3); g.run.segs = 20; g.buildFish(20); g.run.shells = []; g.giveShell('fan'); g.giveShell('ring'); g.run.safe = 1e9;
+  const shells0 = g.run.shells.map((x) => x.seg).sort((a, b) => a - b).join(), owed = g.tollOf(20), st = dive();
+  const toll = { owed, state: st, floor: g.run.floor, segs: g.run.segs, shells0, shells: g.run.shells.map((x) => x.seg).sort((a, b) => a - b).join(), kinds: g.run.shells.length };
+  // too short to spare it: turned back while there is a swarm here it could take, let through for nothing when there is not
+  g.guard.debug.fall(); T.idle(0.3); g.run.segs = 9; g.buildFish(9); g.run.safe = 1e9; const r1 = dive(), stay = { state: r1, floor: g.run.floor, segs: g.run.segs, back: g.run.state, owed: g.tollOf(9) };
+  for (const sc of g.world.schools) g.world.take(sc); const r2 = dive(), free = { state: r2, floor: g.run.floor, segs: g.run.segs };
+  return { grow, crest, toll, stay, free }; });
+check('growing costs more the longer the fish is: five fish for a segment at the start, seventeen at the top, and a bitten fish grows back at the first price', len.grow.first === 5 && len.grow.last === 17 && len.grow.rising && len.grow.total > 165 && len.grow.total < 185 && len.grow.bitten === 5 && len.grow.pearl === 4 && len.grow.five === 1 && len.grow.sixteen === 25 && len.grow.seventeen === 26, JSON.stringify(len.grow));
+check('a full-grown fish eats into its crest: charged, its dash carries half as far again and the ram that lands counts double and spends it', len.crest.half === 0.5 && len.crest.reach > 0.26 && len.crest.blows === 2 && len.crest.after === 0 && len.crest.segs === 26, JSON.stringify(len.crest));
+check('a rift takes its toll: a body of twenty comes out fifteen, and the shells that rode on the tail move up the body', len.toll.owed === 5 && len.toll.state === 'descend' && len.toll.floor === 1 && len.toll.segs === 15 && len.toll.shells0 === '15,18' && len.toll.shells === '12,15' && len.toll.kinds === 2, JSON.stringify(len.toll));
+check('a fish too short to spare the toll is turned back while there is a swarm here it could take, and let through for nothing when there is not', len.stay.owed === 0 && len.stay.state === 'refused' && len.stay.floor === 1 && len.stay.segs === 9 && len.stay.back === 'play' && len.free.state === 'descend' && len.free.floor === 2 && len.free.segs === 9, JSON.stringify({ stay: len.stay, free: len.free }));
 // the Keeper walks on its own legs: feet planted, body riding on them over the ground as it lies
 const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
   const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, W = R.walker, home = { x: r.x - r.nx * 24, z: r.z - r.nz * 24 };

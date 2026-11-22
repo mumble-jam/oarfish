@@ -5,7 +5,7 @@ import { buildOarfish, PALETTE } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
 import { resolve } from './npc.js';
-import { createWorld, SPAWN, FLOORS, wrapD, wrapRule } from './world.js';
+import { createWorld, SPAWN, FLOORS, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
@@ -16,7 +16,20 @@ import { SHELLS, SLOT_EVERY, shellMods, createShellKit, createShellField } from 
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
-const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, FOOD_PER_SEG = 5, SHED_COST = 3;
+const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
+// Length is the dive's money, and these are its prices, all in one place.
+//   cost    fish to grow one segment: the first figure at the starting length and below, the second at one short of the longest, along a curve
+//           bent by `bend` (1 is a straight line; more keeps it cheap for longer). A bitten fish grows back fast; a long one needs the big
+//           swarms. The first four segments must cost 24 or less, or the nursery's three small pens no longer buy its bigger swarm.
+//           (The Pearl takes a fifth off.)
+//   toll    what a rift takes as the fish goes down it: `part` of every segment over `over`, never fewer than `least`. It never leaves a fish
+//           with fewer than `keep`, the least that can still take a small swarm: a fish that cannot spare it is turned back while there is
+//           still something here it could eat, and let through for nothing when there is not.
+//   charge  full grown, food is not wasted: `full` fish fill the crest. Charged, a dash goes `reach` times as far, and the next ram that lands
+//           counts for `blows` and stuns what is within `shock` metres for `stun` seconds. That spends it.
+const LENGTH = { cost: [5, 17], bend: 1.15, toll: { part: 0.4, over: 8, least: 2, keep: 8 }, charge: { full: 30, reach: 1.5, blows: 2, shock: 6, stun: 2.5 } };
+const growCost = (segs, discount = 1) => Math.max(1, Math.round(lerp(LENGTH.cost[0], LENGTH.cost[1], Math.pow(clamp((segs - START_SEGS) / (MAX_SEGS - 1 - START_SEGS), 0, 1), LENGTH.bend)) * discount));
+const riftToll = (segs) => Math.max(LENGTH.toll.least, Math.round((segs - LENGTH.toll.over) * LENGTH.toll.part));
 // Stamina. It is only spent while something is hunting the fish; with nothing about, sprinting and dashing are free.
 // sprint: seconds of sprint in a full bar. regen: seconds to refill, after `pause` seconds of not spending.
 // dash: the share of the bar one dash costs. cool: seconds between dashes. linger: how long a hunt still counts after it breaks off.
@@ -92,6 +105,8 @@ export async function start(saved = {}) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.05;
   const lamp = new THREE.PointLight('#ffe6ee', 0, 30, 1); // the fish's own glow, all there is in the deep
+  const crest = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: '#ffd27a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, fog: false })); // the charge a full-grown fish eats into its crest: seen on the fish, not on the plate
+  crest.renderOrder = 5; scene.add(crest);
   scene.add(hemi, sun, sun.target, lamp);
   const camera = new THREE.PerspectiveCamera(30, 1, 0.3, 260);
 
@@ -207,7 +222,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -291,7 +306,7 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
@@ -302,9 +317,14 @@ export async function start(saved = {}) {
   function addFood(n) {
     run.food += n; run.caught += n;
     let grew = false;
-    while (run.food >= mods.foodPerSeg && run.segs < MAX_SEGS) { run.food -= mods.foodPerSeg; run.segs++; grew = true; }
-    if (run.segs >= MAX_SEGS) run.food = Math.min(run.food, mods.foodPerSeg - 1);
+    while (run.segs < MAX_SEGS && run.food >= growCost(run.segs, mods.food)) { run.food -= growCost(run.segs, mods.food); run.segs++; grew = true; }
+    if (run.segs >= MAX_SEGS && run.food > 0) { // full grown: what it eats goes to its crest
+      const was = run.charge; run.charge = Math.min(1, run.charge + run.food / LENGTH.charge.full); run.food = 0;
+      if (run.charge >= 1 && was < 1) { moment('grow'); pulse('grow'); }
+      say('charge', 'Full grown, what you eat charges your crest. Charged, a dash carries further and your next ram hits twice as hard.', 9);
+    }
     if (grew) { buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); moment('grow'); pulse('grow'); say('grow', 'Eating makes you longer. Your length is your health.', 7); }
+    if (grew && growCost(run.segs, 1) >= LENGTH.cost[0] + 3) say('cost', 'The longer you are, the more each new segment costs. A long body needs the bigger swarms.', 8);
     if (run.segs >= 12 && run.floor === 0) say('well', 'Follow the marker to the rift and dive down into it when you are ready.', 9);
   }
   function lose(n, kind) {
@@ -339,6 +359,20 @@ export async function start(saved = {}) {
     $('shell-list').innerHTML = run.shells.length
       ? [...run.shells].sort((a, b) => a.seg - b.seg).map((s) => { const d = SHELLS[s.type]; return `<li><i style="background: ${d.colour}"></i><b>${d.name}</b>, on segment ${s.seg}. ${d.worn} Shed with its segment, ${d.shed}</li>`; }).join('')
       : '<li>None yet. They lie glowing about each band; swim your head over one to take it.</li>';
+  }
+  // ---- the rift's toll. What it would take from the fish as it is; nothing if the fish cannot spare it
+  const tollOf = (segs) => (segs - riftToll(segs) >= LENGTH.toll.keep ? riftToll(segs) : 0);
+  const couldFeed = () => world.schools.some((sc) => sc.left > 0 && canWrap(bodyMetres() - 0.05, sc.ball)); // is there still a swarm here this body could take
+  const overRift = () => world.rift && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.rift.in(rig.pos.x, rig.pos.z) > 0 && rig.pos.y < world.rift.y + 6;
+  const tollHere = () => (run.state === 'play' && overRift() ? tollOf(run.segs) : 0);
+  function payToll(n) { // the tail goes; the shells that rode on it move up the body to the rearmost places left
+    if (n <= 0) return;
+    const riding = run.shells.filter((sh) => sh.seg > run.segs - n).sort((a, b) => b.seg - a.seg);
+    run.segs -= n; run.shells = run.shells.filter((sh) => sh.seg <= run.segs);
+    let lost = 0;
+    for (const sh of riding) { let seg = 0; for (let k = SLOT_EVERY; k <= run.segs; k += SLOT_EVERY) if (!run.shells.some((x) => x.seg === k)) seg = k; if (seg) run.shells.push({ type: sh.type, seg }); else lost++; }
+    shellsChanged(); buildFish(run.segs);
+    tell(lost ? `The rift took ${n} segments, and ${lost === 1 ? 'a shell' : `${lost} shells`} with them: there was no room left to carry ${lost === 1 ? 'it' : 'them'}.` : `The rift took ${n} segments.`, 5, { kind: lost ? 'warn' : 'note', title: 'The toll' });
   }
   function trimShells() { // shells whose segment is no longer there
     const gone = run.shells.filter((s) => s.seg > run.segs);
@@ -478,7 +512,7 @@ export async function start(saved = {}) {
   const teach = { on: true, done: false, learned: {}, ...store.get('oarfish.teach', {}) };
   const saveTeach = () => store.set('oarfish.teach', { on: teach.on, done: teach.done, learned: teach.learned });
   const know = (id) => { if (!teach.learned[id]) { teach.learned[id] = 1; saveTeach(); } };
-  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard']);
+  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll']); // what the nursery teaches itself, and what can wait until it is over
   const tut = { on: false, step: 0, stall: 0, told: false, was: 0, prize: null };
   // a line of text is the last resort: once ever, never while the nursery is teaching the same thing by other means
   function say(id, text, hold = 7, kind = 'teach') { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); hintQueue.push({ text, hold, kind }); }
@@ -608,7 +642,8 @@ export async function start(saved = {}) {
     // the plate's scale bar is the health bar
     const sc = $('scale');
     sc.style.setProperty('--segs', run.segs);
-    sc.style.setProperty('--food', run.segs >= MAX_SEGS ? 0 : run.food / mods.foodPerSeg);
+    sc.style.setProperty('--food', run.segs >= MAX_SEGS ? 0 : run.food / growCost(run.segs, mods.food));
+    const owed = tollHere(); sc.style.setProperty('--toll', owed); sc.classList.toggle('tolled', owed > 0); // over an open rift: what it will take
     sc.classList.toggle('low', run.segs <= MIN_SEGS + 2);
     $('len').textContent = `${bodyMetres().toFixed(1)} m`;
     $('btn-shed').disabled = run.segs - SHED_COST < MIN_SEGS;
@@ -1179,7 +1214,7 @@ export async function start(saved = {}) {
     inp.dash = false; inp.winded = false;
     const cost = (STAMINA.dash * mods.dashCost) / mods.stamina; // shells change what a dash costs and how long the bar lasts
     if (inp.dashNow && !inp.coil && run.dashCool <= 0 && (!taxed || run.stamina >= cost - 1e-6)) {
-      inp.dash = true; inp.dashScale = mods.dashScale; run.dashCool = STAMINA.cool * mods.dashCool;
+      inp.dash = true; inp.dashScale = mods.dashScale * (run.charge >= 1 ? LENGTH.charge.reach : 1); run.dashCool = STAMINA.cool * mods.dashCool;
       if (taxed) { run.stamina = Math.max(0, run.stamina - cost); run.rest = 0; }
       moment('dash');
     }
@@ -1336,6 +1371,8 @@ export async function start(saved = {}) {
     sun.position.copy(focus).add(SUN_OFFSET);
     sun.target.position.copy(focus);
     lamp.position.set(rig.pos.x + sy * 2.4, rig.pos.y + 3, rig.pos.z + cy * 2.4); // above and on the viewer's side, so the flank is lit
+    { const c = run.charge, full = c >= 1, beat = full ? 0.5 + 0.5 * Math.sin(world.time.value * 7) : 0; // the crest: a glow over the head that grows as it fills, and beats when it is full
+      crest.position.copy(rig.joints[0]).y += 0.3; crest.scale.setScalar(c > 0 ? 0.5 + 0.9 * c + 0.3 * beat : 0.01); crest.material.opacity = damp(crest.material.opacity, c > 0 ? 0.2 + 0.4 * c + 0.2 * beat : 0, 6, dt); }
   }
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
@@ -1364,7 +1401,11 @@ export async function start(saved = {}) {
     } else if (run.state === 'descend') {
       scripted.dir.copy(rig.forward).setY(0).normalize(); scripted.vertical = -1; scripted.amount = 0.3;
       inp = scripted;
-      if (run.stateT > 0.8) { enterFloor(run.floor + 1, true); $('fade').classList.remove('on'); }
+      if (run.stateT > 0.8) { const owed = run.toll; run.toll = 0; enterFloor(run.floor + 1, true); $('fade').classList.remove('on'); payToll(owed); }
+    } else if (run.state === 'refused') { // too short for the rift: it is carried back up out of it
+      scripted.dir.copy(rig.forward).setY(0).normalize(); scripted.vertical = 1; scripted.amount = 0.5;
+      inp = scripted;
+      if (run.stateT > 1.1) run.state = 'play';
     } else if (run.state === 'opening') { // the Sum lets go and the seabed begins to shake
       inp = idle; end.quake = Math.min(1, run.stateT / 3);
       if (run.stateT > 5.5) { run.state = 'rise'; run.stateT = 0; }
@@ -1400,13 +1441,14 @@ export async function start(saved = {}) {
     if (run.state === 'play' && rig.dashT > 0) { // a dash that meets a hunter head-on is a ram
       const hits = foes.ram(rig.snout, rig.forward, mods.tusk);
       if (sum?.ram(rig.snout)) hits.push({ kind: 'sum', pos: rig.snout, food: 0 });
-      const blow = guard?.ram(rig.snout);
+      const charged = run.charge >= 1, blow = guard?.ram(rig.snout, charged ? LENGTH.charge.blows : 1);
       if (blow && blow.bounced) { rig.dashT = 0; run.kick = 0.5; } // it shrugged the ram off
       else if (blow) hits.push(blow);
       if (hits.length) {
         for (const h of hits) { if (h.food) mote(h.pos, h.food); if (h.killed) for (let i = 0; i < 2; i++) foes.spawnPiece(h.pos, 'debris'); }
         run.stamina = Math.min(1, run.stamina + (STAMINA.dash * mods.dashCost) / mods.stamina); run.dashCool = 0; // a ram that lands pays for itself
         run.kick = 1; run.freeze = 0.07;
+        if (charged) { run.charge = 0; foes.stun(rig.snout, LENGTH.charge.shock, LENGTH.charge.stun); run.freeze = 0.12; cam.shake = Math.max(cam.shake, 0.6); moment('kill', 1); } // the crest spends itself on the blow
         if (hits.some((h) => !h.killed)) rig.dashT = 0; // something that survives the blow stops the dash; small things break and the dash carries on through them
         moment(hits.some((h) => h.baited) ? 'kill' : 'ram'); pulse('grow');
       }
@@ -1466,7 +1508,13 @@ export async function start(saved = {}) {
         }
       }
       if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7);
-      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { run.state = 'descend'; run.stateT = 0; fade(true, `#${world.rift.murk.getHexString()}`); moment('descend'); know('down'); } // the palace gate only leads into the hall
+      if (overRift()) say('toll', 'A rift takes part of your tail as you go down it. The dark end of your scale is what this one will take.', 9);
+      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { // the palace gate only leads into the hall
+        const owed = tollOf(run.segs);
+        if (!owed && couldFeed()) { run.state = 'refused'; run.stateT = 0; moment('burst'); pulse('hurt'); tell('Too short for the rift. Feed first.', 4, { kind: 'warn' }); } // it cannot spare the toll, and there is still food here
+        else { run.toll = owed; const N = rig.spine.length; for (let i = 0; i < owed; i++) foes.spawnPiece(rig.joints[Math.max(N - i, 1)], 'debris'); // what the rift takes is left behind in the cloud
+          run.state = 'descend'; run.stateT = 0; fade(true, `#${world.rift.murk.getHexString()}`); moment('descend'); know('down'); }
+      }
     }
     ctx.joints = rig.joints; ctx.time = world.time.value; ctx.dash = rig.dashT > 0; ctx.coil = rig.coiling;
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
@@ -1543,7 +1591,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

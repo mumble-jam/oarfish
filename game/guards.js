@@ -63,13 +63,13 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const vulnerable = () => !S.done && (kind === 'keeper' || kind === 'warden' || S.state === 'tired' || S.state === 'dim' || (kind === 'shearer' && (S.state === 'aim' || S.state === 'charge')));
   const wrappable = () => !S.done && (kind === 'keeper' || S.state === 'tired' || S.state === 'dim' || S.state === 'feed' || S.stun > 0);
   // a dash that reaches it
-  function ram(snout) {
+  function ram(snout, power = 1) { // power: how many blows this one counts for
     if (S.done || snout.distanceTo(pos) > { keeper: 2.1, shearer: 1.5, lamplighter: 1.9, warden: 1.3 }[kind]) return null;
     if (S.stun > 0.3 && S.flash > 0.2) return null; // one ram, one blow
     if (!vulnerable()) { S.stun = 0.4; S.flash = 0.5; game.event('clang', pos); return { kind: 'guard', pos: pos.clone(), food: 0, bounced: true }; } // lit, the Lamplighter shrugs it off
     if (kind === 'warden') S.spin *= -1;
     if (kind === 'shearer') set('tired', 2.2);
-    hurt({ keeper: 1.6, shearer: 1.5, lamplighter: 1.2, warden: 1.3 }[kind]);
+    for (let i = 0; i < power && !S.done; i++) hurt({ keeper: 1.6, shearer: 1.5, lamplighter: 1.2, warden: 1.3 }[kind]);
     return { kind: 'guard', pos: pos.clone(), food: 0 };
   }
   const tailNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(pos) < reach) return j; return -1; };

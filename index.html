@@ -77,7 +77,7 @@ body { background: var(--abyss); color: var(--foam); font: 400 15px/1.35 var(--f
 .caption b { font: 400 21px/1.15 var(--font-caps); letter-spacing: 0.16em; }
 .caption i { font: italic 400 20px/1.15 var(--font-display); margin-left: 0.4em; white-space: nowrap; }
 /* the scale bar: one tick per body segment, a coral stub for food on the way to the next */
-.scale { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 9px; --segs: 10; --food: 0; }
+.scale { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 9px; --segs: 10; --food: 0; --toll: 0; }
 .ruler { display: flex; height: 9px; position: relative; }
 /* shells ride above the tick of the segment that carries them; the head is at the left */
 #scale-shells i { position: absolute; top: -11px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 60%, transparent); }
@@ -86,6 +86,9 @@ body { background: var(--abyss); color: var(--foam); font: 400 15px/1.35 var(--f
 #shell-list b { font-weight: 700; }
 #scale-bar { display: block; width: calc(var(--segs) * var(--tick)); background: repeating-linear-gradient(90deg, var(--foam) 0 1px, transparent 1px var(--tick)); border-bottom: 1px solid var(--foam); border-right: 1px solid var(--foam); transition: width 0.25s; }
 #scale-food { display: block; width: calc(var(--food) * var(--tick)); background: color-mix(in srgb, var(--coral) 55%, transparent); border-bottom: 1px solid var(--coral); transition: width 0.2s; }
+/* over an open rift, the end of the body that the rift will take is marked dark */
+#scale-toll { position: absolute; top: 0; height: 100%; left: calc((var(--segs) - var(--toll)) * var(--tick)); width: calc(var(--toll) * var(--tick)); background: color-mix(in srgb, var(--ink) 72%, transparent); border-bottom: 2px solid var(--coral); opacity: 0; transition: opacity 0.3s, left 0.25s, width 0.25s; pointer-events: none; }
+.scale.tolled #scale-toll { opacity: 1; }
 #len { font: 400 14px/1 var(--font-caps); letter-spacing: 0.12em; min-width: 4.2em; text-align: left; font-variant-numeric: tabular-nums; }
 .scale.low #scale-bar { background: repeating-linear-gradient(90deg, var(--alarm) 0 1px, transparent 1px var(--tick)); border-color: var(--alarm); animation: throb 0.7s ease-in-out infinite alternate; }
 .scale.low #len { color: var(--alarm); }
@@ -362,7 +365,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   <div class="lettering foot">
     <h1 class="caption"><b>Le Gymnètre Épée.</b><i>(Gymnetrus gladius)</i></h1>
     <div class="scale" id="scale" role="img" aria-label="Body length">
-      <div class="ruler"><span id="scale-shells"></span><i id="scale-bar"></i><i id="scale-food"></i></div>
+      <div class="ruler"><span id="scale-shells"></span><i id="scale-bar"></i><i id="scale-food"></i><i id="scale-toll"></i></div>
       <span id="len">3.6 m</span>
     </div>
   </div>

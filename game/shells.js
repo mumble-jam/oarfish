@@ -19,7 +19,7 @@ export const SHELLS = {
   spine: { name: 'Spine', colour: '#d83c5f', worn: 'A biter that bites you dies of it.', shed: 'whatever reaches the bait dies.' },
   lamp: { name: 'Lamp', colour: '#ffd27a', worn: 'Your light reaches half as far again.', shed: 'the bait flares and dazzles every angler near it.' },
   tusk: { name: 'Tusk', colour: '#ffffff', worn: 'A ram breaks anglers too, and every ram feeds you more.', shed: 'each hunter that reaches the bait feeds you.' },
-  pearl: { name: 'Pearl', colour: '#cfe6ff', worn: 'Four mouthfuls grow a segment, not five.', shed: 'take the bait back before it fades and regain two segments.' },
+  pearl: { name: 'Pearl', colour: '#cfe6ff', worn: 'Every new segment costs a fifth less to grow.', shed: 'take the bait back before it fades and regain two segments.' },
 };
 export const SHELL_TYPES = Object.keys(SHELLS);
 export const SLOT_EVERY = 3; // one shell to every third segment
@@ -29,7 +29,7 @@ export function shellMods(worn) {
   const n = (t) => worn.reduce((k, s) => k + (s.type === t ? 1 : 0), 0);
   return {
     dashScale: 1 + 0.5 * n('spire'), stamina: 1 + 0.5 * n('fan'), dashCool: Math.pow(0.5, n('coil')), dashCost: Math.pow(2 / 3, n('coil')),
-    sweep: Math.pow(0.9, n('ring')), shock: n('horn') > 0, thorns: n('spine') > 0, lamp: 1 + 0.5 * n('lamp'), tusk: n('tusk'), foodPerSeg: n('pearl') ? 4 : 5,
+    sweep: Math.pow(0.9, n('ring')), shock: n('horn') > 0, thorns: n('spine') > 0, lamp: 1 + 0.5 * n('lamp'), tusk: n('tusk'), food: n('pearl') ? 0.8 : 1,
   };
 }
 
