@@ -10,13 +10,14 @@ Two people work on this, both through Claude. They are designers, not engineers.
 
 - Work on a branch. Do not commit to `main` or push unless asked. Branches are merged into `main` on request, after the checks pass.
 - Before saying something works: run `npm test` (five suites, about ten minutes in a software renderer) and look at the result yourself with the screenshot tools. Passing checks are not the same as it looking right.
-- `node tools/shot_models.mjs <prefix> [filter…]` photographs models into `out/shots/`; `python3 tools/sheet.py <out.png> <cols> <width> <files…>` tiles them into one sheet to look at.
+- `node tools/shot_models.mjs <prefix> [filter…]` photographs models into `out/shots/` (put library changes over them with `NPC='{"biter":{"soft":true}}'` in front); `python3 tools/sheet.py <out.png> <cols> <width> <files…>` tiles them into one sheet to look at.
 - In this sandbox there may be no downloaded Chromium: `CHROME=/usr/bin/google-chrome npm test`.
 - One control check ("holding the left button coils") depends on real-time state and fails now and then. Re-run before believing it.
 
 ## How it is built
 
 - **Everything is flat-shaded triangles with a colour at each corner.** Models are made with `mesher()` in `game/kit.js`: a skin over cross-sections, fins of rays, eyes with pupils. A face whose colour has alpha 0 gives off its own light. Match this; do not bring in textures or imported models.
+- **One exception, on trial: the soft look (`game/soft.js`).** A component may carry `soft: { shape, … }`, a second way to draw it: no model, just a box whose fragment shader finds a shape made of melted round forms and colours it by where it faces. Only the tail-biter has one. It is off unless chosen under *Look* in the library (kept in the overlay as `soft: true`; the note says `look soft`). It reads the component's own palette and `swim` numbers, takes the scene's fog and lights, and writes its own depth so stone hides it. It costs far more per pixel than a model: fine for a few hunters, not for anything instanced. Give another creature one only when asked, and write its shape in `soft.js` beside the biter's.
 - **Appearance is a component.** `game/npc.js` holds one spec per creature or thing: palette, model, body motion, attachments, states. The game calls `make(id)`; the library calls the same. Never put a colour or a model for a creature anywhere else. Shells register from `shells.js`, plants and stonework from `world.js`, with `register()`.
 - **Behaviour is not in the component.** How a biter hunts is in `foes.js`; the component only says how it looks and how its body moves.
 - **World things are instanced.** `world.js` scatters white models tinted per instance. A thing's tints come from its component (`tonesOf(id)`); stone and paint come from the two colour sets (`stoneOf(band)`, `paintOf(band)`).

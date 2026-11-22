@@ -5,11 +5,15 @@
 //
 // A palette can also be changed from the library without touching this file: those changes are kept in the browser
 // and laid over the defaults below, in the library and in the game alike, until they are reset or written in here.
+//
+// A component may also carry a second way of being drawn, `soft`: light instead of triangles (soft.js). It is on trial,
+// chosen in the library like a colour, and wears the same palette. Without that choice everything is low-poly.
 
 import * as THREE from 'three';
 import { alive } from './kit.js';
 import { glowTexture, lerp } from './geo.js';
 import * as model from './critters.js';
+import { softBody } from './soft.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -19,6 +23,7 @@ let GLOW = null;
 const glowMap = () => (GLOW ||= glowTexture());
 const sprite = (a, color, size) => { const m = new THREE.SpriteMaterial({ map: glowMap(), color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }); a.owned.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(size); return s; };
 const BULB = new THREE.IcosahedronGeometry(0.1, 0), LINE = new THREE.CylinderGeometry(0.014, 0.014, 1, 4).translate(0, 0.5, 0), BAIT = new THREE.OctahedronGeometry(0.07, 0);
+const SHADE = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide }); // seen by the shadow pass only
 const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the wells carry a little light of their own, so they read in the dark
 const SCHOOL = { tone1: '#f3f7fa', tone2: '#ffd96b', tone3: '#9fe0ea', tone4: '#ffb38a' }; // the tints a swarm may take, one to a swarm
 // where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp); sc: its swarm (x, y, z, ball, pack, threat, burst)
@@ -41,6 +46,9 @@ export const NPCS = [
     about: 'Deep-chested, with an underbite and a tall fin. It lives in the shearing stalls, and on the Sum as cleaner fish live on a whale.',
     palette: { back: '#3f2550', flank: '#6d4180', bar: '#583369', belly: '#a981b3', fins: '#e2566b', finDark: '#b8364f', jaw: '#2d1a3a', eye: '#eaff7c' },
     build: (pal) => model.biter(pal), swim: { amp: 0.055, waves: 2.4, nose: 0.44, length: 0.9 }, beat: [4, 3],
+    // its soft look. rim: the colour of the light on its edges. The rest, 0 to 1: how far the edge goes out of focus, how far
+    // its glow reaches into the water, how strong the rim is, the light in its chest, the light of its eye, and film grain
+    soft: { shape: 'biter', rim: '#ffb9a6', edge: 0.46, halo: 0.38, rimLight: 0.72, inner: 0.34, eyeGlow: 0.9, grain: 0.3 },
     states: [{ id: 'roam', name: 'Roaming', speed: 1.2 }, { id: 'hunt', name: 'Hunting', speed: 3.8 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
   { id: 'angler', group: 'Hunters', name: 'Angler', bands: [2, 3, 4], length: 1.6, role: 'Hangs behind one warm light and lunges at what comes to it. It swallows a bait whole.',
     about: 'A globe of a fish, all mouth, with a rod over its head. It sits on the old lamp plinths, where the lamps used to be.',
@@ -131,20 +139,21 @@ export const tweaks = {
   set(id, key, value) {
     const t = load(), o = (t[id] ||= { palette: {} }); o.palette ||= {};
     if (key === 'scale') { if (Math.abs(value - 1) < 0.005) delete o.scale; else o.scale = +value.toFixed(2); }
+    else if (key === 'soft') { if (value && NPC[id].soft) o.soft = true; else delete o.soft; }
     else if (!HEX.test(value) || value.toLowerCase() === NPC[id].palette[key].toLowerCase()) delete o.palette[key]; else o.palette[key] = value.toLowerCase();
-    if (!Object.keys(o.palette).length && o.scale === undefined) delete t[id];
+    if (!Object.keys(o.palette).length && o.scale === undefined && !o.soft) delete t[id];
     keep();
   },
   reset(id) { if (id) delete load()[id]; else saved = {}; keep(); },
   // the changes as a few lines to paste to whoever keeps the code, so they can be written in for everyone
-  text() { const ids = tweaks.changed(); return ids.length ? `Oarfish NPC changes, to write into npc.js:\n${ids.map((id) => { const o = load()[id]; return `${id}: ${[...Object.entries(o.palette || {}).map(([k, v]) => `${k} ${v}`), ...(o.scale !== undefined ? [`scale ${o.scale}`] : [])].join(', ')}`; }).join('\n')}` : ''; },
+  text() { const ids = tweaks.changed(); return ids.length ? `Oarfish NPC changes, to write into npc.js:\n${ids.map((id) => { const o = load()[id]; return `${id}: ${[...Object.entries(o.palette || {}).map(([k, v]) => `${k} ${v}`), ...(o.scale !== undefined ? [`scale ${o.scale}`] : []), ...(o.soft ? ['look soft'] : [])].join(', ')}`; }).join('\n')}` : ''; },
 };
 // a component as it stands now: its defaults with this browser's changes over them
 export function resolve(id, forced = null) {
   const spec = NPC[id], t = load()[id] || {}, palette = { ...spec.palette };
   if (spec.paintOf !== undefined && id !== 'paint') palette.tone = paintOf(spec.paintOf); // a keeper wears its band's colour, unless it has been given one of its own
   for (const [k, v] of Object.entries({ ...(t.palette || {}), ...(forced?.palette || {}) })) if (k in palette && HEX.test(v)) palette[k] = v;
-  return { palette, scale: forced?.scale ?? t.scale ?? 1 };
+  return { palette, scale: forced?.scale ?? t.scale ?? 1, soft: !!spec.soft && !!(forced?.soft ?? t.soft) };
 }
 
 // the tints a component hands to whoever scatters it: its palette's tone1, tone2…
@@ -163,17 +172,19 @@ const shared = (key, build) => { if (!cache.has(key)) cache.set(key, build()); r
 // the model of a component as it stands now. Shared by every creature of the kind, and never thrown away
 export const geometry = (id) => { const look = resolve(NPC[id].paletteFrom || id); return shared(`${id}|${JSON.stringify(look.palette)}`, () => NPC[id].build(look.palette)); };
 
-// One creature. Returns { object (put this in the scene), body (the mesh that swims), parts, look, tick(dt, speed), dispose() }.
+// One creature. Returns { object (put this in the scene), body (the mesh that swims), parts, look, soft, tick(dt, speed), dispose() }.
 // preview: a look to show in place of the saved one, for trying a change before keeping it; its model is the creature's own.
 export function make(id, { preview = null } = {}) {
   const spec = NPC[id], look = resolve(id, preview), own = !!preview;
-  const material = alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, ...(spec.material || {}) }), { swim: spec.swim });
-  const body = new THREE.Mesh(own ? spec.build(look.palette) : geometry(id), material);
-  body.castShadow = true; body.rotation.order = 'YXZ';
-  const a = { id, spec, look, body, object: body, parts: {}, owned: [material],
+  const soft = look.soft ? softBody(spec.soft, look.palette, spec.swim) : null; // the look chosen for it: light, or triangles
+  const material = soft ? soft.material : alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, ...(spec.material || {}) }), { swim: spec.swim });
+  const body = soft ? soft.mesh : new THREE.Mesh(own ? spec.build(look.palette) : geometry(id), material);
+  body.castShadow = !soft; body.rotation.order = 'YXZ';
+  if (soft) { const shade = new THREE.Mesh(geometry(id), SHADE); shade.castShadow = true; body.add(shade); } // light throws no shadow, so its low-poly body, unseen, throws one for it
+  const a = { id, spec, look, body, object: body, parts: {}, owned: [material], soft: !!soft,
     // advance its tail-beat: speed is how fast it is swimming, in metres a second
     tick(dt, speed = 0) { material.userData.swim.value += dt * (spec.beat[0] + spec.beat[1] * speed); },
-    dispose() { for (const o of a.owned) o.dispose(); if (own) body.geometry.dispose(); } };
+    dispose() { for (const o of a.owned) o.dispose(); if (own && !soft) body.geometry.dispose(); } };
   spec.assemble?.(a, look.palette);
   a.object.scale.multiplyScalar(look.scale);
   return a;

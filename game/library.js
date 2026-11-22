@@ -85,19 +85,20 @@ export function createLibrary({ renderer, root, onClose }) {
       S.lift = show.lift || 0;
     } else {
       const actor = make(S.id, { preview });
-      stand.add(actor.object); tris = actor.body.geometry.attributes.position.count / 3;
+      stand.add(actor.object); tris = actor.soft ? 0 : actor.body.geometry.attributes.position.count / 3;
       const extra = [];
       if (actor.segments) actor.segments(11).forEach((s, i) => { const a = (i + 1) * 0.24; s.position.set(4.2 * Math.cos(a) - 4.2, 0, -4.2 * Math.sin(a) - 0.5); s.rotation.y = a; stand.add(s); extra.push(s); }); // trailing from the head, round the ring it swims
       shown = { actor, body: actor.body, extra, dispose() { actor.dispose(); } };
     }
     stand.position.set(0, spec.id === 'hook' ? S.lift + 0.6 : spec.run ? 0 : S.lift, 0); stand.rotation.set(0, 0, 0);
-    for (const o of stand.children) if (o.material && !o.isSprite) o.material.wireframe = S.wire;
-    if (shown.actor) shown.actor.body.material.wireframe = S.wire;
+    const wire = S.wire && !shown.actor?.soft; // a soft body has no wires to show
+    for (const o of stand.children) if (o.material && !o.isSprite) o.material.wireframe = wire;
+    if (shown.actor) shown.actor.body.material.wireframe = wire;
     // the measure: as long as the creature, rounded up to the half metre
     const steps = Math.max(2, Math.ceil(spec.length / 0.5));
     if (!spec.swarm && !spec.run && spec.id !== 'warden' && spec.kind !== 'tokens' && !(spec.show?.n > 1)) for (let i = 0; i < steps; i++) { const b = new THREE.Mesh(ruleGeo, i % 2 ? ruleB : ruleA); b.position.set(0, 0.011, (i + 0.5) * 0.5 - steps * 0.25); b.rotation.y = Math.PI / 2; rule.add(b); } // lying under it, nose to tail
     if (fishModel) { fishModel.group.visible = S.fish; fishModel.group.position.set(-clamp(spec.length * 0.35 + 0.9, 1.2, 4), S.lift, 0); }
-    $('#lib-tris').textContent = `${Math.round(tris)} triangles`;
+    $('#lib-tris').textContent = shown.actor?.soft ? 'drawn as light, no triangles' : `${Math.round(tris)} triangles`;
     if (state.speed !== undefined && !S.dirty) S.speed = state.speed;
     S.dirty = false;
   }
@@ -149,6 +150,7 @@ export function createLibrary({ renderer, root, onClose }) {
       $('#lib-name').textContent = spec.name; $('#lib-role').textContent = spec.role; $('#lib-about').textContent = spec.about;
       $('#lib-where').textContent = `${spec.bands.map((b) => BANDS[b]).join(', ')} · ${spec.swarm ? `${spec.length} m each` : spec.run ? `${spec.length} m to a length` : `${spec.length} m long`}`;
       $('#lib-play').innerHTML = `<label>Light of</label>${seg('band', BANDS.map((b, i) => [i, i + 1, b, spec.bands.includes(i)]), S.band)}`
+        + (spec.soft ? `<label>Look</label>${seg('look', [['flat', 'Low-poly'], ['soft', 'Soft', 'On trial: the same animal, drawn as light']], look.soft ? 'soft' : 'flat')}` : '')
         + (spec.states.length > 1 ? `<label>State</label>${seg('state', spec.states.map((s, i) => [i, s.name]), S.state)}` : '')
         + (spec.swarm ? `<label>Swarm</label>${seg('tier', Object.entries(SWARMS).map(([k, s]) => [k, s.n]), S.tier)}` : '')
         + (spec.swarm || shown?.tones > 1 ? `<label>Tint</label>${seg('tone', Array.from({ length: spec.swarm ? 4 : shown.tones }, (_, i) => [i, i + 1]), S.tone % (spec.swarm ? 4 : shown.tones))}` : '')
@@ -174,6 +176,7 @@ export function createLibrary({ renderer, root, onClose }) {
     const set = b.parentElement?.dataset.set;
     if (set === 'band') { S.band = +b.dataset.v; light(); mount(); panel(); }
     else if (set === 'state') { S.state = +b.dataset.v; S.dirty = false; const st = NPC[S.id].states[S.state]; if (st.speed !== undefined) S.speed = st.speed; if (NPC[S.id].kind === 'fish') mount(); panel(); }
+    else if (set === 'look') { tweaks.set(S.id, 'soft', b.dataset.v === 'soft'); S.changed = true; mount(); list(); panel(); }
     else if (set === 'tier') { S.tier = b.dataset.v; S.dist = SWARMS[S.tier].r * 9 + 3; mount(); panel(); }
     else if (set === 'tone') { S.tone = +b.dataset.v; mount(); panel(); }
     else if (set === 'show') { S[b.dataset.v] = !S[b.dataset.v]; if (S.fish && !fishModel) { fishModel = buildOarfish({ seed: 11, scale: 0.4, bones: 10 }); fishModel.mesh.frustumCulled = false; scene.add(fishModel.group); } mount(); panel(); }
