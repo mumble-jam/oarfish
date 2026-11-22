@@ -216,6 +216,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .dial input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; accent-color: var(--coral); }
 .dial .lo, .dial .hi { font-size: 12.5px; color: color-mix(in srgb, var(--foam) 72%, transparent); }
 .dial .hi { text-align: right; }
+.dial .live { grid-column: 1 / -1; display: block; height: 3px; width: 0; margin-top: 3px; border-radius: 2px; background: var(--foam); opacity: 0.75; transition: width 0.3s linear; }
 .dial p { grid-column: 1 / -1; margin: 2px 0 0; font-size: 13.5px; line-height: 1.3; color: color-mix(in srgb, var(--foam) 86%, transparent); }
 
 /* whole-screen moments */
@@ -377,7 +378,7 @@ button:disabled { opacity: 0.4; cursor: default; }
       <p id="scope-note"></p>
     </div>
     <div class="dial"><label for="m-dream">Dream</label><input type="range" id="m-dream" min="0" max="100" value="60"><span class="lo">dry club</span><span class="hi">deep under water</span><p>Reverb, how dark the sound is, and how long notes hang.</p></div>
-    <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is when nothing is happening.</p></div>
+    <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><i class="live" id="energy-live" title="Where the band is now"></i><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is. The slider is where it rests in empty water. From there it climbs by itself with what is going on round you: swarms, hunters, whatever keeps the rift. The line under the slider shows where it is now.</p></div>
     <div class="dial"><label for="m-menace">Menace</label><input type="range" id="m-menace" min="0" max="100" value="50"><span class="lo">sweet</span><span class="hi">feral</span><p>Which harmony plays, from floating major to something with teeth. Adds low brass and toms.</p></div>
     <div class="dial"><label for="m-react">Reaction</label><input type="range" id="m-react" min="0" max="100" value="70"><span class="lo">steady band</span><span class="hi">follows every move</span><p>How hard speed, wrapping, danger and catches push the band around.</p></div>
     <div class="dial"><label for="m-swing">Swing</label><input type="range" id="m-swing" min="0" max="100" value="60"><span class="lo">straight</span><span class="hi">hard swing</span></div>

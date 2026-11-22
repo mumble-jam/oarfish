@@ -298,6 +298,11 @@ await page.keyboard.down('KeyQ'); await page.waitForTimeout(1500); await page.ke
 await ev(() => window.__game.setFull(true, true)); // the tuning drawer belongs to the full view
 await page.click('#music-tab'); await page.waitForTimeout(700);
 s = await ev(() => { const g = window.__game; const el = document.getElementById('m-menace'); el.value = 90; el.dispatchEvent(new Event('input')); document.getElementById('preset-copy').click(); return { open: document.getElementById('drawer').classList.contains('open'), menace: g.music.params.menace, audio: g.music.running, now: document.getElementById('music-now').textContent, yawRate: +g.rig.yawRate.toFixed(2) }; });
+const live = await ev(() => { const g = window.__game, m = g.music, rest = m.params.energy; const feed = (a, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { speed: 0, coil: 0, danger: 0, low: false, alive: true, activity: a }); return m.energy; };
+  const quiet = feed(0, 40), busy = feed(1, 8), after = feed(0, 40);
+  const sc = g.world.schools.find((x) => x.left > 0), here = g.rig.pos.clone(); g.rig.pos.set(sc.x, g.rig.pos.y, sc.z); const bySwarm = g.activity(); g.rig.pos.copy(here);
+  return { rest, quiet, busy, after, bySwarm }; });
+check('the band\'s energy rests where its slider is, climbs with what is going on round the fish and settles again; a swarm close by counts', Math.abs(live.quiet - live.rest) < 0.03 && live.busy > 0.95 && Math.abs(live.after - live.rest) < 0.03 && live.bySwarm > 0.1 && live.bySwarm <= 1, JSON.stringify(live));
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; const code = g.presetCode(); const r1 = g.applyCode('hey try this one oarfish-music:1:dream=90,energy=20,menace=10,react=40,swing=75,band=80 :)'); const p1 = { ...g.music.params };
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);

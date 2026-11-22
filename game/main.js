@@ -551,12 +551,29 @@ export async function start(saved = {}) {
     if (showing && hintT > 1.2 && showing.kind !== 'note' && hintQueue.length < 4) hintQueue.unshift({ ...showing, hold: Math.max(3, hintT) });
     hintQueue.unshift(m); hintT = 0;
   }
+  // How much is going on round the fish, 0 to 1: the swarms and hunters near it, whatever keeps this band, and the chase
+  // itself. The band's Energy follows it (music.js), so the slider is only where the band rests when the water is empty.
+  const nearBy = (p, reach) => { const d = Math.hypot(wrapD(p.x - rig.pos.x), wrapD(p.z - rig.pos.z)); return d >= reach ? 0 : 1 - d / reach; };
+  function activity() {
+    let a = 0;
+    for (const s of world.schools) if (s.left > 0) a += 0.3 * nearBy(s, 16) * Math.min(1, 0.35 + s.left / 18);
+    for (const b of foes.biters) if (b.alive) a += 0.3 * nearBy(b.pos, 22);
+    for (const f of foes.anglers) if (f.alive) a += 0.3 * nearBy(f.pos, 22);
+    for (const l of foes.leeches) if (l.alive !== false) a += 0.2 * nearBy(l.pos, 18);
+    for (const m of foes.mines) if (m.alive) a += 0.1 * nearBy(m.pos, 14);
+    for (const h of foes.hooks) a += 0.15 * nearBy(h, 14);
+    a += 0.3 * Math.min(2, foes.state.stalked); // hunted outright
+    if (guard && !guard.done) a += 0.6 * nearBy(guard.pos, 26);
+    if (sum) a += sum.state.awake ? 0.9 : 0.25 * nearBy(world.hall, 40);
+    return clamp(a, 0, 1);
+  }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
     nowT -= dt;
     if (nowT > 0 || !$('drawer').classList.contains('open')) return;
     nowT = 0.3;
     const d = music.describe();
-    $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, intensity ${Math.round(d.intensity * 100)}%.` : 'Press any key or click to start the sound.';
+    $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, energy ${Math.round(d.energy * 100)}%, intensity ${Math.round(d.intensity * 100)}%.` : 'Press any key or click to start the sound.';
+    $('energy-live').style.width = `${Math.round(music.energy * 100)}%`;
   }
   function hud(dt) {
     // hints, one at a time
@@ -1407,7 +1424,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS,
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(),
     });
   }
 
@@ -1449,7 +1466,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
