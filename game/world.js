@@ -2,7 +2,7 @@
 // The world repeats every T metres in x and z; fog hides the seam, so it reads as open water.
 
 import * as THREE from 'three';
-import { rng, lerp, clamp, soup, M, glowTexture, beamTexture } from './geo.js';
+import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from './geo.js';
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing } from './kit.js';
 import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf } from './npc.js';
 
@@ -224,7 +224,7 @@ function geometries() {
     // the carved coil: a body that has almost closed on itself, with a crest where the head is
     coil: plain([[new THREE.TorusGeometry(0.62, 0.15, 5, 14, Math.PI * 1.8), M(0, 0, 0, Math.PI / 2, 0, 0)],
       ...[0, 1, 2].map((i) => [new THREE.ConeGeometry(0.05, 0.5 - i * 0.1, 4), M(0.62, 0.3 - i * 0.02, -0.04 - i * 0.16, -0.25 - i * 0.2, 0, 0)])]),
-    glow: glowTexture(), beam: beamTexture(),
+    glow: glowTexture(), beam: beamTexture(), pool: poolTexture(),
   };
   return GEO;
 }
@@ -1041,6 +1041,13 @@ float seaLight(vec2 p, float t) {
     // the goal sits on the nearest copy of the world; its beam turns to face the camera
     const ox = T * Math.round((focus.x - goal.x) / T), oz = T * Math.round((focus.z - goal.z) / T);
     clouds.forEach((c, i) => { const slide = c.flock ? Math.sin(t * 0.07 + i * 2.1) * 0.7 : 0; c.mesh.position.set(ox + rift.tx * slide, c.flock ? Math.sin(t * 0.3 + i * 1.9) * 0.22 : 0, oz + rift.tz * slide); }); // the bank is never quite still
+    if (lamps.house) { // the light under the cloud: about three seconds from dark to dark, never quite out
+      const swell = 0.5 - 0.5 * Math.cos(t * 1.9), glow = 0.3 + 0.7 * swell * Math.sqrt(swell);
+      lamps.house.position.set(rift.x + ox, 0, rift.z + oz);
+      lamps.loom.rotation.y = Math.atan2(camera.position.x - lamps.house.position.x, camera.position.z - lamps.house.position.z);
+      for (const l of lamps) l.mesh.material.opacity = l.peak * glow;
+      beaconMat.opacity = 0.34 * (0.6 + 0.6 * glow);
+    }
     for (const b of beacons) {
       b.position.x = goal.x + ox; b.position.z = goal.z + oz;
       b.rotation.y = Math.atan2(camera.position.x - b.position.x, camera.position.z - b.position.z);
@@ -1080,42 +1087,54 @@ float seaLight(vec2 p, float t) {
     fishMesh.instanceMatrix.needsUpdate = true;
     return at;
   }
-  // Cloud in the rift: a bank of faceted puffs packed between the walls just under the ledges, lit like the stone, with a
+  // Cloud in the rift: a bank of soft round puffs packed between the walls just under the ledges, lit like the stone, with a
   // pale floor under them so that no bed shows through the gaps. The fish drops into it and is gone (main.js closes the
   // water in round it, in the cloud's colour). The puffs are in three flocks that rise, fall and slide a little apart.
-  const clouds = [], murk = rift ? new THREE.Color('#eef7f3').lerp(new THREE.Color(FLOORS[floor + 1].water), 0.2) : null; // the cloud's colour, from inside it
+  const clouds = [], lamps = [], murk = rift ? new THREE.Color('#eef7f3').lerp(new THREE.Color(FLOORS[floor + 1].water), 0.2) : null; // the cloud's colour, from inside it
   if (rift) {
     const pale = new THREE.Color('#f3faf6').lerp(new THREE.Color(F.water), 0.08), shade = pale.clone().lerp(new THREE.Color(FLOORS[floor + 1].water), 0.42);
     const back = (t) => 0.5 - Math.sin(Math.asin(1 - 2 * clamp(t, 0, 1)) / 3); // smooth(), the other way round: how far in the wall is at a given depth
     const room = (u, depth) => riftW(u) - rift.ledge - (rift.wall - rift.ledge) * back((depth - rift.step) / (rift.deep - rift.step)); // half the width between the walls, that far below the shelf
     const P = (u, a, y) => { const c = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * c, y, rift.z + rift.tz * u + rift.nz * c]; };
-    // a puff: twenty flat faces, squashed, no two corners quite where a ball would have them
+    // a puff: a ball of eighty faces pushed out of true and squashed, and shaded as the round thing it nearly is, so that it has no flat faces to catch the light
     const puff = (salt) => {
-      const g = new THREE.IcosahedronGeometry(1, 0), pos = g.attributes.position, moved = new Map();
+      const g = new THREE.IcosahedronGeometry(1, 1), pos = g.attributes.position, nor = g.attributes.normal, moved = new Map(), v = new THREE.Vector3();
       for (let i = 0; i < pos.count; i++) {
         const key = `${pos.getX(i).toFixed(2)},${pos.getY(i).toFixed(2)},${pos.getZ(i).toFixed(2)}`;
-        if (!moved.has(key)) { const h = (n) => hash2(moved.size * 7 + n, salt * 13 + n) - 0.5; moved.set(key, [1 + h(1) * 0.5, 1 + h(2) * 0.5, 1 + h(3) * 0.5]); }
+        if (!moved.has(key)) { const h = (n) => hash2(moved.size * 7 + n, salt * 13 + n) - 0.5; moved.set(key, [1 + h(1) * 0.4, 1 + h(2) * 0.4, 1 + h(3) * 0.4]); }
         const k = moved.get(key); pos.setXYZ(i, pos.getX(i) * k[0], pos.getY(i) * k[1] * 0.62, pos.getZ(i) * k[2]);
+        v.set(pos.getX(i), pos.getY(i) / 0.38, pos.getZ(i)).normalize(); nor.setXYZ(i, v.x, v.y, v.z);
       }
-      g.computeVertexNormals(); owned.push({ dispose: () => g.dispose() }); return g;
+      owned.push({ dispose: () => g.dispose() }); return g;
     };
-    const flocks = [[], [], []];
-    for (const [n, top, low, small, big] of [[230, 0.55, 1.5, 1.3, 2.8], [130, 2.0, 3.2, 2.2, 3.9]]) { // an upper layer of smaller puffs, and bigger ones below to close the gaps
+    // three layers, each in three flocks, from the bottom up: big puffs that close the gaps, smaller ones over them that make the bank's
+    // top, and a few wide thin ones at the height of the ledges, lying out over them, that are hardly there at all
+    const LAYERS = [[130, 2.0, 3.2, 2.2, 3.9, 0.5, 1, 0.85], [230, 0.55, 1.5, 1.3, 2.8, 0.5, 1, 0.6], [70, -0.5, 0.4, 2.4, 3.8, 2.2, 0.55, 0.26]]; // how many; how far under the ledges, from and to; how big, from and to; how far past the walls; how flat; how solid
+    const layers = [];
+    for (const [n, top, low, small, big, past, flat] of LAYERS) {
+      const flocks = [[], [], []]; layers.push(flocks);
       for (let i = 0, made = 0; i < n * 3 && made < n; i++) {
-        const u = dr(-rift.half, rift.half), down = rift.step + dr(top, low), half = room(u, down) + 0.5;
+        const u = dr(-rift.half, rift.half), down = rift.step + dr(top, low), half = room(u, down) + past;
         if (half < 0.9) continue;
         const r = dr(small, big) * clamp(half / 3, 0.55, 1), [x, y, z] = P(u, dr(-half, half) * 0.96, rift.y - down);
-        flocks[made % 3].push({ x, y, z, q: qY(drand() * 6.28, dr(-0.25, 0.25), dr(-0.25, 0.25)), s: S(r * dr(0.85, 1.25), r * dr(0.8, 1.1), r * dr(0.85, 1.25)), tone: pale.clone().lerp(shade, clamp((down - rift.step - top) / 3 + dr(-0.12, 0.16), 0, 1)) });
+        flocks[made % 3].push({ x, y, z, q: qY(drand() * 6.28, dr(-0.25, 0.25), dr(-0.25, 0.25)), s: S(r * dr(0.85, 1.25), r * dr(0.8, 1.1) * flat, r * dr(0.85, 1.25)), tone: pale.clone().lerp(shade, clamp((down - rift.step - top) / 3 + dr(-0.12, 0.16), 0, 1)) });
         made++;
       }
     }
-    const lit = mat(new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true, emissive: pale, emissiveIntensity: lerp(0.16, 0.5, floor / 3) })); // lit like the stone, and holding a little light of its own where there is none
+    // Soft: each puff is part seen through, and thins to nothing round its rim, so that no puff has an outline and the bank has no hard top.
+    // Nothing is sorted, so the layers are drawn from the lowest up and each flock from the bottom up, which is right from anywhere above it.
+    const rim = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= pow(smoothstep(0.1, 0.95, abs(dot(normalize(normal), isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition)))), 1.4);\n#include <opaque_fragment>'); };
     const m4 = new THREE.Matrix4();
-    flocks.forEach((list, k) => {
-      const mesh = add(new THREE.InstancedMesh(puff(k + 1), lit, list.length));
-      list.forEach((c, i) => { mesh.setMatrixAt(i, m4.compose(new THREE.Vector3(c.x, c.y, c.z), c.q, c.s)); mesh.setColorAt(i, c.tone); });
-      mesh.frustumCulled = false; mesh.receiveShadow = true;
-      clouds.push({ mesh, flock: true });
+    layers.forEach((flocks, layer) => {
+      const lit = mat(new THREE.MeshLambertMaterial({ color: '#d9e1de', emissive: pale, emissiveIntensity: lerp(0.3, 0.58, floor / 3), transparent: true, opacity: LAYERS[layer][7], depthWrite: false })); // lit like the stone, but less than it, and holding light of its own, so that a puff is not a pillow with a bright top and dark sides
+      lit.onBeforeCompile = rim;
+      flocks.forEach((list, k) => {
+        list.sort((a, b) => a.y - b.y);
+        const mesh = add(new THREE.InstancedMesh(puff(layer * 3 + k + 1), lit, list.length));
+        list.forEach((c, i) => { mesh.setMatrixAt(i, m4.compose(new THREE.Vector3(c.x, c.y, c.z), c.q, c.s)); mesh.setColorAt(i, c.tone); });
+        mesh.frustumCulled = false; mesh.receiveShadow = true; mesh.renderOrder = layer - 5;
+        clouds.push({ mesh, flock: true });
+      });
     });
     { // the floor of the bank
       const m = mesher(), down = rift.step + 3.3, y = rift.y - down;
@@ -1128,6 +1147,25 @@ float seaLight(vec2 p, float t) {
       mesh.frustumCulled = false; owned.push({ dispose: () => geo.dispose() });
       clouds.push({ mesh, flock: false });
     }
+    // A light under the cloud, swelling and sinking like a lighthouse's, to say where the way on is: a pool of it between the two layers of
+    // puffs, all along the rift and strongest at its middle, so that the bank glows from inside; some of it on the top of the bank; a heart
+    // at the middle; and its loom, standing up out of the rift, which is what is seen from across the shelf. The beam keeps time with it.
+    // Gold, because everything else down here is the colour of water. Added to a pale cloud any light just turns it white, so the pool is
+    // laid over the cloud like paint, and only the heart and the loom are added light.
+    const unit = new THREE.PlaneGeometry(1, 1), lie = new THREE.Group(), side = Math.sign(-rift.tz * rift.nx + rift.tx * rift.nz) || 1;
+    owned.push({ dispose: () => unit.dispose() });
+    lamps.house = add(new THREE.Group()); lie.rotation.y = Math.atan2(-rift.tz, rift.tx); lamps.house.add(lie); // `lie` has the rift running along its x
+    const lamp = (parent, wide, tall, y, peak, order, color, added) => {
+      const m = new THREE.Mesh(unit, mat(new THREE.MeshBasicMaterial({ map: added ? G.glow : G.pool, color, transparent: true, opacity: 0, blending: added ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, fog: false, side: THREE.DoubleSide })));
+      m.scale.set(wide, tall, 1); m.position.y = y; m.renderOrder = order; m.frustumCulled = false; parent.add(m); lamps.push({ mesh: m, peak }); return m;
+    };
+    const flat = (u, ...a) => { const m = lamp(lie, ...a); m.rotation.x = -Math.PI / 2; m.position.x = u; m.position.z = side * riftMid(u); };
+    for (const [u, k] of [[-28, 0.4], [-14, 0.7], [0, 1], [14, 0.7], [28, 0.4]]) {
+      flat(u, 30, 24, rift.y - rift.step - 1.75, 0.95 * k, -4.5, '#ffb85c', false); // between the layers: the upper puffs lie dark across it
+      flat(u, 28, 22, rift.y - rift.step - 0.3, 0.42 * k, -3.5, '#ffc477', false); // on the top of the bank, under the wisps
+    }
+    flat(0, 15, 12, rift.y - rift.step - 0.25, 0.4, -3.4, '#ffd9a0', true);
+    lamps.loom = lamp(lamps.house, 26, 14, rift.y + 2.4, 0.42, -2, '#ffb45a', true);
   }
   // light across the mouth of the rift, for whoever keeps it (guards.js): bars from wall to wall, and a line along each wall
   function riftVeil() {
@@ -1162,6 +1200,6 @@ float seaLight(vec2 p, float t) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

@@ -128,6 +128,8 @@ s = await ev(() => { const g = window.__game, T = window.T; const w = g.world.go
 const sealed = await ev(() => window.__sealed);
 check('the rift is a step down to a ledge and then a sheer drop, cut into a level shelf', Math.abs(sealed.shelf) < 0.4 && Math.abs(sealed.ledge - 2.4) < 0.4 && sealed.depth > 13, JSON.stringify(sealed));
 check('while its keeper lives, the rift is shut: the fish may swim over the ledges but cannot go down between the walls', sealed.state === 'play' && sealed.held === true && sealed.belowShelf === true && !!sealed.guard, JSON.stringify(sealed));
+const lit = await ev(() => { const g = window.__game, T = window.T, r = g.world.rift; let lo = 9, hi = 0; for (let i = 0; i < 45; i++) { T.idle(0.1); const v = r.light(); lo = Math.min(lo, v); hi = Math.max(hi, v); } return { lo: +lo.toFixed(2), hi: +hi.toFixed(2) }; });
+check('a light under the rift\'s cloud swells and sinks, and never goes out', lit.lo > 0.25 && lit.lo < 0.4 && lit.hi > 0.95, JSON.stringify(lit));
 check('with the keeper gone, diving into the rift anywhere along it leads to the next band', s.s0 === 'play' && s.s1 === 'descend' && s.f2 === 3 && s.s3 === 'play', JSON.stringify(s));
 await ev(() => window.T.swim(1.5, 0.6, -0.8)); await snap(page, 'g-band4');
 
@@ -237,7 +239,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(41); g.ru
   for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const a of g.foes.anglers) { a.alive = false; a.group.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500; g.guard.debug.fall();
   const counts = { mines: g.foes.mines.length, leeches: g.foes.leeches.length }; for (const l of g.foes.leeches) l.cool = 99;
   T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; const m = g.foes.mines[0], m2 = g.foes.mines[1], J = g.rig.joints;
-  m.home.copy(J[6]); const segs = g.run.segs; T.idle(0.2); const brushed = { lost: segs - g.run.segs, alive: m.alive };
+  const segs = g.run.segs; g.run.safe = 1; m.home.copy(J[6]); T.idle(0.02); m.home.add(J[6]).sub(m.pos); g.run.safe = 0; T.idle(0.2); const brushed = { lost: segs - g.run.segs, alive: m.alive }; // a drifter wanders a metre and more round its home: put the drifter itself on the body, not its home
   T.idle(1.6); g.run.safe = 0; const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; m2.home.copy(g.rig.snout); m2.home.z += 2.4; m2.ph = 0; T.idle(0.05); m2.home.z += g.rig.snout.z + 2.4 - m2.pos.z; m2.home.x += g.rig.snout.x - m2.pos.x; m2.home.y += g.rig.snout.y - m2.pos.y;
   const segs2 = g.run.segs, caught = g.run.caught; g.sim(1 / 60, { ...fwd, dashNow: true }); g.sim(0.3, fwd); T.idle(0.9);
   return { counts, brushed, rammed: { alive: m2.alive, lost: segs2 - g.run.segs, gained: g.run.caught - caught } }; });

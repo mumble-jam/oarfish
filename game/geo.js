@@ -55,6 +55,7 @@ function canvasTexture(w, h, alphaAt) {
   return new THREE.CanvasTexture(cv);
 }
 // soft round dot
+export const poolTexture = () => canvasTexture(64, 64, (u, v) => { const f = Math.max(0, 1 - Math.hypot(u - 0.5, v - 0.5) * 2); return f * f * (3 - 2 * f); }); // a glow that stays full for longer before it falls away
 export const glowTexture = () => canvasTexture(64, 64, (u, v) => Math.pow(Math.max(0, 1 - Math.hypot(u - 0.5, v - 0.5) * 2), 2.2));
 // a shaft of light: bright at the top, fading down and to the sides
 export const beamTexture = () => canvasTexture(64, 256, (u, v) => Math.pow(1 - Math.abs(u * 2 - 1), 1.6) * Math.pow(1 - v, 0.6) * Math.min(v * 6, 1));
