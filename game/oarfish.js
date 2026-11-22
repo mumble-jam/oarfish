@@ -54,7 +54,12 @@ function curve(pts) {
   };
 }
 
-export function buildOarfish({ seed = 11, scale = 0.4, bones: boneCount = 14, materials: sharedMaterials = null, merge = true, clip = true, palette = null } = {}) {
+// A long fish looks it. Its standing is 0 to 3, a step up at each length that lets it take the next size of swarm (14, 19 and 24
+// segments), and at each step the crest on its head stands taller. The game deepens the glow of its fins by the same measure.
+export const stature = (segs) => (segs >= 24 ? 3 : segs >= 19 ? 2 : segs >= 14 ? 1 : 0);
+export const CREST = [1, 1.25, 1.55, 1.9]; // how tall the crest stands at each standing, against the plate's
+export function buildOarfish({ seed = 11, scale = 0.4, bones: boneCount = 14, materials: sharedMaterials = null, merge = true, clip = true, palette = null, crest = null } = {}) {
+  const tall = crest ?? CREST[stature(boneCount)];
   // repeatable noise keyed by (ring, slot), so the body keeps its shape when the fish grows or shrinks
   const h01 = (a, b) => {
     let t = Math.imul((a + seed * 131) | 0, 0x85ebca6b) ^ Math.imul((b + 0x7f4a7c15) | 0, 0xc2b2ae35);
@@ -365,7 +370,7 @@ export function buildOarfish({ seed = 11, scale = 0.4, bones: boneCount = 14, ma
   // ------------------------------------------------------------------ crest (the long first dorsal rays)
   {
     const K = 5;
-    const lens = [1.45, 1.85, 2.25, 2.55, 2.8, 2.55, 1.9];
+    const lens = [1.45, 1.85, 2.25, 2.55, 2.8, 2.55, 1.9].map((l) => l * tall);
     const NR = lens.length;
     const rays = [];
     for (let i = 0; i < NR; i++) {
@@ -404,7 +409,7 @@ export function buildOarfish({ seed = 11, scale = 0.4, bones: boneCount = 14, ma
           }
         }
         // little pennant near the tip of the longer rays
-        if (len > 2.2) {
+        if (len > 2.2 * tall) {
           const q = (s) => pts[3].clone().lerp(pts[4], s);
           const back = es[4].clone().negate();
           addPlate([q(0.15), q(0.55).addScaledVector(back, 0.2), q(0.95)], v(0.007, 0, 0), 'FinRed');

@@ -43,7 +43,7 @@ export const CAST = {
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -381,6 +381,29 @@ export function createMusic({ context = null } = {}) {
     }
     // --- the cast: whoever is near sits in
     for (const id of st.sitting) playCast(id, st.cast[id], bar, tick, t);
+    // --- a run of catches: each one in time adds a player, and the third is a solo
+    if (st.chain >= 1) playChain(bar, tick, t);
+  }
+  // What the chain adds on this tick. 1: the vibraphone answers the piano, off its hits. 2: two horns riff, the same two bars over and over.
+  // 3: a saxophone solos, a line that walks the chord's scale in swung eighths, lands on a chord note when the chord changes, and breathes.
+  const RIFF = [[2, 0, 0.5], [5, 1, 0.3], [8, 0, 0.3], [11, 2, 0.9], [17, 1, 0.3], [20, 2, 0.5], [23, 0, 0.3]]; // tick in two bars, which note of the voicing, how long in beats
+  function playChain(bar, tick, t) {
+    const ch = tick === 11 ? chordAt(bar + 1) : chordAt(bar), rnd = Math.random, beat = st.beatDur, v = lerp(0.6, 1, params.react);
+    const deg = (d, base) => base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+    if (!plan.comp.includes(tick) && (tick === 3 || tick === 8 || (tick === 11 && rnd() < 0.5))) { const up = voicing(ch, 67); voices.vibes(t, up[(bar + tick) % up.length], beat * 1.4, 0.55 * v); voices.vibes(t + 0.02, up[(bar + tick + 2) % up.length], beat * 1.2, 0.4 * v); }
+    if (st.chain >= 2) for (const [at, i, len] of RIFF) if (at === (bar % 2) * 12 + tick) { const up = voicing(ch, 60); brass(t, [up[i % up.length], up[(i + 2) % up.length]], len * beat, 0.55 * v); }
+    if (st.chain >= 3) {
+      const so = st.solo, sub = tick % 3;
+      if (tick === 0 && bar % 2 === 0 && so.left > 0) so.deg = [7, 9, 11, 13][Math.floor(rnd() * 4)]; // a new chord: start again from one of its notes
+      if (sub === 1) return; // swung eighths: the middle of the triplet is left alone
+      if (so.rest > 0) { so.rest--; return; }
+      if (so.left <= 0) { so.left = 5 + Math.floor(rnd() * 9); so.deg = clamp(so.deg + (rnd() < 0.5 ? 2 : -2), 5, 16); } // a new phrase
+      const step = rnd() < 0.16 ? (rnd() < 0.5 ? 3 : -3) : rnd() < 0.5 ? 1 : -1, held = so.left === 1 || rnd() < 0.14;
+      so.deg = clamp(so.deg + (so.deg > 15 ? -Math.abs(step) : so.deg < 5 ? Math.abs(step) : step), 3, 18);
+      voices.sax(t, deg(so.deg, 53), held ? beat * 1.3 : beat * 0.42, (sub === 0 ? 0.95 : 0.75) * v);
+      if (held) so.rest = 2;
+      if (--so.left <= 0) so.rest = 2 + Math.floor(rnd() * 4); // a breath
+    }
   }
 
   // ---------------------------------------------------------------- the clock
@@ -444,7 +467,9 @@ export function createMusic({ context = null } = {}) {
       for (const id of Object.keys(CAST)) { const to = clamp(near[id] || 0, 0, 1), was = st.cast[id] || 0; st.cast[id] = was + (to - was) * (1 - Math.exp(-dt * (to > was ? 1.6 : 0.5))); }
       st.sitting = Object.keys(CAST).filter((id) => st.cast[id] > 0.12).sort((a, b) => (st.cast[b] + (CAST[b].lead ? 1 : 0)) - (st.cast[a] + (CAST[a].lead ? 1 : 0))).slice(0, 3);
       st.pulse *= Math.exp(-dt / 1.6);
-      const target = clamp(0.02 + 0.36 * energyNow() + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse), 0, 1);
+      st.chain = Math.max(0, Math.min(3, s.chain | 0)); // catches in a row: 1 the vibraphone joins the piano, 2 the horns riff, 3 a solo over all of it
+      st.heat += (st.chain / 3 - st.heat) * (1 - Math.exp(-dt * (st.chain / 3 > st.heat ? 4 : 0.6))); // the band stays warm for a little after the chain is lost
+      const target = clamp(0.02 + 0.36 * energyNow() + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse + 0.3 * st.heat), 0, 1);
       st.intensity += (target - st.intensity) * (1 - Math.exp(-dt * (target > st.intensity ? 3.2 : 0.55)));
       st.tension += (s.coil * P.react - st.tension) * (1 - Math.exp(-dt * 2.5));
     },
@@ -457,6 +482,16 @@ export function createMusic({ context = null } = {}) {
       st.rung = m;
       return m;
     },
+    // One step of the run of notes that goes with a swarm streaming into the mouth: step k of `of`, up the scale of the chord the band is on,
+    // from the middle of the piano; a longer run climbs further. Returns the note.
+    gulp(k, of, v = 1) {
+      if (!st.started || !n) return null;
+      const t = now() + 0.008, ch = chordAt(st.bar), m = 60 + ch.root + ch.q.scale[k % 7] + 12 * Math.floor(k / 7), last = k >= of - 1, vol = lerp(0.35, 1, params.react) * v;
+      pianoNote(t, m, last ? 0.5 : 0.16, (0.5 + 0.4 * (k / of)) * vol);
+      tone(t, { f0: mtof(m + 12), f1: mtof(m + 12) * 1.25, glide: 0.06, decay: 0.08, gain: 0.07 * vol, out: n.keysIn }); // and a bubble on top of each
+      st.gulped = m;
+      return m;
+    },
     // the notes the chimes may ring right now, low to high
     chimeNotes() { const up = voicing(chordAt(st.bar), 72); return [...up, ...up.map((m) => m + 12)]; },
     // something just happened: answer it now, not on the next bar
@@ -464,10 +499,17 @@ export function createMusic({ context = null } = {}) {
       if (!st.started) return;
       const t = now() + 0.012, ch = chordAt(st.bar), v = (0.45 + 0.55 * strength) * lerp(0.35, 1, params.react), up = voicing(ch, 62);
       const low = bassPitch(ch.root, 36);
-      st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
+      st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, crest: 0.4, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
       if (kind === 'loop') { kit.rim(t, 0.8 * v); kit.splash(t, 0.35 * v); }
       else if (kind === 'burst') { kit.splash(t, 0.7 * v); kit.rim(t, v); kit.tom(t + 0.07, 0.6 * v, 112); } // ringed a swarm too big to hold
-      else if (kind === 'catch') { kit.crash(t, 0.75 * v); kit.kick(t, 0.9 * v); up.forEach((m, i) => pianoNote(t + i * 0.012, m + 12, 0.5, 0.8 * v)); bubbles(t + 0.05, up.slice(0, 3), v); st.tension *= 0.3; }
+      else if (kind === 'catch') { // as big as the catch: a small swarm is a cymbal and a chord, a great one is the whole band
+        kit.crash(t, 0.75 * v); kit.kick(t, 0.9 * v); up.forEach((m, i) => pianoNote(t + i * 0.012, m + 12, 0.5, 0.8 * v)); st.tension *= 0.3;
+        if (strength > 0.45) { kit.snare(t, 0.8 * v); kit.tom(t + 0.09, 0.8 * v, 112); kit.tom(t + 0.18, 0.8 * v, 84); }
+        if (strength > 0.65) brass(t, [low + 12, low + 19, low + 24], 0.45, v);
+        if (strength > 0.9) { kit.crash(t + 0.27, v); kit.kick(t + 0.27, v); brass(t + 0.27, [low + 24, ...up.slice(0, 2)], 0.9, v); }
+      }
+      else if (kind === 'chain') { const lvl = Math.round(strength * 3); kit.snare(t, 0.5); kit.snare(t + 0.07, 0.6); kit.snare(t + 0.14, 0.75); kit.ride(t + 0.21, 1, true); if (lvl >= 2) brass(t + 0.21, [up[0], up[2 % up.length]], 0.3, 0.8); if (lvl >= 3) { kit.crash(t + 0.21, 0.9); voices.sax(t + 0.21, up[up.length - 1] + 12, 0.7, 1); } } // a pick-up into the layer that has just come in
+      else if (kind === 'crest') { kit.swell(t, 0.7, 0.5); kit.crash(t + 0.5, 0.9 * v); brass(t + 0.5, [low + 12, low + 19, ...up.slice(1, 3)], 1.3, v); [...up, up[0] + 12].forEach((m, i) => pianoNote(t + 0.5 + i * 0.06, m + 12, 1.1, 0.8 * v)); } // a new standing: the band gives it a fanfare
       else if (kind === 'kill') { kit.crash(t, v); kit.kick(t, v); kit.snare(t, 0.9 * v); kit.tom(t + 0.11, 0.8 * v, 84); brass(t, [low + 12, low + 19, low + 24], 0.4, v); up.forEach((m) => pianoNote(t, m + 12, 0.6, 0.9 * v)); st.tension *= 0.2; }
       else if (kind === 'grow') { up.forEach((m, i) => pianoNote(t + i * 0.07, m + 12, 0.7, 0.7 * v)); kit.ride(t + 0.28, 0.9 * v, true); }
       else if (kind === 'bite') { kit.snare(t, v); kit.rim(t, v); kit.tom(t + 0.08, 0.9 * v, 70); kit.kick(t, v); brass(t, [low + 12, low + 18, low + 25], 0.5, v); n.water.frequency.cancelScheduledValues(t); n.water.frequency.setTargetAtTime(500, t, 0.03); n.water.frequency.setTargetAtTime(cutoff(), t + 0.22, 0.45); } // the hit muffles everything for a moment

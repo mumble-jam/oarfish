@@ -1,11 +1,11 @@
 // The run: scene setup, input, camera, the rules of the dive, and the HUD.
 
 import * as THREE from 'three';
-import { buildOarfish, PALETTE } from './oarfish.js';
+import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
 import { resolve } from './npc.js';
-import { createWorld, SPAWN, FLOORS, wrapD, wrapRule, canWrap } from './world.js';
+import { createWorld, SPAWN, FLOORS, SWARMS, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
@@ -29,6 +29,9 @@ const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
 //           counts for `blows` and stuns what is within `shock` metres for `stun` seconds. That spends it.
 const LENGTH = { cost: [5, 17], bend: 1.15, toll: { part: 0.4, over: 8, least: 2, keep: 8 }, charge: { full: 30, reach: 1.5, blows: 2, shock: 6, stun: 2.5 } };
 const growCost = (segs, discount = 1) => Math.max(1, Math.round(lerp(LENGTH.cost[0], LENGTH.cost[1], Math.pow(clamp((segs - START_SEGS) / (MAX_SEGS - 1 - START_SEGS), 0, 1), LENGTH.bend)) * discount));
+// Catches in a row: one within `window` seconds of the last adds a layer to the band, up to `top` of them, and the top one is a solo.
+// A bite ends it.
+const CHAIN = { window: 9, top: 3 };
 const riftToll = (segs) => Math.max(LENGTH.toll.least, Math.round((segs - LENGTH.toll.over) * LENGTH.toll.part));
 // Stamina. It is only spent while something is hunting the fish; with nothing about, sprinting and dashing are free.
 // sprint: seconds of sprint in a full bar. regen: seconds to refill, after `pause` seconds of not spending.
@@ -111,10 +114,17 @@ export async function start(saved = {}) {
   const camera = new THREE.PerspectiveCamera(30, 1, 0.3, 260);
 
   // ---------------------------------------------------------------- the oarfish, rebuilt whenever its length changes
+  const fishPulse = { value: new THREE.Vector3(-1, 0, 1) }; // where the swell is along the body (0 the head, 1 the tail), how strong, and the body's length as the model has it
+  const pulse3 = { at: 9, k: 0, pace: 1.5 }; // the swell on its way: see growPulse
   const fishMats = {};
   for (const [name, color] of Object.entries(PALETTE)) {
     fishMats[name] = new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     fishMats[name].name = name;
+    fishMats[name].onBeforeCompile = (sh) => { // a swell of light that runs from the head to the tail when the fish grows
+      sh.uniforms.uPulse = fishPulse;
+      sh.vertexShader = `uniform vec3 uPulse;\nvarying float vPulse;\n${sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vPulse = uPulse.y * exp(-pow((-position.z / uPulse.z - uPulse.x) / 0.085, 2.0));\n  transformed.xy *= 1.0 + 0.22 * vPulse;')}`;
+      sh.fragmentShader = `varying float vPulse;\n${sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vec3(1.0, 0.86, 0.6) * vPulse * 0.55;')}`;
+    };
   }
   // the oarfish is a component too: its colours as they stand now, laid on the materials every length of body shares
   const paintFish = () => { const pal = resolve('oarfish').palette; for (const name of Object.keys(fishMats)) fishMats[name].color.set(pal[name[0].toLowerCase() + name.slice(1)] || PALETTE[name]); };
@@ -131,6 +141,7 @@ export async function start(saved = {}) {
   function buildFish(segments) {
     if (fish) { scene.remove(fish.group, fish.helper); fish.mesh.geometry.dispose(); fish.mesh.skeleton.dispose(); fish.helper.dispose?.(); }
     const built = buildOarfish({ bones: segments, materials: fishMats, merge: false, clip: false });
+    fishPulse.value.z = 0.78 * 0.4 * segments; glowFish(segments); // the model's own length, for the swell; and the glow its length has earned
     const mesh = built.mesh;
     const twin = (material, order) => { const m = new THREE.SkinnedMesh(mesh.geometry, material); m.bind(mesh.skeleton, mesh.bindMatrix); m.frustumCulled = false; m.renderOrder = order; built.group.add(m); return m; };
     mesh.frustumCulled = false; // the bones carry the mesh far from its rest-pose bounds
@@ -164,9 +175,22 @@ export async function start(saved = {}) {
   const flash = new THREE.Mesh(flashGeo, new THREE.MeshBasicMaterial({ color: '#ff9db8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
   flash.frustumCulled = false;
   scene.add(moteCloud, flash);
-  function mote(from, food) {
-    if (motes.length >= MOTES) return addFood(food);
-    motes.push({ from: from.clone(), t: -Math.random() * 0.18, food });
+  // from: where it starts. wait: seconds before it sets off. stream: the catch it belongs to, if it is part of one (see `gulp`)
+  function mote(from, food, wait = Math.random() * 0.09, stream = null) {
+    if (motes.length >= MOTES) { if (stream) { stream.food += food; stream.total--; } else addFood(food); return; }
+    motes.push({ from: from.clone(), t: -wait / 0.5, food, stream });
+  }
+  // A swarm that has been wrapped is not eaten all at once. It streams to the mouth, the nearest fish first, over a time that grows with
+  // the swarm; each arrival steps a run of notes up the scale (music.gulp); and only when the last is in does the fish grow, all at once.
+  // points: where the swarm's fish were. size: the swarm against a great one, 0 to 1.
+  function gulp(points, food, size) {
+    const n = Math.min(points.length, 24), per = Math.ceil(points.length / n), span = lerp(0.3, 1.15, size), each = food / points.length;
+    const stream = { total: 0, in: 0, food: 0, notes: Math.round(lerp(5, 14, size)), played: -1, size };
+    const near = points.map((p) => [p, p.distanceToSquared(rig.snout)]).sort((a, b) => a[1] - b[1]);
+    for (let i = 0, k = 0; i < near.length; i += per, k++) { stream.total++; mote(near[i][0], each * Math.min(per, near.length - i), (k / Math.max(1, n - 1)) * span, stream); }
+    if (stream.total <= 0) addFood(Math.round(food), size); // there was no room for a single spark: it is eaten all the same
+    stream.notes = Math.max(1, Math.min(stream.notes, stream.total)); // never more notes than there are sparks to sound them
+    return stream;
   }
   // light up the patch of water the body has just closed round: nose, then the first k joints
   function flashWrap(k, y) {
@@ -188,11 +212,12 @@ export async function start(saved = {}) {
   const pad = createPad();
   let dev = 'keys'; // what the player last touched: 'keys' (keyboard, mouse, finger) or 'pad'
   // a moment of the game, told to the band and, on a controller, to its motors
-  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
+  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
   function moment(kind, strength) {
     music.hit(kind, strength);
     const r = RUMBLE[kind];
-    if (r) buzz(r[0], r[1], r[2]);
+    if (r && kind === 'catch' && strength !== undefined) buzz(0.75 * strength * strength, r[1] * (0.6 + 0.6 * strength), r[2] + 130 * strength); // a bigger catch is a bigger thump
+    else if (r) buzz(r[0], r[1], r[2]);
   }
   // ---- what the hands feel. The controller plays one effect at a time, so everything is mixed here: a hit is an
   // envelope that dies away, and under the hits run the things that last (a hunter closing, a loop closing, speed).
@@ -222,7 +247,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -265,8 +290,13 @@ export async function start(saved = {}) {
     hemi.color.set(F.sky); hemi.groundColor.set(F.bed); hemi.intensity = F.hemi;
     sun.intensity = F.sun; sun.castShadow = F.sun > 0.2;
     lamp.intensity = F.lamp; lamp.distance = F.lampReach * mods.lamp;
-    for (const n of ['FinPale', 'FinPink', 'FinMid', 'FinRed', 'Eye']) { fishMats[n].emissive.set(PALETTE[n]); fishMats[n].emissiveIntensity = F.finGlow * (n === 'Eye' ? 1.4 : 1); }
+    glowFish();
   }
+  // The fins and the eye give light: as much as the band asks for, and more the longer the fish is, a step at each standing (see
+  // `stature` in oarfish.js), so that a long fish glows a little even in daylight and a good deal in the dark.
+  const STATURE_GLOW = [0, 0.1, 0.22, 0.38];
+  function glowFish(segs = run.segs) { const F = world?.floor || FLOORS[0], rank = stature(segs), k = F.finGlow * (1 + 0.3 * rank) + STATURE_GLOW[rank];
+    for (const n of ['FinPale', 'FinPink', 'FinMid', 'FinRed', 'Eye']) { fishMats[n].emissive.set(PALETTE[n]); fishMats[n].emissiveIntensity = k * (n === 'Eye' ? 1.4 : 1); } }
   function enterFloor(index, fromAbove) {
     sum?.dispose(); sum = null;
     world?.dispose(); foes?.dispose();
@@ -306,7 +336,7 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
@@ -314,8 +344,12 @@ export async function start(saved = {}) {
     enterFloor(0, false);
     moment('start');
   }
-  function addFood(n) {
+  // The swell that runs down the body when it grows: k is how strong, and a slow one (a new standing) takes its time.
+  function growPulse(k, slow = false) { pulse3.at = -0.12; pulse3.k = k; pulse3.pace = slow ? 0.85 : 1.55; }
+  // size: how big the catch was that this came from, 0 to 1, if it came from one
+  function addFood(n, size = 0) {
     run.food += n; run.caught += n;
+    const before = run.segs;
     let grew = false;
     while (run.segs < MAX_SEGS && run.food >= growCost(run.segs, mods.food)) { run.food -= growCost(run.segs, mods.food); run.segs++; grew = true; }
     if (run.segs >= MAX_SEGS && run.food > 0) { // full grown: what it eats goes to its crest
@@ -323,14 +357,21 @@ export async function start(saved = {}) {
       if (run.charge >= 1 && was < 1) { moment('grow'); pulse('grow'); }
       say('charge', 'Full grown, what you eat charges your crest. Charged, a dash carries further and your next ram hits twice as hard.', 9);
     }
-    if (grew) { buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); moment('grow'); pulse('grow'); say('grow', 'Eating makes you longer. Your length is your health.', 7); }
+    if (grew) {
+      const up = stature(run.segs) > stature(before), by = run.segs - before;
+      buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); pulse('grow');
+      growPulse(up ? 1.5 : clamp(0.7 + 0.12 * by + 0.3 * size, 0.7, 1.3), up);
+      moment(up ? 'crest' : 'grow', clamp(0.45 + 0.14 * by + 0.3 * size, 0, 1));
+      say('grow', 'Eating makes you longer. Your length is your health.', 7);
+      if (up) say('crest', 'Your crest stands taller. You are long enough now for a bigger kind of swarm.', 8);
+    }
     if (grew && growCost(run.segs, 1) >= LENGTH.cost[0] + 3) say('cost', 'The longer you are, the more each new segment costs. A long body needs the bigger swarms.', 8);
     if (run.segs >= 12 && run.floor === 0) say('well', 'Follow the marker to the rift and dive down into it when you are ready.', 9);
   }
   function lose(n, kind) {
     const N = rig.spine.length;
     for (let i = 0; i < n; i++) foes.spawnPiece(rig.joints[Math.max(N - i, 1)], 'debris');
-    pulse('hurt');
+    pulse('hurt'); run.chain = 0; run.chainT = 0;
     if (run.segs - n < MIN_SEGS) return die();
     run.segs -= n; run.safe = 1.5;
     if (trimShells().length) tell('It rode on the segment you lost.', 4, { kind: 'warn', title: 'A shell is gone' });
@@ -512,7 +553,7 @@ export async function start(saved = {}) {
   const teach = { on: true, done: false, learned: {}, ...store.get('oarfish.teach', {}) };
   const saveTeach = () => store.set('oarfish.teach', { on: teach.on, done: teach.done, learned: teach.learned });
   const know = (id) => { if (!teach.learned[id]) { teach.learned[id] = 1; saveTeach(); } };
-  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll']); // what the nursery teaches itself, and what can wait until it is over
+  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll', 'crest']); // what the nursery teaches itself, and what can wait until it is over
   const tut = { on: false, step: 0, stall: 0, told: false, was: 0, prize: null };
   // a line of text is the last resort: once ever, never while the nursery is teaching the same thing by other means
   function say(id, text, hold = 7, kind = 'teach') { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); hintQueue.push({ text, hold, kind }); }
@@ -1466,6 +1507,8 @@ export async function start(saved = {}) {
       }
     }
     run.kick = Math.max(0, run.kick - dt * 4);
+    if (run.chainT > 0 && (run.chainT -= dt) <= 0) run.chain = 0; // nothing caught in time: the band goes back to what it was playing
+    if (pulse3.at < 1.25) { pulse3.at += dt * pulse3.pace; fishPulse.value.x = pulse3.at; fishPulse.value.y = pulse3.k * clamp((1.25 - pulse3.at) / 0.3, 0, 1); } else fishPulse.value.y = 0;
     fish.mesh.visible = run.state === 'dead' ? run.stateT < 0.2 || Math.floor(run.stateT * 9) % 2 === 0 : !(run.safe > 0 && run.state === 'play' && Math.floor(run.time * 14) % 2);
 
     // going most of the way round something catches it
@@ -1491,8 +1534,8 @@ export async function start(saved = {}) {
         if (w.angle < rule.sweep) continue;
         if (sc.can && w.minD >= sc.fit * 0.88) { // long enough, and the body went round the ball, not through it
           flashWrap(w.k, sc.y);
-          const at = world.take(sc), per = Math.ceil(sc.n / 24); // the whole swarm streams to the mouth, a few fish to a spark
-          for (let i = 0; i < at.length; i += per) mote(at[i], Math.min(per, at.length - i));
+          const at = world.take(sc); // the whole swarm streams to the mouth, a few fish to a spark
+          gulp(at, at.length, clamp(Math.sqrt(sc.n / SWARMS.h.n), 0, 1));
           fishCaught += sc.n;
           if (sc.tier !== 's') say(`swarm-${sc.tier}`, sc.tier === 'h' ? 'The great swarm, whole.' : 'A bigger swarm, whole. Bigger ones still need a longer body.', 6);
         } else if (!sc.can && sc.burst <= 0) { // a body too short to go round it: the swarm bursts out and regroups
@@ -1507,7 +1550,14 @@ export async function start(saved = {}) {
         return true;
       });
       for (const g of big) mote(g.pos, g.food);
-      if (fishCaught || big.length) { moment(big.length ? 'kill' : 'catch', Math.min(1, (fishCaught + big.length * 12) / 40)); if (mods.shock) foes.stun(rig.pos, 5, 2); } // the Horn
+      if (fishCaught || big.length) { // the catch lands: the world holds for an instant, the band hits as hard as the catch was big, and a catch soon after another adds to the band
+        const size = clamp(Math.sqrt((fishCaught + big.length * 12) / SWARMS.h.n), 0, 1);
+        run.chain = run.chainT > 0 ? Math.min(CHAIN.top, run.chain + 1) : 0; run.chainT = CHAIN.window;
+        moment(big.length ? 'kill' : 'catch', size);
+        if (run.chain) music.hit('chain', run.chain / CHAIN.top);
+        run.freeze = Math.max(run.freeze, lerp(0.045, 0.1, size)); run.kick = Math.max(run.kick, 0.25 + 0.45 * size);
+        if (mods.shock) foes.stun(rig.pos, 5, 2); // the Horn
+      }
       const prey = sum?.ring || guard?.ring; // the Sum's head held still over a shed tail, or a rift's keeper when it can be held: ringed like anything else
       if (prey) {
         const g = prey, w = rig.wrap(g.x, g.y, g.z, g.room * 2 + 3.5);
@@ -1548,7 +1598,13 @@ export async function start(saved = {}) {
       moteArr[i * 3] = lerp(m.from.x, rig.snout.x, e); moteArr[i * 3 + 1] = lerp(m.from.y, rig.snout.y, e) + Math.sin(k * Math.PI) * 0.5; moteArr[i * 3 + 2] = lerp(m.from.z, rig.snout.z, e);
       if (m.t > 0.6) eating = true;
     }
-    for (let i = motes.length - 1; i >= 0; i--) if (motes[i].t >= 1) { const [m] = motes.splice(i, 1); addFood(m.food); }
+    for (let i = motes.length - 1; i >= 0; i--) if (motes[i].t >= 1) { const [m] = motes.splice(i, 1), st = m.stream;
+      if (!st) { addFood(m.food); continue; }
+      st.food += m.food; st.in++;
+      const note = Math.round(((st.in - 1) / Math.max(1, st.total - 1)) * (st.notes - 1)); // the first in sounds the bottom of the run, the last the top
+      if (note > st.played) { st.played = note; music.gulp(note, st.notes, 0.5 + 0.5 * st.size); buzz(0, 0.12 + 0.1 * st.size, 30); }
+      if (st.in >= st.total) addFood(Math.round(st.food), st.size); // the last one is in: now it grows
+    }
     moteGeo.attributes.position.needsUpdate = true;
     idle.bite = input.bite = scripted.bite = eating;
     flash.material.opacity = Math.max(0, flash.material.opacity - dt * 1.1);
@@ -1561,7 +1617,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(),
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), chain: run.state === 'play' ? run.chain : 0,
     });
   }
 
@@ -1604,7 +1660,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

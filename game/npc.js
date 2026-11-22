@@ -111,10 +111,10 @@ export const NPCS = [
     states: [{ id: 'wall', name: 'As the wall', speed: 0 }] },
 ];
 // the player's own animal is a component like the rest: its palette is the one oarfish.js is built from
-NPCS.unshift({ id: 'oarfish', group: 'The oarfish', kind: 'fish', name: 'The oarfish', bands: [0, 1, 2, 3, 4], length: 4.9, role: 'You. Length is health: every segment is a bite you can take, and a longer body goes round a bigger swarm.',
+NPCS.unshift({ id: 'oarfish', group: 'The oarfish', kind: 'fish', name: 'The oarfish', bands: [0, 1, 2, 3, 4], length: 4.9, role: 'You. Length is health: every segment is a bite you can take, and a longer body goes round a bigger swarm. At each length that opens a bigger kind of swarm the crest stands taller and the fins glow deeper.',
   about: 'Le Gymnètre épée, as the plate has it: a ribbon of a fish with a red crest and a fin the length of its back. It is rebuilt at every change of length, so the same model serves a short body and a long one.',
   palette: Object.fromEntries(Object.entries(FISH).map(([k, v]) => [k[0].toLowerCase() + k.slice(1), v])), fishKey: (k) => k[0].toUpperCase() + k.slice(1), swim: null, beat: [0, 0], fixed: true,
-  states: [{ id: 'short', name: 'At its shortest', segs: 4 }, { id: 'start', name: 'As a dive begins', segs: 10 }, { id: 'long', name: 'At its longest', segs: 26 }] });
+  states: [{ id: 'short', name: 'At its shortest', segs: 4 }, { id: 'start', name: 'As a dive begins', segs: 10 }, { id: 'second', name: 'Long enough for a middling swarm', segs: 14 }, { id: 'third', name: 'Long enough for a big one', segs: 19 }, { id: 'long', name: 'At its longest', segs: 26 }] });
 NPCS.push({ id: 'tailpiece', group: 'Loose things', kind: 'thing', name: 'A shed tail', bands: [0, 1, 2, 3, 4], length: 0.65, fixed: true, paletteFrom: 'oarfish', role: 'Three segments, dropped as bait or bitten off. Hunters go to it; a shell that rode on it gives the bait its other power.',
   about: 'A length of the oarfish’s own tail, loose in the water, the cut end showing. It has no colours of its own: it is the oarfish’s, so change those and this follows.',
   palette: {}, build: (pal) => model.tailPiece(pal), baked: true, swim: null, beat: [0, 0], material: {}, show: { scale: 1.6, n: 1, lift: 1.2, spin: true }, states: [{ id: 'still', name: 'Adrift' }] });
