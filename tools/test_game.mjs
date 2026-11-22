@@ -97,9 +97,13 @@ check('a biter near the head flees', s.st1 === 'flee' && s.d1 > s.d0 + 1, JSON.s
 s = await ev(() => { const g = window.__game, T = window.T; g.run.safe = 0; const before = g.run.segs; g.shed(); const b = g.foes.biters[1]; b.state = 'roam'; b.cool = 0; b.t = 0; T.idle(0.4);
   return { before, after: g.run.segs, decoys: g.foes.pieces.filter((p) => p.kind === 'decoy').length, biter: b.state, boost: g.rig.boost > 0 }; });
 check('shedding costs three segments and draws the biters', s.after === s.before - 3 && s.decoys === 1 && (s.biter === 'decoy' || s.biter === 'chew'), JSON.stringify(s));
-s = await ev(() => { const g = window.__game, T = window.T; T.idle(9); g.run.safe = 0; g.run.segs = 14; g.buildFish(14); const b = g.foes.biters[2]; const y = g.world.height(30, 30) + 3.5; T.put(30, y, 30, 0); T.idle(0.3);
-  const r = (g.rig.length + 0.8) / (Math.PI * 2); const cx = 30 + r, cz = 30; b.pos.set(cx, y, cz); b.vel.set(0, 0, 0); b.cool = 99; b.state = 'chew'; b.t = 99; b.wander.copy(b.pos); const caught = g.run.caught; T.coil(5); T.idle(1);
-  return { alive: b.alive, gained: g.run.caught - caught }; });
+s = await ev(() => { const g = window.__game, T = window.T; T.idle(9); g.run.safe = 0; g.run.segs = 14; g.buildFish(14); const b = g.foes.biters[2];
+  // somewhere with nothing standing within a coil's reach, and well away from the rift
+  const free = (x, z) => { const y = g.world.height(x, z) + 3.5; for (let k = 0; k < 8; k++) { const p = g.rig.pos.clone().set(x + Math.sin(k * 0.785) * 4.5, y, z + Math.cos(k * 0.785) * 4.5), q = p.clone(); g.world.pushOut(q, 1.4); if (q.distanceTo(p) > 1e-6) return false; } return g.world.rift.in(x, z) < -12; };
+  let sx = 30, sz = 30; find: for (let d = 0; d < 44; d += 4) for (let k = 0; k < 8; k++) { const x = 30 + Math.sin(k * 0.785) * d, z = 30 + Math.cos(k * 0.785) * d; if (free(x, z)) { sx = x; sz = z; break find; } }
+  const y = g.world.height(sx, sz) + 3.5; T.put(sx, y, sz, 0); T.idle(0.3);
+  const r = (g.rig.length + 0.8) / (Math.PI * 2); const cx = sx + r, cz = sz; b.pos.set(cx, y, cz); b.vel.set(0, 0, 0); b.cool = 99; b.state = 'chew'; b.t = 99; b.wander.copy(b.pos); const caught = g.run.caught; T.coil(5); T.idle(1);
+  return { alive: b.alive, gained: g.run.caught - caught, at: [Math.round(sx), Math.round(sz)], floor: g.run.floor }; });
 check('a biter inside a closed loop is caught', s.alive === false && s.gained >= 3, JSON.stringify(s));
 
 // 6. hooks
@@ -116,12 +120,15 @@ s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 14; g.b
 check('an angler winds up, lunges and takes three segments', s.after === s.before - 3 && s.states.includes('windup') && s.states.includes('lunge'), JSON.stringify(s));
 await ev(() => { const g = window.__game, T = window.T; const a = g.foes.anglers[1]; const y = a.home.y + 0.6; T.put(a.home.x - 5, y, a.home.z + 1.5, Math.PI / 2); T.idle(0.4); }); await snap(page, 'g-band3');
 
-// 8. the well leads down
-s = await ev(() => { const g = window.__game, T = window.T; const w = g.world.goal; const y = g.world.height(w.x, w.z) + 1.0; T.put(w.x - 1, y, w.z, 0); T.idle(0.3); window.__sealed = { state: g.run.state, above: g.rig.pos.y > w.y, guard: g.guard.kind };
-  g.guard.debug.fall(); T.put(w.x, y + 6, w.z, 0); T.idle(0.2); const s0 = g.run.state; T.put(w.x - 1, y, w.z, 0); T.idle(0.1); const s1 = g.run.state; T.idle(1.0); const s2 = g.run.state, f2 = g.run.floor; T.idle(2); return { s0, s1, s2, f2, s3: g.run.state, name: g.world.floor.name, y: +g.rig.pos.y.toFixed(1) }; });
+// 8. the rift leads down
+s = await ev(() => { const g = window.__game, T = window.T; const w = g.world.goal, r = g.world.rift; const bottom = g.world.height(w.x, w.z), deep = r.y - 9;
+  T.put(w.x, r.ledgeY + 1.2, w.z, 0); T.idle(0.2); const over = g.rig.pos.y; T.put(w.x - 1, deep, w.z, 0); T.idle(0.3); // on to the ledges it may go; between the walls it may not
+  window.__sealed = { state: g.run.state, held: g.rig.pos.y > r.ledgeY, belowShelf: over < r.y, guard: g.guard.kind, depth: +(r.y - bottom).toFixed(1), ledge: +(r.y - g.world.height(w.x + r.nx * (r.w(0) - 3), w.z + r.nz * (r.w(0) - 3))).toFixed(1), shelf: +(r.y - g.world.height(w.x + r.nx * (r.w(0) + 2), w.z + r.nz * (r.w(0) + 2))).toFixed(1) };
+  g.guard.debug.fall(); T.put(w.x, r.y + 1, w.z, 0); T.idle(0.2); const s0 = g.run.state; T.put(w.x + r.tx * 14 + r.nx * r.mid(14), deep, w.z + r.tz * 14 + r.nz * r.mid(14), 0); T.idle(0.1); const s1 = g.run.state; T.idle(1.0); const s2 = g.run.state, f2 = g.run.floor; T.idle(2); return { s0, s1, s2, f2, s3: g.run.state, name: g.world.floor.name, y: +g.rig.pos.y.toFixed(1) }; });
 const sealed = await ev(() => window.__sealed);
-check('while its guard lives, the well is shut: the fish cannot go down it', sealed.state === 'play' && sealed.above === true && !!sealed.guard, JSON.stringify(sealed));
-check('with the guard gone, the bottom of the well leads to the next band', s.s0 === 'play' && s.s1 === 'descend' && s.f2 === 3 && s.s3 === 'play', JSON.stringify(s));
+check('the rift is a step down to a ledge and then a sheer drop, cut into a level shelf', Math.abs(sealed.shelf) < 0.4 && Math.abs(sealed.ledge - 2.4) < 0.4 && sealed.depth > 13, JSON.stringify(sealed));
+check('while its keeper lives, the rift is shut: the fish may swim over the ledges but cannot go down between the walls', sealed.state === 'play' && sealed.held === true && sealed.belowShelf === true && !!sealed.guard, JSON.stringify(sealed));
+check('with the keeper gone, diving into the rift anywhere along it leads to the next band', s.s0 === 'play' && s.s1 === 'descend' && s.f2 === 3 && s.s3 === 'play', JSON.stringify(s));
 await ev(() => window.T.swim(1.5, 0.6, -0.8)); await snap(page, 'g-band4');
 
 // 8b. stamina, dash and ram
@@ -217,7 +224,7 @@ for (const f of [0, 1, 2, 3]) {
     const hp = { keeper: 3, shearer: 3, lamplighter: 3, warden: 4 }[kind];
     g.sim(0.5, T.none()); const y = g.world.height(w.x, w.z) + 1; T.put(w.x - 1, y, w.z, 0); g.run.safe = 0; T.idle(0.2);
     return { kind, attack, rams, hp, done: G.done, dropped: g.field.items.length - shells0, state: g.run.state }; }, f);
-  check(`band ${f + 1}: the ${s.kind} bites a fish left in its reach, falls to ${s.hp} rams, leaves a shell, and the well opens`, s.attack.bites >= 1 && s.attack.lost >= 2 && s.done && s.rams === s.hp && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
+  check(`band ${f + 1}: the ${s.kind} bites a fish left in its reach, falls to ${s.hp} rams, leaves a shell, and the rift opens`, s.attack.bites >= 1 && s.attack.lost >= 2 && s.done && s.rams === s.hp && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
 }
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(31); g.run.segs = 16; g.buildFish(16); T.idle(0.5); const G = g.guard; G.state.cool = 99;
   T.put(G.pos.x + 2.8, G.pos.y, G.pos.z + 0.9, 1.1); T.idle(0.3); let t = 0, prog = 0; while (!G.done && t < 9) { G.state.cool = 99; g.sim(0.1, { ...T.none(), coil: 1 }); t += 0.1; prog = Math.max(prog, G.ring ? G.ring.progress : 0); }
@@ -243,7 +250,7 @@ s = await ev(() => { const g = window.__game, T = window.T; T.idle(1.6); g.run.s
   g.sim(2.2, { ...T.none(), coil: 1, tight: true }); T.idle(0.8); return { on, ate, hint, thrown, again, crushed: !l.alive, gained: g.run.caught - caught }; });
 check('a leech fastens on, eats what the fish has eaten, is thrown off by a dash and crushed by a tight coil', s.on.state === 'on' && s.ate >= 2 && s.thrown === 'stun' && s.again === 'on' && s.crushed && s.gained === 1, JSON.stringify(s));
 
-// 8g. a soak: every band left running with the fish by its well, to shake out anything that only breaks with time
+// 8g. a soak: every band left running with the fish by its rift, to shake out anything that only breaks with time
 s = await ev(() => { const g = window.__game, T = window.T; const out = [];
   for (let f = 0; f < 5; f++) { g.startRun(50 + f); g.run.segs = 20; g.buildFish(20); g.enterFloor(f, false); const w = g.world.goal; T.put(w.x + 9, w.y + 2.5, w.z + 2, 1); g.giveShell('horn'); g.giveShell('spine');
     let t = 0; while (t < 24 && g.run.state === 'play') { g.sim(0.5, { ...T.none(), dir: { x: Math.sin(t), y: 0, z: Math.cos(t) }, sprint: t % 6 < 2, dashNow: Math.floor(t) % 4 === 0 }); if (Math.floor(t) % 9 === 3) g.shed(); t += 0.5; }
@@ -288,8 +295,14 @@ if (shots) {
 // 11. the real-time loop, real keys, the drawer
 await ev(() => { window.__hold = false; });
 await page.keyboard.down('KeyQ'); await page.waitForTimeout(1500); await page.keyboard.up('KeyQ');
+await ev(() => window.__game.setFull(true, true)); // the tuning drawer belongs to the full view
 await page.click('#music-tab'); await page.waitForTimeout(700);
 s = await ev(() => { const g = window.__game; const el = document.getElementById('m-menace'); el.value = 90; el.dispatchEvent(new Event('input')); document.getElementById('preset-copy').click(); return { open: document.getElementById('drawer').classList.contains('open'), menace: g.music.params.menace, audio: g.music.running, now: document.getElementById('music-now').textContent, yawRate: +g.rig.yawRate.toFixed(2) }; });
+const live = await ev(() => { const g = window.__game, m = g.music, rest = m.params.energy; const feed = (a, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { speed: 0, coil: 0, danger: 0, low: false, alive: true, activity: a }); return m.energy; };
+  const quiet = feed(0, 40), busy = feed(1, 8), after = feed(0, 40);
+  const sc = g.world.schools.find((x) => x.left > 0), here = g.rig.pos.clone(); g.rig.pos.set(sc.x, g.rig.pos.y, sc.z); const bySwarm = g.activity(); g.rig.pos.copy(here);
+  return { rest, quiet, busy, after, bySwarm }; });
+check('the band\'s energy rests where its slider is, climbs with what is going on round the fish and settles again; a swarm close by counts', Math.abs(live.quiet - live.rest) < 0.03 && live.busy > 0.95 && Math.abs(live.after - live.rest) < 0.03 && live.bySwarm > 0.1 && live.bySwarm <= 1, JSON.stringify(live));
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; const code = g.presetCode(); const r1 = g.applyCode('hey try this one oarfish-music:1:dream=90,energy=20,menace=10,react=40,swing=75,band=80 :)'); const p1 = { ...g.music.params };
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);

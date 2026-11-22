@@ -329,24 +329,47 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
   const polar = (a, d) => [SPAWN.x + Math.sin(a) * d, SPAWN.z + Math.cos(a) * d];
 
-  // ------------------------------------------------------------ where this band leads: a well down, or the palace
+  // ------------------------------------------------------------ where this band leads: a rift down, or the palace
   const goalAngle = floor === 0 ? 3.9 : rr(0, Math.PI * 2);
-  const [gx, gz] = polar(goalAngle, rr(50, 62));
-  const goal = { x: gx, z: gz, y: 0, kind: last ? 'palace' : 'well' };
+  const goalD = rr(50, 62);
+  const [gx, gz] = polar(goalAngle, last ? goalD : floor === 0 ? 70 : goalD + 8); // a rift lies further out than the palace does, so that what is built on the way to it stands on the shelf
+  const goal = { x: gx, z: gz, y: 0, kind: last ? 'palace' : 'rift' };
   // Ryūgū is one ring hall whose wall is the Sum (boss.js). The gate stands just outside the wall's only gap.
   // phi is the bearing of that gap from the hall's centre; gapHalf is half its width along the ring, in metres.
   const hall = last ? { x: gx + Math.sin(goalAngle) * 24.6, z: gz + Math.cos(goalAngle) * 24.6, R: 22, phi: goalAngle + Math.PI, gapHalf: 5.4, y: undefined } : null;
 
   // ------------------------------------------------------------ the lie of the seabed
   const ph = Array.from({ length: 8 }, () => rr(0, Math.PI * 2));
+  const bed = (x, z) => 1.5 * Math.sin(K * x + ph[0]) * Math.cos(K * z + ph[1])
+    + 0.9 * Math.sin(K * (2 * x + z) + ph[2])
+    + 0.55 * Math.cos(K * (3 * x - 2 * z) + ph[3])
+    + 0.3 * Math.sin(K * (5 * x + 4 * z) + ph[4]); // before anything is cut into it
+  // The rift. The shelf this band stands on has cracked across the way, and the crack is the way down: long and ragged,
+  // closing to nothing at both ends, stepping down to a ledge and then dropping sheer into the dark of the next band.
+  // Its middle is the goal. n points along the way from the start to the goal, t runs along the crack; a point is
+  // u metres along the crack from its middle and a metres across it. The shelf levels out toward its edge, at rift.y.
+  const rift = last ? null : { x: gx, z: gz, y: bed(gx, gz), nx: Math.sin(goalAngle), nz: Math.cos(goalAngle), tx: Math.cos(goalAngle), tz: -Math.sin(goalAngle),
+    half: 38, wide: 12.5, lip: 1.6, ledge: 4.6, wall: 7.4, step: 2.4, deep: 14 }; // half its length, half its width at the middle; across it from the edge in: the lip, the ledge, the wall; how far the ledge and the bottom lie below the shelf
+  const smooth = (k) => k * k * (3 - 2 * k);
+  const riftMid0 = 2.6 * Math.sin(ph[5]) + 1.2 * Math.sin(ph[6]);
+  const riftMid = (u) => 2.6 * Math.sin(u * 0.11 + ph[5]) + 1.2 * Math.sin(u * 0.29 + ph[6]) - riftMid0; // how far the crack wanders off its line
+  const riftW = (u) => { const k = 1 - (u / rift.half) ** 2; return k <= 0 ? 0 : rift.wide * Math.pow(k, 0.6) + k * (1 - Math.exp(-(u * u) / 60)) * (1.1 * Math.sin(u * 0.31 + ph[7]) + 0.7 * Math.sin(u * 0.83 + ph[1])); }; // half its width, edge to edge
+  // how far inside the rift's edge a point is, in metres; less than nothing outside it
+  function riftIn(x, z) {
+    if (!rift) return -99;
+    const dx = wrapD(x - rift.x), dz = wrapD(z - rift.z), a = dx * rift.nx + dz * rift.nz;
+    if (Math.abs(a) > rift.wide + 16) return rift.wide - Math.abs(a); // far off: near enough, and cheap
+    const u = dx * rift.tx + dz * rift.tz, over = Math.abs(u) - rift.half;
+    if (over >= 0) return -Math.hypot(over, a); // past its ends
+    return riftW(u) - Math.abs(a - riftMid(u));
+  }
+  const riftDrop = (q) => rift.step * smooth(clamp(q / rift.lip, 0, 1)) + (rift.deep - rift.step) * smooth(clamp((q - rift.ledge) / (rift.wall - rift.ledge), 0, 1));
+  const riftClear = (x, z, pad = 0) => !rift || riftIn(x, z) < -pad;
   function height(x, z) {
-    let h = 1.5 * Math.sin(K * x + ph[0]) * Math.cos(K * z + ph[1])
-      + 0.9 * Math.sin(K * (2 * x + z) + ph[2])
-      + 0.55 * Math.cos(K * (3 * x - 2 * z) + ph[3])
-      + 0.3 * Math.sin(K * (5 * x + 4 * z) + ph[4]);
-    if (!last) {
-      const d = Math.hypot(wrapD(x - goal.x), wrapD(z - goal.z));
-      if (d < 24) { const k = clamp((6.4 - d) / 2.6, 0, 1); h -= 7 * k * k * (3 - 2 * k) + 0.5 * Math.exp(-(d * d) / 90); } // the well is a shaft, straight-sided, in a slight hollow
+    let h = bed(x, z);
+    if (rift) {
+      const q = riftIn(x, z);
+      if (q > -10) { h = lerp(h, rift.y, smooth(clamp((q + 10) / 8, 0, 1))); if (q > 0) h -= riftDrop(q); }
     } else if (hall.y !== undefined) {
       const d = Math.hypot(wrapD(x - hall.x), wrapD(z - hall.z));
       if (d < hall.R + 9) { const k = clamp((hall.R + 9 - d) / 7, 0, 1); h = lerp(h, hall.y, k * k * (3 - 2 * k)); } // the hall has a level floor
@@ -355,8 +378,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   }
   if (hall) hall.y = height(hall.x, hall.z);
   const meadow = (x, z) => Math.sin(K * (2 * x - z) + ph[5]) * Math.cos(K * (x + 3 * z) + ph[6]) + 0.25 * Math.sin(K * (6 * x + 5 * z) + ph[7]);
-  const rimHeight = (() => { let s = 0; for (let i = 0; i < 8; i++) s += height(goal.x + Math.sin(i * 0.785) * 7.5, goal.z + Math.cos(i * 0.785) * 7.5); return s / 8; })();
-  goal.y = last ? height(goal.x, goal.z) : rimHeight;
+  goal.y = last ? height(goal.x, goal.z) : rift.y;
 
   const nTri = GRID * GRID * 2;
   const tPos = new Float32Array(nTri * 9), tCol = new Float32Array(nTri * 9), tNor = new Float32Array(nTri * 9);
@@ -397,6 +419,7 @@ float seaLight(vec2 p, float t) {
 
   const sandA = new THREE.Color('#c8c9a6'), sandB = new THREE.Color('#b9bd9b'), sandHi = new THREE.Color('#d3d2ad');
   const grassA = new THREE.Color('#a5c09f'), grassB = new THREE.Color('#95b596'), pit = new THREE.Color(FLOORS[Math.min(floor + 1, FLOORS.length - 1)].water).multiplyScalar(0.55);
+  const rockA = new THREE.Color('#a9ad97'), rockB = new THREE.Color('#7f8a80'); // the rock of the shelf, where the rift has laid it bare
   const vertexY = (ix, iz) => height(ix * CELL, iz * CELL) + (hash2(ix, iz) - 0.5) * 0.36;
   let tcx = 1e9, tcz = 1e9;
   function rebuildTerrain(fx, fz) {
@@ -412,7 +435,14 @@ float seaLight(vec2 p, float t) {
       const h = hash2(ax + bx + qx, az + bz + qz, salt);
       if (meadow(mx, mz) > 0.55) col.copy(grassA).lerp(grassB, h);
       else col.copy(sandA).lerp(sandB, h).lerp(sandHi, clamp((my + 1) / 4, 0, 1) * 0.5);
-      if (!last) col.lerp(pit, clamp(1.2 - Math.hypot(wrapD(mx - goal.x), wrapD(mz - goal.z)) / 7, 0, 1) * 0.92); // the well darkens toward the next band
+      if (rift) {
+        const q = riftIn(mx, mz);
+        if (q > -1.5) { // the rift: bare rock in beds where the shelf has broken, darkening toward the next band
+          const down = rift.y - my;
+          if (n.y < 0.9 || down > 1) col.copy(rockA).lerp(rockB, (Math.floor((my + 60) / 1.15) & 1 ? 0.7 : 0.12) + h * 0.3);
+          col.lerp(pit, clamp((down - 1.2) / (rift.deep - 4), 0, 1) * 0.95);
+        }
+      }
       for (const p of [A, B, C]) {
         tPos[o] = p.x; tPos[o + 1] = p.y; tPos[o + 2] = p.z;
         tNor[o] = n.x; tNor[o + 1] = n.y; tNor[o + 2] = n.z;
@@ -465,7 +495,7 @@ float seaLight(vec2 p, float t) {
     sites.push([hall.x, hall.z, (hall.R + 4) / 0.75]); // nothing grows or stands in the hall, or against its wall
     for (let i = 0; i < 4; i++) { const a = hall.phi + 1.1 + i * 1.3; spots.biters.push([hall.x + Math.sin(a) * (hall.R - 2.6), hall.z + Math.cos(a) * (hall.R - 2.6)]); } // biters live on the Sum as cleaner fish do on a whale
   }
-  const clearNow = (x, z, pad) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 6 + pad);
+  const clearNow = (x, z, pad) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 6 + pad) && riftClear(x, z, pad + 1);
   // A column is a stack: a plinth, a moulded base, fluted drums that narrow as they climb, a cushion and a top slab
   // in the district's colour. Where it broke, the break is jagged; where it was sawn (the Narrowing) it is flat.
   function column(x, z, h, { capital = true, yaw = rand() * 3, collide = true, sawn = false } = {}) {
@@ -674,46 +704,51 @@ float seaLight(vec2 p, float t) {
     { const [x, z] = P(26.5, 3.6), y = height(x, z) - 0.2; blocks.push({ x, y, z, q: qY(A), s: S(1.3, 0.7, 1.3), color: pick(stoneTones) }); coils.push({ x, y: y + 0.86, z, q: qY(A), s: S(0.62), color: district }); } // the lesson, carved: a body closed round a swarm
     nurse.jar = urnAt(...P(49), 2.7, 'shell');
     paveRoad(...P(-3), ...P(47), 1.2, 1.2);
-    { const [jx, jz] = P(51), gd = Math.hypot(goal.x - jx, goal.z - jz), gx2 = (goal.x - jx) / gd, gz2 = (goal.z - jz) / gd; // and on from the jar to the well, small hoops marking the way
-      paveRoad(jx, jz, jx + gx2 * (gd - 12), jz + gz2 * (gd - 12), 1.2, 1.2);
-      for (let d = 4, i = 0; d < gd - 13; d += 5.5, i++) hoop(jx + gx2 * d + gz2 * (i % 2 ? 2.6 : -2.6), jz + gz2 * d - gx2 * (i % 2 ? 2.6 : -2.6), 1.1); }
+    { const [jx, jz] = P(51), gd = Math.hypot(goal.x - jx, goal.z - jz), gx2 = (goal.x - jx) / gd, gz2 = (goal.z - jz) / gd; // and on from the jar to the rift, small hoops marking the way
+      paveRoad(jx, jz, jx + gx2 * (gd - 19), jz + gz2 * (gd - 19), 1.2, 1.2);
+      for (let d = 4, i = 0; d < gd - 20; d += 5.5, i++) hoop(jx + gx2 * d + gz2 * (i % 2 ? 2.6 : -2.6), jz + gz2 * d - gx2 * (i % 2 ? 2.6 : -2.6), 1.1); }
   }
   F.ruins.forEach((kind, i) => {
     if (!builders[kind]) return;
     for (let tries = 0; tries < 12; tries++) { const [x, z] = polar(rr(0, 6.28), rr(30, 60)); if (clearNow(x, z, 16)) { builders[kind](x, z); break; } }
   });
 
-  // the well: a rim of old stones round the pit, a pale beam rising out of it
+  // the rift's middle, where people came to it: old stones along both edges, a frame over the mouth, a pale beam rising out of it
   const beacons = [];
   const beaconMat = mat(new THREE.MeshBasicMaterial({ map: G.beam, color: last ? '#ffd9a0' : '#bfe9ff', transparent: true, opacity: last ? 0.5 : 0.34, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
   const portal = { mesh: null, level: 1 }; // level dims the gate's light: the Sum puts it out when it wakes
   if (!last) {
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + rr(-0.1, 0.1), x = goal.x + Math.sin(a) * 9.2, z = goal.z + Math.cos(a) * 9.2;
-      if (i % 3 === 1) continue; // gaps to swim in through
-      column(x, z, i % 2 ? rr(1.2, 2.2) : rr(2.6, 3.6), { capital: i % 2 === 0, yaw: a });
-    }
-    // so that it reads as a well: a stone curb round the mouth, capped in the district's colour, and a frame over it with the people's ring hung in it
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2, x = goal.x + Math.sin(a) * 6.9, z = goal.z + Math.cos(a) * 6.9, y = height(x, z) - 0.15;
-      blocks.push({ x, y, z, q: qY(a), s: S(2.3, 0.8, 0.8), color: pick(stoneTones) }, { x, y: y + 0.8, z, q: qY(a), s: S(2.45, 0.16, 0.95), color: district });
+    const { nx, nz, tx, tz } = rift, yawT = goalAngle, yawN = goalAngle - Math.PI / 2; // a block turned to lie along the rift, or across it
+    const at = (u, a) => { const k = a + riftMid(u); return [goal.x + tx * u + nx * k, goal.z + tz * u + nz * k]; }; // u metres along the rift from its middle, a metres across it
+    // a curb along both edges, capped in the district's colour, with gaps to swim in through, and bollards on it
+    for (const side of [-1, 1]) for (let i = -6; i <= 6; i++) {
+      if (i === 0 || Math.abs(i) === 4) continue;
+      const u = i * 2.5, [x, z] = at(u, side * (riftW(u) + 0.7)), y = height(x, z) - 0.15;
+      blocks.push({ x, y, z, q: qY(yawT), s: S(2.3, 0.8, 0.8), color: pick(stoneTones) }, { x, y: y + 0.8, z, q: qY(yawT), s: S(2.45, 0.16, 0.95), color: district });
       colliders.push({ x, z, r: 0.85, top: y + 1.0 });
+      if (Math.abs(i) % 3 === 2) { drums.push({ x, y: y + 0.96, z, q: qY(yawT), s: S(0.4, 0.5, 0.4), color: dpick(stoneTones) }); blocks.push({ x, y: y + 1.46, z, q: qY(yawT), s: S(0.5, 0.1, 0.5), color: district }); if (floor >= 2) grownBulbs.push({ x, y: y + 1.56, z, q: qY(0), s: S(1, 0.3, 1) }); } // lamps on them once it is dark
     }
-    // the paving round it, laid in rings, and steps let into the wall of the shaft, winding down
-    paveRing(goal.x, goal.z, 8.3, 1.25, 0.1); paveRing(goal.x, goal.z, 10.6, 1.4, 0.3);
-    for (let i = 0; i < 30; i++) {
-      const a = goalAngle + i * 0.44, d = lerp(6.0, 4.15, i / 29), x = goal.x + Math.sin(a) * d, z = goal.z + Math.cos(a) * d;
-      blocks.push({ x, y: height(x, z) - 0.02, z, q: qY(a), s: S(1.5, 0.2, 0.8), color: i % 5 === 4 ? district : stoneLike(dpick(stoneTones)) });
+    // a row of columns behind each curb, and paving between
+    for (const side of [-1, 1]) for (const [u, tall] of [[-17, 0], [-11, 1], [-5, 0], [5, 1], [11, 0], [17, 1]]) {
+      const [x, z] = at(u, side * (riftW(u) + 3.3)), big = (side > 0) === !!tall;
+      column(x, z, big ? rr(2.6, 3.6) : rr(1.2, 2.2), { capital: big, yaw: yawT });
     }
-    for (let i = 0; i < 18; i += 3) { const a = ((i + 0.5) / 18) * Math.PI * 2, x = goal.x + Math.sin(a) * 6.9, z = goal.z + Math.cos(a) * 6.9, y = height(x, z) + 0.81; drums.push({ x, y, z, q: qY(a), s: S(0.4, 0.5, 0.4), color: dpick(stoneTones) }); blocks.push({ x, y: y + 0.5, z, q: qY(a), s: S(0.5, 0.1, 0.5), color: district }); if (floor >= 2) grownBulbs.push({ x, y: y + 0.6, z, q: qY(0), s: S(1, 0.3, 1) }); } // bollards on the curb, lamps on them once it is dark
-    {
-      const a = goalAngle + Math.PI / 2, ax = goal.x + Math.sin(a) * 7.9, az = goal.z + Math.cos(a) * 7.9, bx = goal.x - Math.sin(a) * 7.9, bz = goal.z - Math.cos(a) * 7.9;
-      const top = Math.max(column(ax, az, 6.2, { yaw: a }), column(bx, bz, 6.2, { yaw: a }));
-      lintel(ax, az, bx, bz, top, 0.55);
-      // the people's ring, hung over the mouth on two chains
-      const ry = top - 2.75;
+    for (const side of [-1, 1]) for (let u = -19; u <= 19; u += 1.4) for (const out of [1.95, 4.6]) if (drand() > (out > 2 ? 0.32 : 0.12)) { const [x, z] = at(u, side * (riftW(u) + out)); flagAt(x, z, out > 2 ? 1.4 : 1.25, yawT + dr(-0.15, 0.15)); }
+    // steps let into the near wall, going down into the dark
+    for (let i = 0; i < 15; i++) {
+      const u = -10 + i * 1.25, [x, z] = at(u, -(riftW(u) - rift.ledge - 0.35 - i * 0.17));
+      blocks.push({ x, y: rift.y - rift.step - 0.25 - i * 0.66, z, q: qY(yawT), s: S(1.5, 0.2, 1.0), color: i % 5 === 4 ? district : stoneLike(dpick(stoneTones)) });
+    }
+    { // a pillar on the ledge at either side of the mouth, and the people's ring hung between them on two long chains, over the dark
+      const out = riftW(0) - rift.ledge + 0.9, [ax, az] = at(0, -out), [bx, bz] = at(0, out), a = goalAngle;
+      const top = Math.max(column(ax, az, 8.4, { yaw: a }), column(bx, bz, 8.4, { yaw: a })), ry = top - 4.4;
       wreaths.push({ x: goal.x, y: ry, z: goal.z, q: qY(a + Math.PI / 2), s: S(1.55), color: district });
-      for (const sgn of [-1, 1]) for (let k = 0; k < 5; k++) { const d = sgn * lerp(1.1, 1.6, k / 4); coins.push({ x: goal.x + Math.sin(a) * d, y: lerp(ry + 1.25, top - 0.1, k / 4), z: goal.z + Math.cos(a) * d, q: qY(a + (k % 2 ? 0 : Math.PI / 2), Math.PI / 2), s: S(0.75, 0.75, 1.1), color: dpick(stoneTones) }); }
+      for (const sgn of [-1, 1]) for (let k = 0; k <= 12; k++) { const t = k / 12, d = sgn * lerp(1.15, out - 0.35, t); coins.push({ x: goal.x + Math.sin(a) * d, y: lerp(ry + 1.2, top + 0.1, t) - 1.5 * t * (1 - t) * 4 * 0.5, z: goal.z + Math.cos(a) * d, q: qY(a + (k % 2 ? 0 : Math.PI / 2), Math.PI / 2 - sgn * 0.35), s: S(0.75, 0.75, 1.1), color: dpick(stoneTones) }); }
+    }
+    // further along, nobody tends it: what has broken off lies on the edge and on the ledges
+    for (let u = -34; u <= 34; u += 3.5) for (const side of [-1, 1]) {
+      if (Math.abs(u) > 19 && drand() < 0.75) { const [x, z] = at(u, side * (riftW(u) + dr(0.4, 1.6))); rubbleAt(x, z, 0.2, 1.5, 2 + Math.floor(drand() * 3)); }
+      if (riftW(u) > rift.ledge + 0.5 && drand() < 0.5) { const [x, z] = at(u + dr(-1, 1), side * (riftW(u) - dr(2.2, 3.8))); rubbleAt(x, z, 0.1, 0.9, 2); }
     }
     const beam = add(new THREE.Mesh(new THREE.PlaneGeometry(7, 40), beaconMat));
     beam.position.set(goal.x, goal.y + 13, goal.z);
@@ -738,7 +773,7 @@ float seaLight(vec2 p, float t) {
     beacons.push(beam);
     goal.y += 4.6;
   }
-  const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad);
+  const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad) && riftClear(x, z, pad + 0.6);
 
   // ------------------------------------------------------------ swarms of small fish: the food, in four sizes
   const fishKit = swarmKit(swarmFor(floor), { glow: F.fishGlow }); // this band's small fish, as their component gives them
@@ -753,6 +788,7 @@ float seaLight(vec2 p, float t) {
     const penned = !kept && !first && !tease && (floor === 0 || (floor === 1 && s % 2 === 0)); // deeper down nobody keeps them
     if (penned) { for (let t = 0; t < 12 && !clearNow(hx, hz, 5); t++) { hx = rand() * T; hz = rand() * T; } sites.push([hx, hz, 4]); pen(hx, hz, SWARMS[tier].r * 2.6 + 1.1); }
     if (hall) for (let t = 0; t < 20 && !farFrom(hx, hz, hall.x, hall.z, hall.R + 12); t++) { hx = rand() * T; hz = rand() * T; } // no swarm drifts into the hall
+    if (rift && !kept && !first && !tease) for (let t = 0; t < 20 && !riftClear(hx, hz, 5); t++) { hx = rand() * T; hz = rand() * T; } // or lives in the rift
     const sw = SWARMS[tier];
     schools.push({ tier, n: sw.n, ball: sw.r, fit: sw.r, orbit: sw.r + 0.3, can: false, px: 0, pz: 0, pack: 1, progress: 0, arcStart: 0, arcSign: 1, hx, hz, hy: height(hx, hz) + rr(2.6, 4.2), ph: rand() * 6.28, r: kept ? 0.6 : first ? 1.6 : tease ? 1.4 : penned ? 0.7 : rr(4, 9), clock: rand() * 50,
       threat: 0, x: hx, z: hz, y: 0, left: sw.n, burst: 0, tone: schoolTones[s % schoolTones.length], ring: null, arc: null });
@@ -1043,10 +1079,22 @@ float seaLight(vec2 p, float t) {
     fishMesh.instanceMatrix.needsUpdate = true;
     return at;
   }
-  // has the fish gone down the well, or through the palace gate?
+  // light across the mouth of the rift, for whoever keeps it (guards.js): bars from wall to wall, and a line along each wall
+  function riftVeil() {
+    const m = mesher(), y = rift.y - rift.step + 0.35, slot = (u) => riftW(u) - rift.ledge - 0.3;
+    const P = (u, a) => { const k = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * k, y, rift.z + rift.tz * u + rift.nz * k]; };
+    for (let u = -rift.half; u < rift.half; u += 2.2) {
+      const s0 = slot(u), s1 = slot(u + 0.13), s2 = slot(u + 2.2);
+      if (s0 < 0.5 || s2 < 0.5) continue;
+      m.quad(P(u, -s0), P(u, s0), P(u + 0.13, s1), P(u + 0.13, -s1), '#ffffff');
+      for (const sg of [-1, 1]) m.quad(P(u, sg * s0), P(u, sg * (s0 - 0.11)), P(u + 2.2, sg * (s2 - 0.11)), P(u + 2.2, sg * s2), '#ffffff');
+    }
+    return m.geometry();
+  }
+  // has the fish gone down the rift, or through the palace gate?
   function atGoal(p) {
     const dx = wrapD(p.x - goal.x), dz = wrapD(p.z - goal.z), d = Math.hypot(dx, dz);
-    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : d < 4 && p.y - height(p.x, p.z) < 1.7; // through the gate, or at the bottom of the pit
+    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : riftIn(p.x, p.z) > rift.ledge + 1 && p.y < rift.y - rift.step - 4.5; // through the gate, or well down between the walls of the rift
   }
   // a clear spot on the open seabed, for placing hunters and hooks
   function openSpot(minFromSpawn = 24) {
@@ -1064,6 +1112,6 @@ float seaLight(vec2 p, float t) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

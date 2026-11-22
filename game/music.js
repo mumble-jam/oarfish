@@ -2,7 +2,8 @@
 // Nothing is sampled; every sound is synthesised with Web Audio. The band reads the game state each
 // tick (speed, coiling, danger, depth) and answers events at once with cymbals, stabs and fills.
 //
-// Sliders (all 0..1): volume, dream (reverb, darkness, sustain), energy (tempo, how busy the band is at rest),
+// Sliders (all 0..1): volume, dream (reverb, darkness, sustain), energy (tempo, how busy the band is: where it rests
+// in empty water; from there it climbs by itself with what is going on round the fish, see `life` below),
 // menace (which harmony is used, low brass, toms), react (how hard the game pushes the band around),
 // swing (straight to hard swing), band (drummer forward to harmony forward).
 
@@ -35,7 +36,7 @@ const RIDE = [0, 3, 5, 6, 9, 11];
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -293,13 +294,16 @@ export function createMusic({ context = null } = {}) {
   }
 
   // ---------------------------------------------------------------- the clock
+  // Energy as the band plays it: the slider is where it rests, and life (how much is going on round the fish, 0 to 1,
+  // told to update() and smoothed there) carries it the rest of the way to hunting
+  const energyNow = () => lerp(params.energy, 1, st.life);
   function schedule(until) {
     if (!st.started) return;
     while (st.nextTime < until) {
       if (st.alive) playTick(st.bar, st.tick, st.nextTime);
       // step to the next swung eighth: three ticks to a beat, the middle one a true triplet, the last pushed late by swing
       if (st.tick % 3 === 0) {
-        const bpm = lerp(108, 172, params.energy) * (1 + 0.1 * st.intensity) * (st.alive ? 1 : 0.6);
+        const bpm = lerp(108, 172, energyNow()) * (1 + 0.1 * st.intensity) * (st.alive ? 1 : 0.6);
         st.beatDur = 60 / bpm;
       }
       const late = lerp(0.5, 0.74, params.swing), frac = [0, 1 / 3, late, 1];
@@ -321,7 +325,8 @@ export function createMusic({ context = null } = {}) {
   const api = {
     params, state: st,
     // what the band is doing right now, for the drawer
-    describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity } : null; },
+    describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow() } : null; },
+    get energy() { return energyNow(); },
     get muted() { return st.muted; },
     get running() { return st.started && ctx?.state === 'running'; },
     // call from a click or key press: browsers only let sound start from a gesture
@@ -340,9 +345,10 @@ export function createMusic({ context = null } = {}) {
     update(dt, s) {
       Object.assign(st, { speed: s.speed, coil: s.coil, danger: s.danger, low: !!s.low });
       if (s.alive !== st.alive) { st.alive = s.alive; applyParams(s.alive ? 0.3 : 1.2); }
-      const P = params;
+      const P = params, a = clamp(s.activity || 0, 0, 1);
+      st.life += (a - st.life) * (1 - Math.exp(-dt * (a > st.life ? 0.7 : 0.2))); // it gathers in a couple of seconds and lets go over several: a tempo should not flinch
       st.pulse *= Math.exp(-dt / 1.6);
-      const target = clamp(0.02 + 0.36 * P.energy + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse), 0, 1);
+      const target = clamp(0.02 + 0.36 * energyNow() + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse), 0, 1);
       st.intensity += (target - st.intensity) * (1 - Math.exp(-dt * (target > st.intensity ? 3.2 : 0.55)));
       st.tension += (s.coil * P.react - st.tension) * (1 - Math.exp(-dt * 2.5));
     },

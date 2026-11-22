@@ -59,6 +59,15 @@ s = await ev(() => { const g = window.__game, T = window.T; const yaw = g.cam.ya
   return { right: m.x * Math.cos(yaw) - m.z * Math.sin(yaw), d: m.d }; });
 await page.keyboard.up('KeyD');
 check('D swims to the right of the view', s.right > 0.6, JSON.stringify(s));
+// the adventure camera also aims the fish up and down: W goes where the view points
+await page.keyboard.down('KeyW');
+s = await ev(() => { const g = window.__game, T = window.T; const go = (pitch) => { T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = pitch; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); return g.rig.pos.y - y0; };
+  const level = go(0.34), nearly = go(0.42), up = go(-0.2), down = go(0.95); g.cam.pitch = 0.34; return { level, nearly, up, down }; });
+await page.keyboard.up('KeyW');
+await page.keyboard.down('KeyS');
+s.back = await ev(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = 0.95; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = 0.34; return g.rig.pos.y - y0; });
+await page.keyboard.up('KeyS');
+check('in the adventure camera W swims where the view points: up when it looks up, down when it looks down, level in between, and S the other way', Math.abs(s.level) < 0.1 && Math.abs(s.nearly) < 0.1 && s.up > 0.4 && s.down < -0.4 && s.back > 0.4, JSON.stringify(s));
 
 // ---- the mouse turns the view with no button held: first the real pointer lock, if this browser grants it
 await page.mouse.move(700, 420);
@@ -126,22 +135,33 @@ check('P again resumes', !s.paused && s.dt > 0.4 && s.menu === 'none' && s.duck 
 await unlock(); // P took the mouse back on resuming; a captured mouse cannot reach the corner buttons
 await page.keyboard.press('KeyV');
 check('V goes back to point-and-swim', (await ev(() => window.__game.feel.mode)) === 'point');
+await page.keyboard.down('KeyW');
+s = await ev(() => { const g = window.__game, was = g.cam.pitch, ease = g.cam.ease; window.T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = 1.2; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = was; g.cam.ease = ease; return g.rig.pos.y - y0; });
+await page.keyboard.up('KeyW');
+check('...where the view looks down from above and W stays level', Math.abs(s) < 0.1, String(s));
 await page.click('#btn-pause'); await page.waitForTimeout(450);
 s = await ev(() => window.__game.paused);
 await page.keyboard.press('Escape');
 check('the corner button pauses and Esc resumes', s === true && (await ev(() => window.__game.paused)) === false);
 
-// ---- H hides the help and brings it back
-await page.keyboard.press('KeyH');
-s = await ev(() => ({ bare: document.getElementById('stage').classList.contains('bare'), keys: getComputedStyle(document.getElementById('keys')).display, top: getComputedStyle(document.querySelector('.top')).display, tools: getComputedStyle(document.querySelector('.tools')).display, scale: getComputedStyle(document.getElementById('scale')).display, saved: localStorage.getItem('oarfish.ui') }));
-check('H hides the key list and the corner buttons, and keeps the scale bar', s.bare && s.keys === 'none' && s.top === 'none' && s.tools === 'none' && s.scale !== 'none' && /true/.test(s.saved), JSON.stringify(s));
-await ev(() => window.__game.sim(0.3)); await snap('c-bare');
+// ---- a dive opens on the plain view; H adds the key list and the tools, and takes them away again
+const view = () => ev(() => { const st = (q) => getComputedStyle(document.querySelector(q)).display;
+  return { full: document.getElementById('stage').classList.contains('full'), keys: st('#keys'), tools: st('.tools'), tuning: st('#music-tab'), fs: st('#btn-fs'), pause: st('#btn-pause'), scale: st('#scale'), prompt: st('#prompt'), saved: localStorage.getItem('oarfish.ui') }; });
+s = await view();
+check('a dive opens on the plain view: no key list or tools, but a pause button, the scale bar and the key prompts', !s.full && s.keys === 'none' && s.tools === 'none' && s.tuning === 'none' && s.fs === 'none' && s.pause !== 'none' && s.scale !== 'none' && s.prompt !== 'none', JSON.stringify(s));
+await ev(() => window.__game.sim(0.3)); await snap('c-plain');
 await page.keyboard.press('KeyP'); await page.waitForTimeout(100);
-s = await ev(() => getComputedStyle(document.querySelector('.top')).display);
-check('...but the corner buttons come back while paused', s === 'flex', s);
-await page.waitForTimeout(450); await page.keyboard.press('KeyP'); await page.keyboard.press('KeyH');
-s = await ev(() => getComputedStyle(document.getElementById('keys')).display);
-check('H again shows them', s === 'flex', s);
+s = await view();
+check('...and the other corner buttons come back while paused', s.tuning !== 'none' && s.fs !== 'none', JSON.stringify(s));
+await page.waitForTimeout(450); await page.keyboard.press('KeyP');
+await page.keyboard.press('KeyH');
+s = await view();
+check('H shows the key list, the tuning drawer and the model tools, and the choice is kept', s.full && s.keys === 'flex' && s.tools === 'flex' && s.tuning !== 'none' && s.fs !== 'none' && /"full":true/.test(s.saved), JSON.stringify(s));
+await ev(() => window.__game.sim(0.3)); await snap('c-full');
+await page.keyboard.press('KeyH'); await ev(() => window.__game.sim(0.3));
+s = { ...(await view()), hint: await ev(() => document.getElementById('hint').textContent) };
+check('H again hides them and says how to get them back', !s.full && s.keys === 'none' && /"full":false/.test(s.saved) && /brings them back/.test(s.hint), JSON.stringify(s));
+await page.keyboard.press('KeyH'); // the checks below use the corner buttons of the full view
 
 // ---- full screen
 await page.click('#btn-fs'); await page.waitForTimeout(600);
@@ -171,10 +191,11 @@ check('the left stick swims away from the camera, and the legend turns to the co
 await snap('c-pad');
 s = await ev(() => { const g = window.__game, pad = window.fakePad; pad.axes[1] = -0.45; g.sim(2); const slow = g.rig.speed; pad.axes[1] = -1; g.sim(2); const full = g.rig.speed; window.B(7, 1); g.sim(2); const sprint = g.rig.speed; window.B(7, 0); pad.axes[1] = 0; return { slow, full, sprint }; });
 check('the stick is analogue and R2 sprints', s.slow < s.full - 0.4 && s.sprint > s.full + 1.5, JSON.stringify(s));
-s = await ev(() => { const g = window.__game, pad = window.fakePad; const y0 = g.cam.yaw, p0 = g.cam.pitch; pad.axes[2] = 1; g.sim(0.5); pad.axes[2] = 0; const dyaw = g.cam.yaw - y0; pad.axes[3] = -1; g.sim(0.4); pad.axes[3] = 0; const dpitch = g.cam.pitch - p0;
+s = await ev(() => { const g = window.__game, pad = window.fakePad; g.cam.ease = null; g.cam.pitch = 0.98; // a known tilt: what the mouse checks above leave behind depends on what the browser reports for the first move after it hands the mouse back
+  const y0 = g.cam.yaw, p0 = g.cam.pitch; pad.axes[2] = 1; g.sim(0.5); pad.axes[2] = 0; const dyaw = g.cam.yaw - y0; pad.axes[3] = -1; g.sim(0.4); pad.axes[3] = 0; const dpitch = g.cam.pitch - p0;
   const z0 = g.cam.zoom; window.B(12, 1); g.sim(0.5); window.B(12, 0); const zoom = g.cam.zoom / z0;
   g.cam.yaw += 2; window.tap(11); g.sim(1.5); const off = Math.atan2(Math.sin(g.cam.yaw - g.rig.yaw - Math.PI), Math.cos(g.cam.yaw - g.rig.yaw - Math.PI));
-  return { dyaw, dpitch, zoom, off }; });
+  return { dyaw, dpitch, zoom, off, p0, mode: g.feel.mode }; });
 check('the right stick turns the view, the D-pad zooms, R3 brings the view behind', Math.abs(s.dyaw + 1.3) < 0.15 && s.dpitch < -0.15 && s.zoom < 0.7 && Math.abs(s.off) < 0.15, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 3, 72, 0); g.sim(0.3); const y0 = g.rig.pos.y; window.B(5, 1); g.sim(1); window.B(5, 0); const up = g.rig.pos.y - y0; const y1 = g.rig.pos.y; window.B(4, 1); g.sim(1); window.B(4, 0); return { up, down: g.rig.pos.y - y1 }; });
 check('R1 rises and L1 dives', s.up > 0.4 && s.down < -0.3, JSON.stringify(s));
@@ -201,8 +222,8 @@ s = await ev(() => ({ msg: document.getElementById('rumble-msg').textContent, no
 check('the pause menu tests the vibration and says what the browser reports for the controller', /motors \(dual-rumble\)/.test(s.msg) && /played all three/.test(s.msg) && /can vibrate/.test(s.note) && s.n === 2, JSON.stringify(s));
 await page.waitForTimeout(350); await page.keyboard.press('KeyP');
 s = await ev(() => { const g = window.__game; window.tap(9); const p1 = g.paused; const f0 = document.activeElement?.id; window.tap(13); const f1 = document.activeElement?.id; window.tap(12); const f2 = document.activeElement?.id; window.tap(0); const p2 = g.paused;
-  window.tap(8); const bare1 = g.ui.bare; window.tap(8); return { p1, f0, f1, f2, p2, bare1, bare2: g.ui.bare }; });
-check('Options pauses, the D-pad walks the menu, Cross resumes, Create hides the help', s.p1 && s.f0 === 'btn-resume' && s.f1 === 'btn-full' && s.f2 === 'btn-resume' && !s.p2 && s.bare1 && !s.bare2, JSON.stringify(s));
+  window.tap(8); const full1 = g.ui.full; window.tap(8); return { p1, f0, f1, f2, p2, full1, full2: g.ui.full }; });
+check('Options pauses, the D-pad walks the menu, Cross resumes, Create hides and shows the keys and tools', s.p1 && s.f0 === 'btn-resume' && s.f1 === 'btn-full' && s.f2 === 'btn-resume' && !s.p2 && !s.full1 && s.full2, JSON.stringify(s));
 // ---- the key-binding menu: change keys and buttons, save the set under a name, get it back
 await page.keyboard.press('KeyP'); await page.waitForTimeout(150); await page.click('#btn-binds');
 s = await ev(() => ({ shown: getComputedStyle(document.querySelector('#pause .binds')).display, main: getComputedStyle(document.querySelector('#pause .in')).display, slots: document.querySelectorAll('#bind-grid button').length, w: document.querySelector('#bind-grid button[data-a="up"][data-k="0"]').textContent, pad: document.querySelector('#bind-grid button[data-a="sprint"][data-p]').textContent }));
@@ -235,28 +256,13 @@ s = await ev(() => { const g = window.__game; Object.defineProperty(navigator, '
 await page.keyboard.press('KeyA');
 check('unplugging is noticed and a key brings the keyboard legend back', /No controller/.test(s) && (await ev(() => window.__game.dev)) === 'keys' && /Shift/.test(await ev(() => document.getElementById('keys').textContent)), s);
 
-// ---- the world's seed: the same seed is the same world, and it can be copied, pasted and kept
+// ---- a dive is built from one number that players never see: the checks rely on the same number giving the same world
 s = await ev(() => { const g = window.__game; const look = () => { const w = g.world; return [w.goal.x, w.goal.z, ...w.schools.flatMap((x) => [x.hx, x.hz]), g.foes.biters.length].map((v) => +v.toFixed(3)).join(); };
   const snapOf = (seed) => { g.startRun(seed); const a = look(); g.enterFloor(2, false); const b = look(); g.enterFloor(4, false); const c = [g.world.hall.x, g.world.hall.z].map((v) => +v.toFixed(3)).join(); return a + '|' + b + '|' + c; };
-  const one = snapOf(4242), again = snapOf(4242), other = snapOf(4243);
-  return { same: one === again, differs: one !== other, word: [g.readSeed('Ryugu').seed, g.readSeed(' ryugu ').seed, g.readSeed('Warsaw').seed], bare: g.readSeed('31337').seed, code: g.readSeed('try this: oarfish-world:1:777 !!').seed, old: g.readSeed('oarfish-world:9:5').old, none: g.readSeed('  ') }; });
-check('the same seed builds the same world in every band, another seed a different one', s.same && s.differs, JSON.stringify(s));
-check('a seed can be a code, a bare number or any word', s.code === 777 && s.bare === 31337 && s.word[0] === s.word[1] && s.word[0] !== s.word[2] && s.word[0] >= 0 && s.word[0] < 1e6 && s.old === true && s.none === null, JSON.stringify(s));
-await ev(() => window.__game.startRun(4242));
-await page.keyboard.press('KeyP'); await page.waitForTimeout(150);
-await page.click('#seed-copy'); await page.waitForTimeout(200);
-s = await ev(() => ({ now: document.getElementById('seed-now').textContent, msg: document.getElementById('seed-msg').textContent, box: document.getElementById('seed-in').value }));
-check('the pause menu shows this dive\'s seed and copies it', /world 4242\./.test(s.now) && (/Copied: oarfish-world:1:4242/.test(s.msg) || s.box === 'oarfish-world:1:4242'), JSON.stringify(s));
-await snap('c-seed');
-await page.click('#seed-go'); // nothing pasted yet
-s = await ev(() => ({ msg: document.getElementById('seed-msg').textContent, paused: window.__game.paused, seed: window.__game.run.seed }));
-await page.fill('#seed-in', 'hey, try oarfish-world:1:777 :)'); await page.click('#seed-go'); await page.waitForTimeout(150);
-const dived = await ev(() => { const g = window.__game; g.sim(0.2); return { seed: g.run.seed, paused: g.paused, state: g.run.state, floor: g.run.floor, segs: g.run.segs, hint: document.getElementById('hint').textContent }; });
-check('pasting a seed and pressing Dive starts a new dive in that world', /Paste a seed first/.test(s.msg) && s.paused && s.seed === 4242 && dived.seed === 777 && !dived.paused && dived.state === 'play' && dived.floor === 0 && dived.segs === 10 && /World 777/.test(dived.hint), JSON.stringify({ s, dived }));
-await page.keyboard.press('KeyP'); await page.waitForTimeout(150); await page.click('#seed-keep');
-s = await ev(() => { const g = window.__game; const label = document.getElementById('seed-keep').textContent, saved = localStorage.getItem('oarfish.world'); g.setPaused(false); g.startRun(); const a = g.run.seed; g.startRun(); const b = g.run.seed;
-  document.getElementById('seed-keep').click(); const seeds = new Set(); for (let i = 0; i < 4; i++) { g.startRun(); seeds.add(g.run.seed); } return { label, saved, a, b, after: seeds.size, now: document.getElementById('seed-now').textContent }; });
-check('Keep this world makes every new dive the same world, until it is let go', /Keeping/.test(s.label) && /"keep":true/.test(s.saved) && s.a === 777 && s.b === 777 && s.after > 1 && /draws a new one/.test(s.now), JSON.stringify(s));
+  const one = snapOf(4242), again = snapOf(4242), other = snapOf(4243); g.startRun(4242);
+  const seeds = new Set(); for (let i = 0; i < 4; i++) { g.startRun(); seeds.add(g.run.seed); } g.startRun(4242);
+  return { same: one === again, differs: one !== other, fresh: seeds.size, menu: !!document.getElementById('seed-copy') || /seed/i.test(document.getElementById('pause').textContent), stored: localStorage.getItem('oarfish.world') }; });
+check('the same number builds the same world in every band, each new dive draws a new one, and nothing about seeds is shown or kept', s.same && s.differs && s.fresh > 1 && !s.menu && s.stored === null, JSON.stringify(s));
 await page.keyboard.press('KeyV'); await ev(() => window.__game.sim(0.3));
 
 // ---- how the adventure camera looks in each band, level and from below

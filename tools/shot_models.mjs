@@ -24,7 +24,7 @@ const ctx = await browser.newContext({ viewport: { width: 1100, height: 700 } })
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver/.test(m.text())) console.log('[error]', m.text().slice(0, 300)); });
-await page.addInitScript(([npc, look]) => { try { localStorage.setItem('oarfish.world', JSON.stringify({ keep: true, seed: 4242 })); localStorage.setItem('oarfish.ui', JSON.stringify({ bare: true })); if (npc) localStorage.setItem('oarfish.npc', npc); if (look) localStorage.setItem('oarfish.look', look); } catch {} }, [process.env.NPC || '', process.env.LOOK || '']);
+await page.addInitScript(([npc, look]) => { try { localStorage.setItem('oarfish.ui', JSON.stringify({ full: false })); if (npc) localStorage.setItem('oarfish.npc', npc); if (look) localStorage.setItem('oarfish.look', look); } catch {} }, [process.env.NPC || '', process.env.LOOK || '']);
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 const frame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -45,7 +45,7 @@ const visit = (floor, what, side = 2.4) => page.evaluate(([f, what, side]) => {
   const near = (list) => list.filter((o) => o.alive !== false)[0];
   const sc = w.schools.find((s) => !s.gone && s.tier !== 's') || w.schools[0];
   const at = {
-    spawn: () => v(r.pos), well: () => [w.goal.x, w.height(w.goal.x, w.goal.z) + 7, w.goal.z], hall: () => (w.hall ? [w.hall.x, w.hall.y + 2, w.hall.z] : null),
+    spawn: () => v(r.pos), well: () => [w.goal.x, w.goal.y, w.goal.z], hall: () => (w.hall ? [w.hall.x, w.hall.y + 2, w.hall.z] : null),
     school: () => (sc ? (sc.x || sc.z ? [sc.x, sc.y, sc.z] : [sc.hx, sc.hy, sc.hz]) : null), biter: () => v(near(g.foes.biters)?.pos), angler: () => v(near(g.foes.anglers)?.pos), mine: () => v(near(g.foes.mines)?.pos), leech: () => v(near(g.foes.leeches)?.pos),
     hook: () => (g.foes.hooks[0] ? [g.foes.hooks[0].x, g.foes.hooks[0].y0, g.foes.hooks[0].z] : null), guard: () => (g.guard ? v(g.guard.pos) : null),
     shell: () => (g.field?.items[0] ? [g.field.items[0].x, g.field.items[0].y, g.field.items[0].z] : null),

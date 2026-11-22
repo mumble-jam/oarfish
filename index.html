@@ -4,6 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Oarfish dive 0.5</title>
+<meta name="description" content="Play as an oarfish in sunken ruins: wrap swarms with your body, grow, and dive five bands down. A low-poly roguelike that runs in the browser.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Oarfish dive">
+<meta property="og:title" content="Oarfish dive">
+<meta property="og:description" content="Play as an oarfish in sunken ruins: wrap swarms with your body, grow, and dive five bands down.">
+<meta property="og:url" content="https://mumble-jam.github.io/oarfish/">
+<meta property="og:image" content="https://mumble-jam.github.io/oarfish/thumbnail.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A long low-poly oarfish with a red crest swims past sunken columns, lettered like an old natural history plate.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
@@ -145,7 +160,7 @@ body { background: var(--abyss); color: var(--foam); font: 400 15px/1.35 var(--f
 #prompt.on { opacity: 1; }
 #prompt .in { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 5px; white-space: nowrap; padding: 5px 11px 5px 6px; border-radius: 999px; font: 500 13px/1 var(--font-body); color: var(--foam); background: color-mix(in srgb, var(--ink) 52%, transparent); }
 #prompt .in span { margin-left: 3px; }
-#stage.bare #prompt, #stage.cine #prompt, #stage.paused #prompt { display: none; }
+#stage.cine #prompt, #stage.paused #prompt { display: none; }
 #btn-skip { font-size: 13px; padding: 7px 13px; }
 #btn-skip[hidden] { display: none; }
 #stage.paused #btn-skip { display: none; }
@@ -204,6 +219,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .dial input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; accent-color: var(--coral); }
 .dial .lo, .dial .hi { font-size: 12.5px; color: color-mix(in srgb, var(--foam) 72%, transparent); }
 .dial .hi { text-align: right; }
+.dial .live { grid-column: 1 / -1; display: block; height: 3px; width: 0; margin-top: 3px; border-radius: 2px; background: var(--foam); opacity: 0.75; transition: width 0.3s linear; }
 .dial p { grid-column: 1 / -1; margin: 2px 0 0; font-size: 13.5px; line-height: 1.3; color: color-mix(in srgb, var(--foam) 86%, transparent); }
 
 /* whole-screen moments */
@@ -228,7 +244,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause .main { font-size: 16px; padding: 12px 22px; background: var(--coral); border-color: var(--coral); color: var(--ink); }
 #pause .row { display: flex; gap: 8px; }
 #pause .row button { flex: 1 1 0; line-height: 1.2; }
-#pause .row.paste button { flex: 0 0 auto; }
 /* the key-binding menu takes the place of the pause menu while it is open */
 #pause > .binds { display: none; width: min(540px, 100%); }
 #pause.binding > .binds { display: flex; }
@@ -249,9 +264,13 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause button:focus, #end button:focus { outline: 2px solid var(--foam); outline-offset: 2px; }
 .keys.menu { position: static; max-width: none; pointer-events: auto; display: flex; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--foam) 20%, transparent); }
 .keys.menu li.key { display: flex; }
-/* H hides the help: the key list and the corner buttons. The plate, the scale bar and the marker stay. */
-#stage.bare > .keys, #stage.bare > .tools, #stage.bare > .top, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
-#stage.bare.paused > .top, #stage.cine.paused > .top { display: flex; }
+/* The game as it is meant to be seen: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
+   H (or the pause menu) turns on the full view, which adds the key list, the tuning drawer and the model tools. */
+#stage:not(.full) > .keys, #stage:not(.full) > .tools, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
+#stage:not(.full):not(.paused) > .top > #btn-fs, #stage:not(.full):not(.paused) > .top > #music-tab { display: none; }
+#stage:not(.full):not(.paused) > .top > button { opacity: 0.72; transition: opacity 0.2s; }
+#stage:not(.full):not(.paused) > .top > button:hover, #stage:not(.full):not(.paused) > .top > button:focus-visible { opacity: 1; }
+#stage.cine.paused > .top { display: flex; }
 #stage[data-mode="look"] canvas { cursor: default; }
 #error { position: absolute; inset: 0; z-index: 9; display: none; place-items: center; padding: 28px; text-align: center; background: var(--abyss); }
 #error p { max-width: 46ch; margin: 0; }
@@ -322,7 +341,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   <div id="prompt"></div>
   <div id="toast" role="status" aria-live="polite"><i class="mark"></i><div class="txt"><em id="toast-kick"></em><b id="toast-title"></b><span id="hint"></span></div><i class="time"></i></div>
   <svg id="stamina" viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="13"/><circle class="fg" id="stamina-arc" cx="18" cy="18" r="13" pathLength="100"/></svg>
-  <div id="goal"><div class="in"><i id="goal-arrow"></i><span id="goal-label">the well</span></div></div>
+  <div id="goal"><div class="in"><i id="goal-arrow"></i><span id="goal-label">the rift</span></div></div>
 
   <div class="lettering foot">
     <h1 class="caption"><b>Le Gymnètre Épée.</b><i>(Gymnetrus gladius)</i></h1>
@@ -362,7 +381,7 @@ button:disabled { opacity: 0.4; cursor: default; }
       <p id="scope-note"></p>
     </div>
     <div class="dial"><label for="m-dream">Dream</label><input type="range" id="m-dream" min="0" max="100" value="60"><span class="lo">dry club</span><span class="hi">deep under water</span><p>Reverb, how dark the sound is, and how long notes hang.</p></div>
-    <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is when nothing is happening.</p></div>
+    <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><i class="live" id="energy-live" title="Where the band is now"></i><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is. The slider is where it rests in empty water. From there it climbs by itself with what is going on round you: swarms, hunters, whatever keeps the rift. The line under the slider shows where it is now.</p></div>
     <div class="dial"><label for="m-menace">Menace</label><input type="range" id="m-menace" min="0" max="100" value="50"><span class="lo">sweet</span><span class="hi">feral</span><p>Which harmony plays, from floating major to something with teeth. Adds low brass and toms.</p></div>
     <div class="dial"><label for="m-react">Reaction</label><input type="range" id="m-react" min="0" max="100" value="70"><span class="lo">steady band</span><span class="hi">follows every move</span><p>How hard speed, wrapping, danger and catches push the band around.</p></div>
     <div class="dial"><label for="m-swing">Swing</label><input type="range" id="m-swing" min="0" max="100" value="60"><span class="lo">straight</span><span class="hi">hard swing</span></div>
@@ -388,17 +407,6 @@ button:disabled { opacity: 0.4; cursor: default; }
       <button type="button" id="btn-new">New dive</button>
     </div>
     <p id="pause-msg" aria-live="polite"></p>
-    <div class="set preset">
-      <span class="cap">The world</span>
-      <p id="seed-now"></p>
-      <div class="row">
-        <button type="button" id="seed-copy">Copy seed</button>
-        <button type="button" id="seed-keep" aria-pressed="false">Keep this world</button>
-      </div>
-      <label for="seed-in">Paste a seed</label>
-      <div class="row paste"><input type="text" id="seed-in" placeholder="oarfish-world:1:..." autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" id="seed-go">Dive</button></div>
-      <p id="seed-msg" aria-live="polite"></p>
-    </div>
     <div class="set">
       <span class="cap">Shells</span>
       <ul id="shell-list"></ul>
@@ -414,7 +422,7 @@ button:disabled { opacity: 0.4; cursor: default; }
     <div class="dial"><label for="f-look">Look speed</label><input type="range" id="f-look" min="0" max="100" value="50"><span class="lo">slow</span><span class="hi">fast</span><p>How fast the mouse or the right stick turns the view.</p></div>
     <label class="check"><input type="checkbox" id="f-teach" checked><span><b>Teach me as I play</b>A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
     <button type="button" id="btn-library">Specimen library</button>
-    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-bare">Hide the controls on screen</button></div>
+    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-keys">Show keys and tools on screen</button></div>
     <ul class="keys menu" id="pause-keys" aria-label="Controls"></ul>
     <div class="dial"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
     <button type="button" id="btn-rumble">Test the vibration</button>
@@ -438,7 +446,7 @@ button:disabled { opacity: 0.4; cursor: default; }
     <small id="end-best"></small>
     <button type="button" id="btn-again">Dive again</button>
   </div></div>
-  <div id="error"><p>The dive could not start in this browser: WebGL is unavailable or the 3D library did not load. The model file itself, oarfish.glb, opens in Blender or any glTF viewer.</p></div>
+  <div id="error"><p>The dive could not start in this browser: WebGL is unavailable or the 3D library did not load. Try a current version of Chrome, Safari or Firefox.</p></div>
 </div>
 
 <script type="importmap">

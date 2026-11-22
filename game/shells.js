@@ -143,11 +143,11 @@ export function createShellField(scene, world, kit, { seed = 1, floor = 0, count
   }
   for (let i = 0; i < count; i++) {
     let x = 0, z = 0;
-    for (let t = 0; t < 30; t++) { // not in the well, not in the hall, not on top of the start
+    for (let t = 0; t < 30; t++) { // not in the rift, not in the hall, not on top of the start
       const a = rr(0, Math.PI * 2), d = i === 0 && floor === 0 ? rr(13, 18) : rr(16, 48);
       x = T / 2 + Math.sin(a) * d; z = T / 2 + Math.cos(a) * d;
       const g = world.goal, h = world.hall;
-      if (Math.hypot(wrapD(x - g.x), wrapD(z - g.z)) < 11) continue;
+      if (Math.hypot(wrapD(x - g.x), wrapD(z - g.z)) < 11 || (world.rift && world.rift.in(x, z) > -3)) continue;
       if (h && Math.hypot(wrapD(x - h.x), wrapD(z - h.z)) < h.R + 5) continue;
       break;
     }
