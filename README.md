@@ -1,5 +1,7 @@
 # Oarfish dive
 
+**Play it:** https://mumble-jam.github.io/oarfish/ (this is whatever is on `main`; it updates by itself a minute or two after a merge).
+
 A low-poly roguelike played as an oarfish in sunken ruins. You swim down through five depth bands, growing by wrapping your body round swarms of small fish. Your length is your health, your reach and your currency: hunters bite it off, and you can shed your own tail as bait. Each band's well is kept by a guard; at the bottom is the palace, and the Sum.
 
 It runs in a browser from plain files. There is no build step and nothing to compile.
