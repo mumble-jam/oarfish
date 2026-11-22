@@ -516,6 +516,7 @@ export async function start(saved = {}) {
     return { x: N.jar.x, y: N.jar.y + N.jar.size - 1.2, z: N.jar.z, label: 'the jar' };
   }
   // the key for the thing in front of you, hung over the thing itself: keys to show, a word, and where
+  // (the pen offers the wrap keys beside the left mouse button: on a trackpad a click with two fingers down is the right button, which dashes)
   const promptEl = $('prompt'); let promptKey = '';
   function prompt() {
     let p = null;
@@ -523,14 +524,14 @@ export async function start(saved = {}) {
       const padOn = dev === 'pad', N = world.nursery, L = tut.on ? LESSONS[tut.step] : null, near = (o, d) => Math.hypot(wrapD(o.x - rig.pos.x), wrapD(o.z - rig.pos.z)) < d;
       if (L === 'hoop' && tut.step === 0) p = { keys: padOn ? ['Left stick'] : [kb('up'), kb('left'), kb('down'), kb('right')], verb: 'swim', at: [rig.pos.x, rig.pos.y + 1.5, rig.pos.z] };
       else if (L === 'hoop' && near(N.hoops[tut.step], 14)) { const h = N.hoops[tut.step], a = tut.step === 1 ? 'rise' : 'dive'; p = { keys: [padOn ? pb(a) : kb(a)], verb: a, at: [h.x, h.y + h.r + 0.9, h.z] }; }
-      else if (L === 'pen' && near(world.schools[0], 12)) { const c = world.schools[0]; p = { keys: padOn ? [pb('wrap')] : feel.mode === 'look' ? ['Left mouse'] : [kb('wrapL'), kb('wrapR')], verb: 'hold, and go round', at: [c.x, c.y + 1.5, c.z] }; }
+      else if (L === 'pen' && near(world.schools[0], 12)) { const c = world.schools[0]; p = { keys: padOn ? [pb('wrap')] : feel.mode === 'look' ? ['Left mouse', 'or', kb('wrapL'), kb('wrapR')] : [kb('wrapL'), kb('wrapR')], verb: 'hold, and go round', at: [c.x, c.y + 1.5, c.z] }; }
       else if (L === 'jar' && near(N.jar, 13)) p = { keys: [padOn ? pb('sprint') : kb('sprint')], verb: 'dash into it', at: [N.jar.x, N.jar.y + N.jar.size + 0.8, N.jar.z] };
       else if (!tut.on && !teach.learned.shed && foes.state.stalked > 0 && run.segs - SHED_COST >= MIN_SEGS) { const tail = rig.joints[rig.joints.length - 1]; p = { keys: [padOn ? pb('shed') : kb('shed')], verb: 'shed your tail', at: [tail.x, tail.y + 1.2, tail.z] }; }
       else if (!tut.on && !teach.learned.down && world.rift && guard?.done && world.rift.in(rig.pos.x, rig.pos.z) > world.rift.ledge - 1) p = { keys: [padOn ? pb('dive') : kb('dive')], verb: 'dive into the rift', at: [rig.pos.x, rig.pos.y - 1.7, rig.pos.z] }; // over the open rift, the first time
     }
     if (!p) { if (promptKey) { promptKey = ''; promptEl.classList.remove('on'); } return; }
     const key = p.keys.join('|') + p.verb;
-    if (key !== promptKey) { promptKey = key; promptEl.innerHTML = `<div class="in">${p.keys.map((k) => `<kbd>${k}</kbd>`).join('')}<span>${p.verb}</span></div>`; promptEl.classList.add('on'); }
+    if (key !== promptKey) { promptKey = key; promptEl.innerHTML = `<div class="in">${p.keys.map((k) => (k === 'or' ? '<i>or</i>' : `<kbd>${k}</kbd>`)).join('')}<span>${p.verb}</span></div>`; promptEl.classList.add('on'); }
     proj.set(rig.pos.x + wrapD(p.at[0] - rig.pos.x), p.at[1], rig.pos.z + wrapD(p.at[2] - rig.pos.z)).project(camera);
     const w = stage.clientWidth, h = stage.clientHeight, off = proj.z > 1;
     promptEl.style.opacity = off ? 0 : '';
@@ -658,7 +659,7 @@ export async function start(saved = {}) {
       + `<li class="note">The right stick looks around; ${pb('behind')} brings the view behind you. ${pb('zoomIn')} and ${pb('zoomOut')} zoom.</li>`;
     if (touch) return '<li class="note">Hold and drag: the fish swims to your finger. Hold on a swarm to wrap it. Pinch to zoom, drag with two fingers to look around.</li>';
     return row(K(kb('up'), kb('left'), kb('down'), kb('right')), 'steer', K(kb('sprint')), 'dash, hold to sprint') + row(K(kb('wrapL'), kb('wrapR')), 'wrap, or coil', K(kb('sprint')), 'tight') + row(K(kb('rise')), 'rise', K(kb('dive')), 'dive') + row(K(kb('shed')), 'shed tail as bait') + row(K(kb('pause')), 'pause', K(kb('full')), 'full screen', K(kb('hide')), 'hide this')
-      + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Tilt the view up or down and the fish swims that way. Left button wraps, right button dashes and sprints, scroll zooms. ${kb('view')} goes back to pointing.</li>`
+      + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Tilt the view up or down and the fish swims that way. Left button wraps, right button dashes and sprints, scroll zooms. On a trackpad a click with two fingers down is the right button; ${kb('wrapL')} and ${kb('wrapR')} wrap from the keys. ${kb('view')} goes back to pointing.</li>`
         : `<li class="note">Or hold the mouse button and the fish swims to the pointer. Right-drag looks around, scroll zooms. ${kb('view')} switches to the adventure camera.</li>`);
   }
   function renderLegend() { const h = legend(); $('keys').innerHTML = h; $('pause-keys').innerHTML = h; }
@@ -877,7 +878,7 @@ export async function start(saved = {}) {
   window.addEventListener('click', () => music.unlock(), true);
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  const lookMouse = (e) => e.pointerType === 'mouse' && feel.mode === 'look';
+  const lookMouse = (e) => e.pointerType !== 'touch' && feel.mode === 'look'; // whatever is not a finger: some browsers leave the kind of pointer empty while they hold it
   canvas.addEventListener('pointerdown', (e) => {
     setDev('keys');
     if (lookMouse(e)) { look.buttons = e.buttons; return; } // the buttons are wrap and sprint here, read in readInput
