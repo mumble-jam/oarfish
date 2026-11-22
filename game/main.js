@@ -12,7 +12,7 @@ import { createPad, BTN } from './pad.js';
 import { createSum } from './boss.js';
 import { createSurface, SKY } from './surface.js';
 import { createGuard } from './guards.js';
-import { SHELLS, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
+import { SHELLS, SHELL_TYPES, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
@@ -220,7 +220,7 @@ export async function start(saved = {}) {
   const pad = createPad();
   let dev = 'keys'; // what the player last touched: 'keys' (keyboard, mouse, finger) or 'pad'
   // a moment of the game, told to the band and, on a controller, to its motors
-  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], surge: [0.5, 0.6, 200], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
+  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], cache: [0.6, 0.6, 260], surge: [0.5, 0.6, 200], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
   function moment(kind, strength) {
     music.hit(kind, strength);
     const r = RUMBLE[kind];
@@ -255,7 +255,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -344,7 +344,7 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
@@ -435,6 +435,14 @@ export async function start(saved = {}) {
       s.position.set(h.x - sx * sd * 0.55, h.y - 0.22, h.z - sz * sd * 0.55); s.scale.setScalar(0.35 + 0.6 * beat * on + 0.06 * run.harmony);
       s.material.opacity = damp(s.material.opacity, lit * on * (0.1 + 0.05 * run.harmony + 0.75 * beat * (0.55 + 0.09 * run.harmony)), 16, dt); });
     for (const m of oarRings) { const u = m.userData; if (u.t >= u.life) { m.visible = false; continue; } u.t += dt; const k = clamp(u.t / u.life, 0, 1); m.scale.setScalar(lerp(u.from, u.to, 1 - (1 - k) * (1 - k))); m.material.opacity = u.peak * (1 - k) * (1 - k); }
+  }
+  // A cache has been opened by one of the body puzzles in the ruins (world.js, PUZZLE): what was put by in it comes to the mouth, as a
+  // catch does, and from some a shell is left lying by it. What is opened is counted, band by band, for whatever keeps score later.
+  function openCache(c) {
+    const at = new THREE.Vector3(rig.pos.x + wrapD(c.x - rig.pos.x), c.y, rig.pos.z + wrapD(c.z - rig.pos.z));
+    gulp(Array.from({ length: 12 }, (_, i) => at.clone().add(new THREE.Vector3(Math.sin(i * 2.4) * 0.5, 0.12 * i, Math.cos(i * 2.4) * 0.5))), c.food, 0.6);
+    moment('cache'); run.kick = Math.max(run.kick, 0.5); run.caches[run.floor] = (run.caches[run.floor] || 0) + 1;
+    if (c.shell) { const have = new Set([...run.shells.map((s) => s.type), ...field.items.filter((it) => !it.taken).map((it) => it.type)]); field.drop(c.x + 1.6, c.z + 1.2, SHELL_TYPES.find((t) => !have.has(t)) || SHELL_TYPES[(run.floor * 3 + 1) % SHELL_TYPES.length], 1.1); }
   }
   // The swell that runs down the body when it grows: k is how strong, and a slow one (a new standing) takes its time.
   function growPulse(k, slow = false) { pulse3.at = -0.12; pulse3.k = k; pulse3.pace = slow ? 0.85 : 1.55; }
@@ -1378,7 +1386,7 @@ export async function start(saved = {}) {
     else if (run.rest > STAMINA.pause) run.stamina = Math.min(1, run.stamina + dt / STAMINA.regen);
     if (run.winded && run.stamina >= cost) run.winded = false;
   }
-  const ringable = () => { const big = sum?.ring || guard?.ring; return big ? [...world.schools, big] : world.schools; }; // swarms, and the Sum's head while it holds still
+  const ringable = () => { const big = sum?.ring || guard?.ring, posts = world.react?.posts; return big || posts?.length ? [...world.schools, ...(posts || []), ...(big ? [big] : [])] : world.schools; }; // swarms, a capstan in the ruins, and the Sum's head while it holds still
   // the nearest swarm the body could take, and which way round it the fish is already heading
   function wrapSide() {
     let t = null, td = Infinity;
@@ -1709,6 +1717,7 @@ export async function start(saved = {}) {
     placeCamera(dt);
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
+    if (world.react) for (const c of world.react.opened.splice(0)) openCache(c);
     if (world.react) for (const c of world.react.rang.splice(0)) { music.chime(c.note, c.v); buzz(0, 0.16 * c.v, 40); } // a chime brushed: the band gives it its note, the hands a tick. (The sea's surface, at the end, is a world with nothing in it to answer.)
     lessons(dt);
     hud(dt);

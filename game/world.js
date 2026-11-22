@@ -811,6 +811,55 @@ float seaLight(vec2 p, float t) {
     beacons.push(beam);
     goal.y += 4.6;
   }
+
+  // ------------------------------------------------------------ body puzzles: three kinds, each one something only a long body can do,
+  // each opening a cache. Nobody has to. Nothing is written by them: what must be done is shown by what moves when the fish begins to
+  // do it. They are made of pieces the ruins already had, and placed from the third run of numbers, last of all, so that the rest of
+  // the band stands where it did.
+  //   capstan  a post with the carved coil for its head and a line to a lidded cist: swim round it and the head turns, the lid slides
+  //   windows  four hoops in a row, as in the nursery: go through all of them in one pass and each lights as it is threaded
+  //   vent     a chimney breathing silt, and its twin, capped: lie over the open one and the cap of the other is blown off
+  const PUZZLE = { food: [12, 16, 20, 24, 28], turns: 1.25, reach: 4.6, gap: 5.5, between: 6, plug: 1.5 };
+  const puzzles = [];
+  {
+    const kerb = (x, z, r, n = 9) => { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, bx = x + Math.sin(a) * r, bz = z + Math.cos(a) * r; blocks.push({ x: bx, y: height(bx, bz) - 0.15, z: bz, q: qY(a), s: S(0.74, 0.5, 0.36), color: stoneTones[i % stoneTones.length] }); } };
+    // a post, as `post` makes one, but with nothing drawn from the runs of numbers the rest of the band is laid out by
+    const stand = (x, z, h, r) => { const y = height(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: stoneTones[1 % stoneTones.length] }); drums.push({ x, y, z, q: qY(xr(0, 3)), s: S(r * 2, h, r * 2), color: stoneTones[0] }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
+    const flagsTo = (ax, az, bx, bz) => { const len = Math.hypot(bx - ax, bz - az); for (let d = 0.9; d < len - 0.6; d += 1.15) { const x = lerp(ax, bx, d / len) + xr(-0.1, 0.1), z = lerp(az, bz, d / len) + xr(-0.1, 0.1); flags.push({ x, y: height(x, z) - 0.03, z, q: lie(x, z, Math.atan2(bx - ax, bz - az)), s: S(0.95, 0.1, 0.8), color: tint(stoneTones[0], '#7c9794', 0.35) }); } };
+    // a cist: a ring of kerb stones with a round lid in the band's paint, and what was put by inside it
+    const cist = (x, z) => { kerb(x, z, 1.05); const y = height(x, z); for (let i = 0; i < 7; i++) { const a = xr(0, 6.28), d = xr(0, 0.6); coins.push({ x: x + Math.sin(a) * d, y: y + 0.05 + i * 0.03, z: z + Math.cos(a) * d, q: qY(xr(0, 6), xr(-0.5, 0.5), xr(-0.5, 0.5)), s: S(1), color: i % 2 ? '#e9dfc0' : district }); } return { x, y: y + 0.42, z, open: 0 }; };
+    // somewhere clear for one: first beside the way to the well, where it will be come upon; failing that, anywhere in the band
+    const spot = (pad) => { for (let t = 0; t < 260; t++) { const [x, z] = t < 90 ? along(xr(16, Math.max(goalDist - 16, 22)), (xrand() < 0.5 ? -1 : 1) * xr(9, 26)) : polar(xr(0, 6.28), xr(16, 66)); if (clearNow(x, z, pad) && puzzles.every((p) => farFrom(x, z, p.x, p.z, 15))) return [x, z]; } return null; };
+    const kinds = last ? ['capstan', 'vent'] : ['capstan', 'windows', 'vent'];
+    for (const kind of kinds) {
+      if (kind === 'capstan') {
+        const at = spot(5.5); if (!at) continue; const [x, z] = at, a = xr(0, 6.28), cx = x + Math.sin(a) * 5.2, cz = z + Math.cos(a) * 5.2;
+        const top = stand(x, z, 2.5, 0.34); kerb(x, z, 0.95, 7); flagsTo(x, z, cx, cz);
+        blocks.push({ x: (x + cx) / 2, y: height((x + cx) / 2, (z + cz) / 2) + 0.2, z: (z + cz) / 2, q: qY(a), s: S(0.06, 0.06, 5.2), color: '#4a4036' }); // the line from the capstan to the lid
+        sites.push([x, z, 6.5, 'puzzle'], [cx, cz, 2.5, 'puzzle']);
+        puzzles.push({ kind, x, z, y: top - 0.55, cache: cist(cx, cz), ax: Math.sin(a), az: Math.cos(a), turn: 0, was: null, done: false, k: 0, ring: { x, z, y: top - 0.55, left: 1, can: true, threat: 1, orbit: 2.0 } }); // `ring`: what the wrap keys go round, as they do a swarm
+      } else if (kind === 'windows') {
+        let made = null;
+        for (let t = 0; t < 500 && !made; t++) { const p = t < 180 ? along(xr(14, Math.max(goalDist - 14, 22)), (xrand() < 0.5 ? -1 : 1) * xr(8, 26)) : polar(xr(0, 6.28), xr(16, 66));
+          const dir = t < 180 ? goalAngle + xr(-0.6, 0.6) : xr(0, 6.28), ux = Math.sin(dir), uz = Math.cos(dir), pts = [0, 1, 2, 3].map((k) => [p[0] + ux * k * PUZZLE.gap + Math.cos(dir) * Math.sin(k * 1.3) * 0.9, p[1] + uz * k * PUZZLE.gap - Math.sin(dir) * Math.sin(k * 1.3) * 0.9]);
+          const end = [p[0] + ux * (3 * PUZZLE.gap + 4.2), p[1] + uz * (3 * PUZZLE.gap + 4.2)];
+          if ([...pts, end].every(([hx, hz]) => clearNow(hx, hz, 2.7) && puzzles.every((q) => farFrom(hx, hz, q.x, q.z, 12)))) made = { dir, ux, uz, pts, end }; }
+        if (!made) continue;
+        const { dir, ux, uz, pts, end } = made, nx = Math.cos(dir), nz = -Math.sin(dir), R = 1.55;
+        const hoops4 = pts.map(([hx, hz], k) => { const y = height(hx, hz) + 2.3 + 0.5 * Math.sin(k * 2.1 + 1);
+          for (const sg of [-1, 1]) { const px = hx + nx * sg * (R + 0.2), pz = hz + nz * sg * (R + 0.2), py = height(px, pz) - 0.2; drums.push({ x: px, y: py, z: pz, q: qY(dir), s: S(0.4, y - py, 0.4), color: stoneTones[k % stoneTones.length] }); bases.push({ x: px, y: py + 0.15, z: pz, q: qY(dir), s: S(0.72, 0.8, 0.72), color: stoneTones[(k + 1) % stoneTones.length] }); blocks.push({ x: px, y, z: pz, q: qY(dir), s: S(0.54, 0.12, 0.54), color: district }); colliders.push({ x: px, z: pz, r: 0.4, top: y + 0.2 }); }
+          sites.push([hx, hz, 3, 'puzzle']); return { x: hx, y, z: hz, r: R, lit: 0, side: 0, mesh: null }; });
+        flagsTo(pts[0][0] - ux * 2.5, pts[0][1] - uz * 2.5, end[0], end[1]); sites.push([end[0], end[1], 2.5, 'puzzle']);
+        puzzles.push({ kind, x: pts[0][0], z: pts[0][1], y: hoops4[0].y, dir, ux, uz, hoops: hoops4, cache: cist(end[0], end[1]), next: -1, step: 0, timer: 0, done: false, k: 0 });
+      } else {
+        const at = spot(5.5); if (!at) continue; const [x, z] = at, a = xr(0, 6.28), bx = x + Math.sin(a) * 6, bz = z + Math.cos(a) * 6;
+        const chimney = (vx, vz) => { const y = height(vx, vz) - 0.2; bases.push({ x: vx, y: y + 0.12, z: vz, q: qY(a), s: S(1.5, 1.1, 1.5), color: stoneTones[1 % stoneTones.length] }); shafts.push({ x: vx, y: y + 0.3, z: vz, q: qY(a), s: S(1.3, 1.25, 1.3), color: stoneTones[0] }); drums.push({ x: vx, y: y + 1.5, z: vz, q: qY(a), s: S(0.84, 0.06, 0.84), color: '#1d2530' }); colliders.push({ x: vx, z: vz, r: 0.72, top: y + 1.56 }); return y + 1.56; };
+        const topA = chimney(x, z), topB = chimney(bx, bz); flagsTo(x, z, bx, bz); kerb(bx, bz, 1.25, 8);
+        sites.push([x, z, 4, 'puzzle'], [bx, bz, 4, 'puzzle']);
+        puzzles.push({ kind, x, z, y: topA, cache: { x: bx, y: topB + 0.02, z: bz, open: 0, shell: true }, press: 0, puff: 0, done: false, k: 0 });
+      }
+    }
+  }
   const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad) && riftClear(x, z, pad + 0.6);
 
   // ------------------------------------------------------------ swarms of small fish: the food, in four sizes
@@ -970,11 +1019,22 @@ float seaLight(vec2 p, float t) {
   }
 
   // ------------------------------------------------------------ all the stonework, instanced once every builder has added its pieces
-  { const places = sites.slice(1).filter(([x, z, r]) => r >= 5 && (!hall || farFrom(x, z, hall.x, hall.z, hall.R + 8)) && (!nurse || urns.every((u) => farFrom(x, z, u.x, u.z, 12))));
+  { const places = sites.slice(1).filter(([x, z, r, what]) => r >= 5 && !what && (!hall || farFrom(x, z, hall.x, hall.z, hall.R + 8)) && (!nurse || urns.every((u) => farFrom(x, z, u.x, u.z, 12))));
     for (let i = 0; i < 5 && places.length; i++) { const [sx, sz, r] = places.splice(Math.floor(drand() * places.length), 1)[0], a = drand() * 6.28, p = new THREE.Vector3(sx + Math.sin(a) * r * 0.45, 0, sz + Math.cos(a) * r * 0.45); p.y = height(p.x, p.z) + 1; pushOut(p, 1.3); urnAt(p.x, p.z, dr(1.9, 2.4), 'food'); } }
   const single = [];
   for (const u of urns) { u.mesh = add(new THREE.Mesh(G.jar, mat(new THREE.MeshLambertMaterial({ color: u.color, vertexColors: true, side: THREE.DoubleSide })))); u.mesh.scale.setScalar(u.size); u.mesh.rotation.y = drand() * 6.28; u.mesh.castShadow = true; u.mesh.frustumCulled = false; single.push(u); }
   if (nurse) for (const h of nurse.hoops) { h.mesh = add(new THREE.Mesh(G.wreath, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: '#ffe9b0', emissiveIntensity: 0 })))); h.mesh.scale.setScalar(h.r); h.mesh.rotation.y = nurse.dir; h.mesh.castShadow = true; h.mesh.frustumCulled = false; single.push(h); }
+
+  // the parts of the puzzles that move: a capstan's head, the hoops of a row of windows, and the lid of every cache
+  { const paint = () => mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: '#ffe9b0', emissiveIntensity: 0 }));
+    for (const p of puzzles) {
+      const c = p.cache, wide = p.kind === 'vent' ? 1.75 : 2.35;
+      c.lid = { mesh: add(new THREE.Mesh(G.drum, paint())), x: c.x, y: c.y, z: c.z }; c.lid.mesh.scale.set(wide, 0.14, wide); c.lid.mesh.castShadow = true; c.lid.mesh.frustumCulled = false; single.push(c.lid);
+      if (p.kind === 'capstan') { const g = add(new THREE.Group()), m = paint(), ring = new THREE.Mesh(G.coil, m); ring.scale.setScalar(1.25); ring.castShadow = true; g.add(ring);
+        for (const a of [0, Math.PI / 2]) { const bar = new THREE.Mesh(G.block, m); bar.scale.set(0.13, 0.13, 3.1); bar.position.y = -0.07; bar.rotation.y = a; bar.castShadow = true; g.add(bar); }
+        p.head = { mesh: g, x: p.x, y: p.y, z: p.z, mat: m }; single.push(p.head); }
+      if (p.kind === 'windows') for (const h of p.hoops) { h.mesh = add(new THREE.Mesh(G.wreath, paint())); h.mesh.scale.setScalar(h.r); h.mesh.rotation.y = p.dir; h.mesh.castShadow = true; h.mesh.frustumCulled = false; single.push(h); }
+    } }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
   const breakUrn = (u) => { if (u.broken) return false; u.broken = true; u.col.off = true; u.mesh.geometry = G.jarBroken; return true; };
 
@@ -1011,6 +1071,8 @@ float seaLight(vec2 p, float t) {
   { const gone = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < DUST; i++) dust.setMatrixAt(i, gone); }
   let puffNext = 0, puffsLive = 0;
   const SILT = [1.35, 1.95]; // metres over the bed: all of it rises from under a body this low, none from under one this high
+  // one puff of silt let go at a place, with a push: for whatever else in the band breathes (a vent, a cache thrown open)
+  const puffAt = (x, y, z, vx, vy, vz, size, life) => { const pf = puffs[puffNext]; puffNext = (puffNext + 1) % DUST; pf.p.set(x, y, z); pf.v.set(vx, vy, vz); pf.age = 0; pf.life = life; pf.size = size; puffsLive = DUST; };
   const puffUp = (x, z, vx, vz, k) => { const pf = puffs[puffNext]; puffNext = (puffNext + 1) % DUST;
     pf.p.set(x + (Math.random() - 0.5) * 0.36, height(x, z) + 0.08, z + (Math.random() - 0.5) * 0.36); pf.v.set(vx * 0.2 + (Math.random() - 0.5) * 0.5, 0.28 + Math.random() * 0.4, vz * 0.2 + (Math.random() - 0.5) * 0.5);
     pf.age = 0; pf.life = 1.0 + Math.random() * 1.1; pf.size = (0.16 + Math.random() * 0.22) * (0.7 + 0.6 * k); };
@@ -1134,6 +1196,61 @@ float seaLight(vec2 p, float t) {
     }
   }
 
+  // ---- the body puzzles (see PUZZLE): each is watched only while the fish is near, and each shows how far along it is by what moves
+  const opened = []; // caches opened since this was last read: { kind, x, y, z, food, shell }. main.js feeds the fish from them
+  function unseal(p) { p.done = true; p.k = 1; p.cache.open = 1e-3; opened.push({ kind: p.kind, x: p.cache.x, y: p.cache.y + 0.5, z: p.cache.z, food: PUZZLE.food[floor], shell: !!p.cache.shell });
+    for (let i = 0; i < 10; i++) { const a = i * 0.63; puffAt(p.cache.x + Math.sin(a) * 0.6, p.cache.y + 0.2, p.cache.z + Math.cos(a) * 0.6, Math.sin(a) * 1.4, 1.2 + 0.5 * Math.random(), Math.cos(a) * 1.4, 0.26, 1.5); } }
+  function solve(dt, focus, body) {
+    const J = body && body.joints.length > 2 ? body.joints : null, t = time.value, turnA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+    for (const p of puzzles) {
+      const ox = T * Math.round((focus.x - p.x) / T), oz = T * Math.round((focus.z - p.z) / T), c = p.cache, lid = c.lid;
+      const near = !!J && Math.hypot(p.x + ox - J[0].x, p.z + oz - J[0].z) < 45;
+      if (!near && !(c.open > 0 && c.open < 1)) continue;
+      const head = J ? J[0] : null;
+      if (!p.done && head) {
+        if (p.kind === 'capstan') { // swim round it: the head of the capstan turns with the fish and the line draws the lid off
+          const hx = head.x - (p.x + ox), hz = head.z - (p.z + oz), d = Math.hypot(hx, hz), a = Math.atan2(hx, hz);
+          if (d < PUZZLE.reach && d > 0.45 && Math.abs(head.y - p.y) < 3.2) { if (p.was !== null) p.turn += turnA(a - p.was); p.was = a; }
+          else { p.was = null; p.turn -= Math.sign(p.turn) * Math.min(Math.abs(p.turn), 0.8 * dt); } // left alone, it unwinds
+          p.k = Math.min(1, Math.abs(p.turn) / (PUZZLE.turns * Math.PI * 2));
+          if (p.k >= 1) unseal(p);
+        } else if (p.kind === 'windows') { // through all four in one pass, from either end
+          p.timer = Math.max(0, p.timer - dt);
+          if (p.got > 0 && p.timer <= 0) { p.got = 0; p.next = null; for (const h of p.hoops) h.lit = 0; } // too long between two of them: they go dark
+          p.hoops.forEach((h, k) => {
+            const dx = head.x - (h.x + ox), dz = head.z - (h.z + oz), along = dx * p.ux + dz * p.uz, off = Math.hypot(dx - along * p.ux, head.y - h.y, dz - along * p.uz), side = Math.sign(along);
+            const through = h.side !== 0 && side !== 0 && side !== h.side && Math.abs(along) < 2.5 && off < h.r * 1.2; if (side) h.side = side;
+            if (!through) return;
+            if (!p.got && (k === 0 || k === p.hoops.length - 1)) { p.next = k; p.step = k === 0 ? 1 : -1; }
+            if (k !== p.next) return;
+            h.lit = 1; p.got = (p.got || 0) + 1; p.next += p.step; p.timer = PUZZLE.between; stirred.rang.push({ note: p.got, v: 0.9, x: h.x + ox, y: h.y, z: h.z + oz });
+            if (p.got >= p.hoops.length) unseal(p);
+          });
+          p.k = (p.got || 0) / p.hoops.length;
+        } else { // lie over the open chimney: its breath stops and the pressure goes to the cap of the other
+          const ax = p.x + ox, az = p.z + oz; let over = false;
+          for (let j = 0; j < J.length && !over; j++) { const q = J[j]; over = q.y - p.y < 1.25 && q.y > p.y - 0.5 && Math.hypot(q.x - ax, q.z - az) < 0.95; }
+          p.press = clamp(p.press + (over ? dt / PUZZLE.plug : -dt / 2.5), 0, 1); p.k = p.press; p.over = over;
+          if (p.press >= 1) unseal(p);
+        }
+      }
+      // ---- what shows
+      if (p.kind === 'capstan') { p.head.mesh.rotation.y = p.turn; p.head.mat.emissiveIntensity = 0.12 + 0.6 * p.k; Object.assign(p.ring, { x: p.x + ox, z: p.z + oz, left: p.done ? 0 : 1 }); }
+      if (p.kind === 'windows') for (const h of p.hoops) h.mesh.material.emissiveIntensity += ((h.lit ? 1 : 0.22 + 0.14 * Math.sin(t * 2.6 + h.x)) - h.mesh.material.emissiveIntensity) * (1 - Math.exp(-8 * dt));
+      if (p.kind === 'vent') { p.puff -= dt;
+        if (p.puff <= 0) { p.puff = 0.14; const calm = p.done ? 0.5 : 1;
+          if (!p.over || p.done) puffAt(p.x + ox + (Math.random() - 0.5) * 0.3, p.y + 0.05, p.z + oz + (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, 1.5 * calm + Math.random() * 0.5, (Math.random() - 0.5) * 0.3, 0.2, 1.7);
+          if (!p.done && Math.random() < 0.15 + 0.85 * p.press) { const a = Math.random() * 6.28; puffAt(c.x + ox + Math.sin(a) * 0.8, c.y, c.z + oz + Math.cos(a) * 0.8, Math.sin(a) * (0.5 + 1.2 * p.press), 0.3, Math.cos(a) * (0.5 + 1.2 * p.press), 0.11, 0.9); } } }
+      // the lid: drawn off by the capstan's line as it turns, rattling on a chimney under pressure, and thrown off when the cache opens
+      if (c.open > 0 && c.open < 1) c.open = Math.min(1, c.open + dt / 0.9);
+      const o = c.open, e = o * o * (3 - 2 * o), sx = p.kind === 'capstan' ? -p.ax : 0.8, sz = p.kind === 'capstan' ? -p.az : 0.6, slide = (p.kind === 'capstan' ? 1.5 * p.k : 0) + (p.kind === 'capstan' ? 0.5 : 1.9) * e;
+      const shake = p.kind === 'vent' && !p.done ? p.press : 0, hop = (p.kind === 'vent' ? 2.4 : 0.25) * Math.sin(Math.PI * o) - (p.kind === 'vent' ? 1.0 : 0.25) * e;
+      lid.x = c.x + sx * slide; lid.z = c.z + sz * slide; lid.y = c.y + hop + 0.1 * shake * (0.5 + 0.5 * Math.sin(t * 43));
+      lid.mesh.position.set(lid.x + ox, lid.y, lid.z + oz); lid.mesh.rotation.set(0.05 * shake * Math.sin(t * 37), 0, 0.5 * e + 0.05 * shake * Math.sin(t * 29));
+      lid.mesh.material.emissiveIntensity = p.done ? 0.1 : 0.1 + 0.5 * p.k;
+    }
+  }
+
   // ------------------------------------------------------------ per-frame
   const m4 = new THREE.Matrix4(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), none = new THREE.Vector3(0, 0, 0);
   let wrapTimer = 0;
@@ -1229,6 +1346,7 @@ float seaLight(vec2 p, float t) {
       b.rotation.y = Math.atan2(camera.position.x - b.position.x, camera.position.z - b.position.z);
     }
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
+    solve(dt, focus, body);
     stir(dt, focus, body);
   }
 
@@ -1407,7 +1525,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

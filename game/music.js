@@ -537,7 +537,7 @@ export function createMusic({ context = null } = {}) {
       if (!st.started) return;
       const t = now() + 0.012, ch = chordAt(st.bar), v = (0.45 + 0.55 * strength) * lerp(0.35, 1, params.react), up = voicing(ch, 62);
       const low = bassPitch(ch.root, 36);
-      st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, crest: 0.4, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
+      st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, crest: 0.4, cache: 0.4, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
       if (kind === 'loop') { kit.rim(t, 0.8 * v); kit.splash(t, 0.35 * v); }
       else if (kind === 'burst') { kit.splash(t, 0.7 * v); kit.rim(t, v); kit.tom(t + 0.07, 0.6 * v, 112); } // ringed a swarm too big to hold
       else if (kind === 'catch') { // as big as the catch: a small swarm is a cymbal and a chord, a great one is the whole band
@@ -547,6 +547,7 @@ export function createMusic({ context = null } = {}) {
         if (strength > 0.9) { kit.crash(t + 0.27, v); kit.kick(t + 0.27, v); brass(t + 0.27, [low + 24, ...up.slice(0, 2)], 0.9, v); }
       }
       else if (kind === 'chain') { const lvl = Math.round(strength * 3); kit.snare(t, 0.5); kit.snare(t + 0.07, 0.6); kit.snare(t + 0.14, 0.75); kit.ride(t + 0.21, 1, true); if (lvl >= 2) brass(t + 0.21, [up[0], up[2 % up.length]], 0.3, 0.8); if (lvl >= 3) { kit.crash(t + 0.21, 0.9); voices.sax(t + 0.21, up[up.length - 1] + 12, 0.7, 1); } } // a pick-up into the layer that has just come in
+      else if (kind === 'cache') { kit.ride(t, 1, true); kit.kick(t, 0.8 * v); [...up, up[0] + 12, up[1] + 12].forEach((m, i) => pianoNote(t + i * 0.07, m + 12, 0.9, 0.75 * v)); kit.crash(t + 0.42, 0.6 * v); } // something sealed has come open: a run up the chord and a cymbal at the top
       else if (kind === 'crest') { kit.swell(t, 0.7, 0.5); kit.crash(t + 0.5, 0.9 * v); brass(t + 0.5, [low + 12, low + 19, ...up.slice(1, 3)], 1.3, v); [...up, up[0] + 12].forEach((m, i) => pianoNote(t + 0.5 + i * 0.06, m + 12, 1.1, 0.8 * v)); } // a new standing: the band gives it a fanfare
       else if (kind === 'kill') { kit.crash(t, v); kit.kick(t, v); kit.snare(t, 0.9 * v); kit.tom(t + 0.11, 0.8 * v, 84); brass(t, [low + 12, low + 19, low + 24], 0.4, v); up.forEach((m) => pianoNote(t, m + 12, 0.6, 0.9 * v)); st.tension *= 0.2; }
       else if (kind === 'grow') { up.forEach((m, i) => pianoNote(t + i * 0.07, m + 12, 0.7, 0.7 * v)); kit.ride(t + 0.28, 0.9 * v, true); }
