@@ -34,13 +34,14 @@ const SHIPPED_FEEL = { assist: 60, mode: 'point', look: 50, rumble: 70 }; // hel
 // The two views. 'point' is the plate: high, far and flat, and the mouse says where to swim. 'look' is the
 // adventure camera: nearer and wider, free to drop below the fish, and the mouse (or the right stick) turns it.
 const VIEW = { point: { fov: 30, k: 1, low: 0.16 }, look: { fov: 40, k: 0.66, low: -0.3 } };
+const LOOK_LEVEL = 0.34; // the tilt the adventure camera settles at behind the fish; with the view here, forward is level
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Everything a key or a controller button can be set to do, in the order the binding menu lists it.
 // A key action takes up to two keys. Movement on a controller is always the left stick, and looking the right.
 const ACTIONS = [
   ['up', 'Swim forward'], ['down', 'Swim back'], ['left', 'Swim left'], ['right', 'Swim right'],
   ['sprint', 'Dash, hold to sprint'], ['wrap', 'Wrap or coil, side picked for you'], ['wrapL', 'Wrap or coil left'], ['wrapR', 'Wrap or coil right'],
-  ['rise', 'Rise'], ['dive', 'Dive'], ['shed', 'Shed tail as bait'], ['pause', 'Pause'], ['full', 'Full screen'], ['hide', 'Hide the controls'],
+  ['rise', 'Rise'], ['dive', 'Dive'], ['shed', 'Shed tail as bait'], ['pause', 'Pause'], ['full', 'Full screen'], ['hide', 'Keys and tools on screen'],
   ['view', 'Switch camera'], ['behind', 'Bring the view behind you'], ['zoomIn', 'Zoom in'], ['zoomOut', 'Zoom out'],
 ];
 const STICK = new Set(['up', 'down', 'left', 'right']);
@@ -306,7 +307,7 @@ export async function start(saved = {}) {
     if (index === FLOORS.length - 1) say('palace', 'The palace gate is near. Swim through it.', 9);
   }
   function startRun(seed = freshSeed()) {
-    if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? 0.34 : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
+    if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
     Object.assign(run, { seed, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     if (worldPref.keep) { worldPref.seed = seed; store.set('oarfish.world', worldPref); }
@@ -661,7 +662,7 @@ export async function start(saved = {}) {
       + `<li class="note">The right stick looks around; ${pb('behind')} brings the view behind you. ${pb('zoomIn')} and ${pb('zoomOut')} zoom.</li>`;
     if (touch) return '<li class="note">Hold and drag: the fish swims to your finger. Hold on a swarm to wrap it. Pinch to zoom, drag with two fingers to look around.</li>';
     return row(K(kb('up'), kb('left'), kb('down'), kb('right')), 'steer', K(kb('sprint')), 'dash, hold to sprint') + row(K(kb('wrapL'), kb('wrapR')), 'wrap, or coil', K(kb('sprint')), 'tight') + row(K(kb('rise')), 'rise', K(kb('dive')), 'dive') + row(K(kb('shed')), 'shed tail as bait') + row(K(kb('pause')), 'pause', K(kb('full')), 'full screen', K(kb('hide')), 'hide this')
-      + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Left button wraps, right button dashes and sprints, scroll zooms. ${kb('view')} goes back to pointing.</li>`
+      + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Tilt the view up or down and the fish swims that way. Left button wraps, right button dashes and sprints, scroll zooms. ${kb('view')} goes back to pointing.</li>`
         : `<li class="note">Or hold the mouse button and the fish swims to the pointer. Right-drag looks around, scroll zooms. ${kb('view')} switches to the adventure camera.</li>`);
   }
   function renderLegend() { const h = legend(); $('keys').innerHTML = h; $('pause-keys').innerHTML = h; }
@@ -675,15 +676,15 @@ export async function start(saved = {}) {
   function showMode() {
     $('mode-point').setAttribute('aria-pressed', String(feel.mode === 'point')); $('mode-look').setAttribute('aria-pressed', String(feel.mode === 'look'));
     $('mode-note').textContent = feel.mode === 'point' ? 'Hold the mouse button and the fish swims to the pointer. Right-drag looks around. The view stays high, as on the plate.'
-      : look.free ? 'The keys swim and the mouse turns the view. This page was not allowed to capture the mouse, so the view follows it while it moves over the water, and keeps turning while it rests at the left or right edge.'
-        : 'The keys swim and the mouse turns the view, with no button held. Click the water to hand the mouse to the game. Esc takes it back and pauses.';
+      : look.free ? 'The keys swim and the mouse turns the view. This page was not allowed to capture the mouse, so the view follows it while it moves over the water, and keeps turning while it rests at the left or right edge. Tilt the view up or down and the fish swims that way.'
+        : 'The keys swim and the mouse turns the view, with no button held. Tilt the view up or down and the fish swims that way. Click the water to hand the mouse to the game. Esc takes it back and pauses.';
   }
   function setMode(m, quiet) {
     if (touch || m !== 'look') m = 'point';
     const changed = feel.mode !== m;
     feel.mode = m; fp.mode = m; store.set('oarfish.feel', fp);
     stage.dataset.mode = m;
-    if (changed && m === 'look') { cam.plate = cam.pitch; behind(0.34); }
+    if (changed && m === 'look') { cam.plate = cam.pitch; behind(LOOK_LEVEL); }
     if (changed && m === 'point') {
       if (look.locked) { look.mine = true; document.exitPointerLock?.(); }
       look.buttons = 0;
@@ -727,7 +728,7 @@ export async function start(saved = {}) {
       $('btn-resume').focus({ preventScroll: true });
     } else {
       if ($('pause').contains(document.activeElement)) document.activeElement.blur();
-      if (ui.bare) closeDrawer();
+      if (!ui.full) closeDrawer();
     }
   }
   const fsOn = () => !!document.fullscreenElement;
@@ -752,12 +753,14 @@ export async function start(saved = {}) {
     fsMine = false;
   });
   function closeDrawer() { $('drawer').classList.remove('open'); $('music-tab').setAttribute('aria-expanded', 'false'); }
-  function setBare(on, quiet) { // hide the help: the key list and the corner buttons
-    ui.bare = !!on; store.set('oarfish.ui', ui);
-    stage.classList.toggle('bare', ui.bare);
-    $('btn-bare').textContent = ui.bare ? 'Show the controls on screen' : 'Hide the controls on screen';
-    if (ui.bare && !paused) closeDrawer();
-    if (ui.bare && !quiet && !paused) tell(dev === 'pad' ? `Controls hidden. ${pb('hide')} brings them back, ${pb('pause')} opens the menu.` : touch ? 'Controls hidden.' : `Controls hidden. ${kb('hide')} brings them back, ${kb('pause')} opens the menu.`, 4);
+  // Two views. The plain one is the game: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
+  // The full one adds what is for looking things up and for tuning: the key list, the tuning drawer, the model tools.
+  function setFull(on, quiet) {
+    ui.full = !!on; delete ui.bare; store.set('oarfish.ui', ui); // `bare` was this setting the other way round, when the full view was the usual one
+    stage.classList.toggle('full', ui.full);
+    $('btn-keys').textContent = ui.full ? 'Hide keys and tools on screen' : 'Show keys and tools on screen';
+    if (!ui.full && !paused) closeDrawer();
+    if (!ui.full && !quiet && !paused) tell(dev === 'pad' ? `Keys and tools hidden. ${pb('hide')} brings them back.` : touch ? 'Keys and tools hidden.' : `Keys and tools hidden. ${kb('hide')} brings them back.`, 4);
   }
   function newDive(arm) { // leaving a dive takes two presses
     clearTimeout(newT);
@@ -863,7 +866,7 @@ export async function start(saved = {}) {
       return;
     }
     if (!e.repeat && act === 'full') { e.preventDefault(); return fullscreen(); }
-    if (!e.repeat && act === 'hide') return setBare(!ui.bare);
+    if (!e.repeat && act === 'hide') return setFull(!ui.full);
     if (!e.repeat && act === 'view' && !touch) return setMode(feel.mode === 'look' ? 'point' : 'look');
     if (paused || typing(e) || !act) return; // a focused slider keeps its arrow keys
     if ((e.code === 'Space' || e.code === 'Enter') && document.activeElement?.tagName === 'BUTTON') return; // let a focused button be a button
@@ -954,7 +957,7 @@ export async function start(saved = {}) {
         if (pad.pressed(BTN.cross)) (at?.tagName === 'BUTTON' ? at : menu.querySelector('button')).click();
         if (paused && pad.pressed(BTN.circle)) { if ($('pause').classList.contains('binding')) openBinds(false); else setPaused(false); }
       } else {
-        if (pp('hide')) setBare(!ui.bare);
+        if (pp('hide')) setFull(!ui.full);
         if (pp('shed')) shed();
         if (pp('behind')) behind(clamp(cam.pitch, 0.2, 0.6));
         if (pp('full')) fullscreen(false);
@@ -1015,7 +1018,7 @@ export async function start(saved = {}) {
   }
   $('mode-point').addEventListener('click', () => setMode('point'));
   $('mode-look').addEventListener('click', () => setMode('look'));
-  $('btn-bare').addEventListener('click', () => setBare(!ui.bare, true));
+  $('btn-keys').addEventListener('click', () => setFull(!ui.full, true));
   {
     const ls = $('f-look');
     ls.value = Number.isFinite(fp.look) ? fp.look : SHIPPED_FEEL.look;
@@ -1186,6 +1189,12 @@ export async function start(saved = {}) {
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       input.dir = dirVec.set(c * ix - s * iy, 0, -s * ix - c * iy).normalize();
       input.amount = amount;
+      // the adventure camera also aims the fish up and down: forward goes where the view points, back goes the other way.
+      // A little either side of level changes nothing, so the fish holds its depth until the view is tilted on purpose.
+      if (feel.mode === 'look') {
+        const tilt = LOOK_LEVEL - cam.pitch, past = Math.abs(tilt) - 0.1;
+        if (past > 0) input.vertical = clamp(input.vertical + Math.sign(tilt) * Math.min(1, past / 0.5) * (iy / Math.hypot(ix, iy)) * amount, -1, 1);
+      }
     } else if (steerId !== null && pointers.has(steerId)) {
       // swim to the point under the pointer, at the fish's own depth
       const p = pointers.get(steerId), r = canvas.getBoundingClientRect();
@@ -1458,7 +1467,7 @@ export async function start(saved = {}) {
 
   startRun(Number.isFinite(saved.seed) ? saved.seed : undefined);
   setMode(fp.mode || SHIPPED_FEEL.mode, true);
-  setBare(!!ui.bare, true);
+  setFull(ui.full === true, true);
   renderLegend();
   if (Number.isFinite(saved.floor) && saved.floor > 0 && saved.floor < FLOORS.length) { run.segs = clamp(saved.segs | 0, MIN_SEGS, MAX_SEGS); buildFish(run.segs); enterFloor(saved.floor, false); }
   for (const k of ['yaw', 'pitch', 'zoom']) if (Number.isFinite(saved[`cam_${k}`])) cam[k] = saved[`cam_${k}`];
@@ -1484,7 +1493,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setBare, seedCode, readSeed, worldPref, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, seedCode, readSeed, worldPref, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

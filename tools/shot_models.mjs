@@ -22,7 +22,7 @@ const ctx = await browser.newContext({ viewport: { width: 1100, height: 700 } })
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver/.test(m.text())) console.log('[error]', m.text().slice(0, 300)); });
-await page.addInitScript(() => { try { localStorage.setItem('oarfish.world', JSON.stringify({ keep: true, seed: 4242 })); localStorage.setItem('oarfish.ui', JSON.stringify({ bare: true })); } catch {} });
+await page.addInitScript(() => { try { localStorage.setItem('oarfish.world', JSON.stringify({ keep: true, seed: 4242 })); localStorage.setItem('oarfish.ui', JSON.stringify({ full: false })); } catch {} });
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 const frame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));

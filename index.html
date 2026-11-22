@@ -145,7 +145,7 @@ body { background: var(--abyss); color: var(--foam); font: 400 15px/1.35 var(--f
 #prompt.on { opacity: 1; }
 #prompt .in { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 5px; white-space: nowrap; padding: 5px 11px 5px 6px; border-radius: 999px; font: 500 13px/1 var(--font-body); color: var(--foam); background: color-mix(in srgb, var(--ink) 52%, transparent); }
 #prompt .in span { margin-left: 3px; }
-#stage.bare #prompt, #stage.cine #prompt, #stage.paused #prompt { display: none; }
+#stage.cine #prompt, #stage.paused #prompt { display: none; }
 #btn-skip { font-size: 13px; padding: 7px 13px; }
 #btn-skip[hidden] { display: none; }
 #stage.paused #btn-skip { display: none; }
@@ -249,9 +249,13 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause button:focus, #end button:focus { outline: 2px solid var(--foam); outline-offset: 2px; }
 .keys.menu { position: static; max-width: none; pointer-events: auto; display: flex; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--foam) 20%, transparent); }
 .keys.menu li.key { display: flex; }
-/* H hides the help: the key list and the corner buttons. The plate, the scale bar and the marker stay. */
-#stage.bare > .keys, #stage.bare > .tools, #stage.bare > .top, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
-#stage.bare.paused > .top, #stage.cine.paused > .top { display: flex; }
+/* The game as it is meant to be seen: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
+   H (or the pause menu) turns on the full view, which adds the key list, the tuning drawer and the model tools. */
+#stage:not(.full) > .keys, #stage:not(.full) > .tools, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
+#stage:not(.full):not(.paused) > .top > #btn-fs, #stage:not(.full):not(.paused) > .top > #music-tab { display: none; }
+#stage:not(.full):not(.paused) > .top > button { opacity: 0.72; transition: opacity 0.2s; }
+#stage:not(.full):not(.paused) > .top > button:hover, #stage:not(.full):not(.paused) > .top > button:focus-visible { opacity: 1; }
+#stage.cine.paused > .top { display: flex; }
 #stage[data-mode="look"] canvas { cursor: default; }
 #error { position: absolute; inset: 0; z-index: 9; display: none; place-items: center; padding: 28px; text-align: center; background: var(--abyss); }
 #error p { max-width: 46ch; margin: 0; }
@@ -414,7 +418,7 @@ button:disabled { opacity: 0.4; cursor: default; }
     <div class="dial"><label for="f-look">Look speed</label><input type="range" id="f-look" min="0" max="100" value="50"><span class="lo">slow</span><span class="hi">fast</span><p>How fast the mouse or the right stick turns the view.</p></div>
     <label class="check"><input type="checkbox" id="f-teach" checked><span><b>Teach me as I play</b>A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
     <button type="button" id="btn-library">Specimen library</button>
-    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-bare">Hide the controls on screen</button></div>
+    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-keys">Show keys and tools on screen</button></div>
     <ul class="keys menu" id="pause-keys" aria-label="Controls"></ul>
     <div class="dial"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
     <button type="button" id="btn-rumble">Test the vibration</button>

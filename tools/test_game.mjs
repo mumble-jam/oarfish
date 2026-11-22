@@ -288,6 +288,7 @@ if (shots) {
 // 11. the real-time loop, real keys, the drawer
 await ev(() => { window.__hold = false; });
 await page.keyboard.down('KeyQ'); await page.waitForTimeout(1500); await page.keyboard.up('KeyQ');
+await ev(() => window.__game.setFull(true, true)); // the tuning drawer belongs to the full view
 await page.click('#music-tab'); await page.waitForTimeout(700);
 s = await ev(() => { const g = window.__game; const el = document.getElementById('m-menace'); el.value = 90; el.dispatchEvent(new Event('input')); document.getElementById('preset-copy').click(); return { open: document.getElementById('drawer').classList.contains('open'), menace: g.music.params.menace, audio: g.music.running, now: document.getElementById('music-now').textContent, yawRate: +g.rig.yawRate.toFixed(2) }; });
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
