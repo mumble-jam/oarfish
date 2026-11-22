@@ -1114,14 +1114,26 @@ export async function start(saved = {}) {
       const say = (t) => { $('rumble-msg').textContent = t; };
       if (!pad.state.connected) return say('No controller is connected. Press any button on it first.');
       const seen = pad.report().join('; ');
-      if (!pad.motors) return say(`${seen}. The browser gives this page no motors to drive. With a DualSense that is usually Bluetooth: try a USB cable. Steam, if it is open, can also keep the controller's motors to itself. Chrome and Edge do best.`);
+      if (!pad.motors) return say(`${seen}. ${!/dualsense|054c/i.test(pad.state.name) ? 'The browser gives this page no motors to drive for this controller.' : pad.direct.supported ? 'On Windows the browser has no motor code for a DualSense, whatever the cable. Press “Connect DualSense motors” and pick the controller from the browser’s list: the game then drives the motors itself.' : 'This browser has no motor code for a DualSense and cannot hand the controller to the page either. Chrome and Edge can: open the game in one of them and press “Connect DualSense motors”.'}`);
       if (feel.rumble <= 0) return say('Vibration is turned all the way down.');
       say(`${seen}. Playing: the light motor, the heavy motor, then a heartbeat.`);
       const k = feel.rumble, first = await pad.test(0, k, 350);
       await wait(200); await pad.test(k, 0, 350); await wait(250);
       for (const m of [0.8, 0.45, 0.8, 0.45]) { await pad.test(k * m, 0, 90); await wait(m > 0.5 ? 70 : 350); }
-      say(`${seen}. The browser ${first === 'played' ? 'played all three' : `answered: ${first}`}. If your hands felt nothing, the command is being dropped between the browser and the controller: try a USB cable in place of Bluetooth, and close Steam if it is running.`);
+      say(`${seen}. The browser ${first === 'played' ? 'played all three' : `answered: ${first}`}. If your hands felt nothing, the command is being dropped between the browser and the controller: try a USB cable in place of Bluetooth, and close Steam if it is running.${pad.direct.trouble ? ` (${pad.direct.trouble})` : ''}`);
     });
+    // A DualSense on Windows: no browser drives its motors, but Chrome and Edge will hand the controller to the page (pad.js). The browser
+    // shows its own list, the player picks the controller once, and it is taken up again on every later visit without asking.
+    const db = $('btn-direct'), directName = () => { db.textContent = pad.direct.connected ? 'DualSense motors: connected' : 'Connect DualSense motors'; };
+    db.hidden = !pad.direct.supported;
+    db.addEventListener('click', async () => {
+      const say = (t) => { $('rumble-msg').textContent = t; };
+      const got = pad.direct.connected ? 'connected' : await pad.direct.connect();
+      directName();
+      if (got === 'connected') { pad.rumble(0.7, 0.7, 220); return say(`Connected (${pad.direct.how}): you should have felt one short buzz. The game drives the motors itself from now on, and the browser will remember the controller. If you felt nothing, close Steam or anything else that manages the controller and press this again.`); }
+      say({ none: 'No controller was picked. In the browser’s list choose the one called DualSense or Wireless Controller, then press Connect.', blocked: 'This view of the page is not allowed to reach devices. Open the game at its own address and try there.', unsupported: 'This browser cannot do this. Chrome and Edge can.', failed: `The controller would not open: ${pad.direct.trouble || 'no reason given'}. Close Steam, DS4Windows or anything else that manages the controller, and try again.` }[got] || `The browser answered: ${got}.`);
+    });
+    pad.direct.resume().then(directName);
   }
   const toggle = (id, key, apply) => {
     const b = $(id);

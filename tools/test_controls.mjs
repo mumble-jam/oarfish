@@ -22,7 +22,13 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 }, permissions: ['clipboard-read', 'clipboard-write'] })).newPage();
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
-await page.addInitScript(() => { window.__noNursery = true; });
+await page.addInitScript(() => { window.__noNursery = true;
+  // a stand-in for the browser's device access: one DualSense on a cable, on current firmware, that the player may pick
+  window.hidSent = []; window.hidPick = true;
+  const fw = new DataView(new ArrayBuffer(64)); fw.setUint8(0, 0x20); fw.setUint16(44, 0x0224, true);
+  const sense = { vendorId: 0x054c, productId: 0x0ce6, opened: false, collections: [{ outputReports: [{ reportId: 2 }] }], async open() { sense.opened = true; }, async sendReport(id, data) { window.hidSent.push([id, Array.from(data)]); }, async receiveFeatureReport() { return fw; } };
+  Object.defineProperty(Navigator.prototype, 'hid', { configurable: true, get: () => ({ getDevices: async () => [], requestDevice: async () => (window.hidPick ? [sense] : []), addEventListener() {} }) });
+});
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.evaluate(() => { window.__hold = true; });
@@ -220,6 +226,20 @@ await page.keyboard.press('KeyP'); await page.waitForTimeout(150);
 await page.click('#btn-rumble'); await page.waitForFunction(() => /played|answered/.test(document.getElementById('rumble-msg').textContent), null, { timeout: 20000 }).catch(() => {}); // timers run slowly in a window nobody is looking at
 s = await ev(() => ({ msg: document.getElementById('rumble-msg').textContent, note: document.getElementById('pad-note').textContent, n: window.rumbles.filter((r) => r.duration === 350).length }));
 check('the pause menu tests the vibration and says what the browser reports for the controller', /motors \(dual-rumble\)/.test(s.msg) && /played all three/.test(s.msg) && /can vibrate/.test(s.note) && s.n === 2, JSON.stringify(s));
+// a DualSense's motors, which no browser drives on Windows: the page asks for the controller and sends it Sony's own command
+s = await ev(async () => { const P = await import('/game/pad.js'), enc = new TextEncoder();
+  const usb = P.senseReport(0.8, 0.2), old = P.senseReport(1, 1, false, 0, 'old'), neu = P.senseReport(1, 1, false, 0, 'new'), bt = P.senseReport(0.8, 0.2, true, 5), sum = P.crc32([0xa2, 0x31, ...bt.data.subarray(0, 73)]);
+  return { crc: P.crc32(enc.encode('123456789')).toString(16), usb: [usb.id, usb.data.length, usb.data[0], usb.data[2], usb.data[3], usb.data[38]], old: [old.data[0], old.data[38]], neu: [neu.data[0], neu.data[38]],
+    bt: [bt.id, bt.data.length, bt.data[0], bt.data[1], bt.data[2], bt.data[4], bt.data[5], bt.data[40]], sealed: [sum & 255, (sum >>> 8) & 255, (sum >>> 16) & 255, sum >>> 24].join() === Array.from(bt.data.subarray(73)).join() }; });
+check('the DualSense command is laid out as Sony has it: flags, light motor, heavy motor, and over Bluetooth a counter in front and a checksum behind',
+  s.crc === 'cbf43926' && s.usb.join() === '2,47,3,51,204,4' && s.old.join() === '3,0' && s.neu.join() === '2,4' && s.bt.join() === '49,77,80,16,3,51,204,4' && s.sealed, JSON.stringify(s));
+s = await ev(async () => { window.hidPick = false; const b = document.getElementById('btn-direct'), shown = !b.hidden; b.click(); await new Promise((r) => setTimeout(r, 120)); const none = document.getElementById('rumble-msg').textContent;
+  window.hidPick = true; window.hidSent.length = 0; b.click(); await new Promise((r) => setTimeout(r, 700)); const g = window.__game;
+  return { shown, none, msg: document.getElementById('rumble-msg').textContent, label: b.textContent, first: window.hidSent[0], last: window.hidSent[window.hidSent.length - 1], n: window.hidSent.length, motors: g.pad.motors, report: g.pad.report().join('; ') }; });
+check('“Connect DualSense motors” asks the browser for the controller, buzzes it once, stops the motors, and says so',
+  s.shown && /No controller was picked/.test(s.none) && /Connected \(cable, current firmware\)/.test(s.msg) && /connected/.test(s.label) && s.n >= 2 && s.first[0] === 2 && s.first[1][0] === 2 && s.first[1][38] === 4 && s.first[1][2] > 100 && s.first[1][3] > 100 && s.last[1][2] === 0 && s.last[1][3] === 0 && s.motors && /spoken to directly/.test(s.report), JSON.stringify({ ...s, first: s.first && s.first[1].slice(0, 5), last: s.last && s.last[1].slice(0, 5) }));
+s = await ev(async () => { const g = window.__game; window.hidSent.length = 0; g.pad.rumble(0.5, 0.25, 60); g.pad.rumble(0.9, 0.1, 60); await new Promise((r) => setTimeout(r, 400)); return window.hidSent.map((r) => [r[1][3], r[1][2]]); });
+check('once connected, every vibration the game plays goes down the direct line too, and each one ends', s.length >= 2 && s.some((r) => r[0] === 230 && r[1] === 26) && s[s.length - 1].join() === '0,0', JSON.stringify(s));
 await page.waitForTimeout(350); await page.keyboard.press('KeyP');
 s = await ev(() => { const g = window.__game; window.tap(9); const p1 = g.paused; const f0 = document.activeElement?.id; window.tap(13); const f1 = document.activeElement?.id; window.tap(12); const f2 = document.activeElement?.id; window.tap(0); const p2 = g.paused;
   window.tap(8); const full1 = g.ui.full; window.tap(8); return { p1, f0, f1, f2, p2, full1, full2: g.ui.full }; });
