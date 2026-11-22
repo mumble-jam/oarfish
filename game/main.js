@@ -737,7 +737,7 @@ export async function start(saved = {}) {
     newDive(false); $('pause-msg').textContent = ''; openBinds(false); openNote(false);
     if (on) {
       if (look.locked) { look.mine = true; document.exitPointerLock?.(); }
-      showMode(); renderLegend();
+      showMode(); renderLegend(); showDev();
       $('btn-resume').focus({ preventScroll: true });
     } else {
       if ($('pause').contains(document.activeElement)) document.activeElement.blur();
@@ -1052,6 +1052,13 @@ export async function start(saved = {}) {
   $('mode-point').addEventListener('click', () => setMode('point'));
   $('mode-look').addEventListener('click', () => setMode('look'));
   $('btn-keys').addEventListener('click', () => setFull(!ui.full, true));
+  // ---- testing tools: in the pause menu, and only while the keys and tools are on screen. Straight to any band, a longer body, the keeper out of the way
+  $('dev-bands').innerHTML = FLOORS.map((f, i) => `<button type="button" data-band="${i}" title="${f.name}" aria-pressed="false">${i + 1}</button>`).join('');
+  const DEV_NOTE = 'Shown only while keys and tools are on screen. A band starts fresh, at the length you have.';
+  function showDev(msg) { for (const b of $('dev-bands').children) b.setAttribute('aria-pressed', String(+b.dataset.band === run.floor)); $('dev-keeper').disabled = !guard || guard.done; $('dev-grow').disabled = run.segs >= MAX_SEGS; $('dev-msg').textContent = msg || DEV_NOTE; }
+  $('dev-bands').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || ended()) return; enterFloor(+b.dataset.band, false); setPaused(false); if (e.isTrusted) grab(true); });
+  $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
+  $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {
     const ls = $('f-look');
     ls.value = Number.isFinite(fp.look) ? fp.look : SHIPPED_FEEL.look;

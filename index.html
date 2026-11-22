@@ -280,6 +280,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 .keys.menu li.key { display: flex; }
 /* The game as it is meant to be seen: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
    H (or the pause menu) turns on the full view, which adds the key list, the tuning drawer and the model tools. */
+#stage:not(.full) #pause .dev { display: none; } /* the testing tools are for whoever has the keys and tools on screen */
 #stage:not(.full) > .keys, #stage:not(.full) > .tools, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
 #stage:not(.full):not(.paused) > .top > #btn-fs, #stage:not(.full):not(.paused) > .top > #music-tab { display: none; }
 #stage:not(.full):not(.paused) > .top > button { opacity: 0.72; transition: opacity 0.2s; }
@@ -439,6 +440,12 @@ button:disabled { opacity: 0.4; cursor: default; }
     <label class="check"><input type="checkbox" id="f-teach" checked><span><b>Teach me as I play</b>A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
     <button type="button" id="btn-library">Specimen library</button>
     <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-keys">Show keys and tools on screen</button></div>
+    <div class="set dev">
+      <span class="cap" id="dev-cap">Testing</span>
+      <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
+      <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button></div>
+      <p id="dev-msg" aria-live="polite"></p>
+    </div>
     <ul class="keys menu" id="pause-keys" aria-label="Controls"></ul>
     <div class="dial"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
     <button type="button" id="btn-rumble">Test the vibration</button>

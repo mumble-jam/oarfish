@@ -276,6 +276,16 @@ if (shots) {
   await ev(() => { const g = window.__game; g.cam.pitch = 1.1; g.sim(0.6); }); await snap('c-look-high');
   await ev(() => { const g = window.__game; g.setMode('point'); g.sim(2); }); await snap('c-point-after');
 }
+// ---- testing tools: in the pause menu, only in the full view
+await ev(() => { const g = window.__game; g.startRun(4242); g.sim(1); g.setFull(false, true); g.setPaused(true); }); await frame();
+const devHidden = await ev(() => document.querySelector('#pause .dev').getClientRects().length === 0);
+await ev(() => { window.__game.setFull(true, true); }); await frame();
+s = await ev(() => ({ shown: document.querySelector('#pause .dev').getClientRects().length > 0, bands: document.querySelectorAll('#dev-bands button').length, here: document.querySelector('#dev-bands [aria-pressed="true"]')?.textContent, segs: window.__game.run.segs }));
+await page.click('#dev-grow'); await page.click('#dev-bands button:nth-child(3)'); await frame();
+const went = await ev(() => { const g = window.__game; return { floor: g.run.floor, paused: g.paused, state: g.run.state, segs: g.run.segs, keeper: g.guard?.kind }; });
+await ev(() => { window.__game.setPaused(true); }); await page.click('#dev-keeper'); await frame();
+const beat = await ev(() => { const g = window.__game, out = { done: g.guard.done, here: document.querySelector('#dev-bands [aria-pressed="true"]')?.textContent, off: document.getElementById('dev-keeper').disabled }; g.setFull(false, true); g.setPaused(false); return out; });
+check('the testing tools are in the pause menu only while keys and tools are shown: any band, a longer body, the keeper beaten', devHidden && s.shown && s.bands === 5 && s.here === '1' && went.floor === 2 && !went.paused && went.state === 'play' && went.segs === s.segs + 4 && went.keeper === 'lamplighter' && beat.done && beat.here === '3', JSON.stringify({ devHidden, ...s, went, beat }));
 // ---- feedback: a sheet in the pause menu and at the end of a dive; the note is copied, never sent
 await ev(() => { const g = window.__game; g.startRun(4242); g.sim(3); g.setPaused(true); });
 await page.click('#btn-note'); await frame(page);
