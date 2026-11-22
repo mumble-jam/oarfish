@@ -18,14 +18,19 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.addInitScript(() => { window.__noNursery = true; });
 await page.goto(`http://localhost:${server.address().port}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
-for (const f of [0, 1, 2, 3, 4]) {
+const which = process.argv.slice(2).map(Number); // the bands to measure: all of them, or those named
+for (const f of which.length ? which : [0, 1, 2, 3, 4]) {
   const r = await page.evaluate(async (f) => {
     const g = window.__game; g.startRun(4242); if (f) g.enterFloor(f, false); g.run.safe = 1e9;
     g.renderer.info.autoReset = false;
     const t0 = performance.now(); g.sim(2, { dir: { x: 0.6, y: 0, z: 0.8 }, amount: 1, vertical: 0, sprint: false }); const simMs = (performance.now() - t0) / 120;
     g.renderer.info.reset(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const i = g.renderer.info;
-    return { floor: f, tris: i.render.triangles, calls: i.render.calls, geometries: i.memory.geometries, stepMs: +simMs.toFixed(2) };
+    const tris = i.render.triangles, calls = i.render.calls;
+    // a frame drawn here, where the processor does the graphics card's work: the best of five rounds of five, since other work on the machine only ever adds
+    const gl = g.renderer.getContext(), px = new Uint8Array(4); let drawMs = 1e9;
+    for (let round = 0; round < 5; round++) { const t1 = performance.now(); for (let k = 0; k < 5; k++) { g.renderer.render(g.scene, g.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } drawMs = Math.min(drawMs, (performance.now() - t1) / 5); }
+    return { floor: f, tris, calls, geometries: i.memory.geometries, stepMs: +simMs.toFixed(2), drawMs: +drawMs.toFixed(1) };
   }, f);
   console.log(JSON.stringify(r));
 }

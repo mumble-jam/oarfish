@@ -1556,6 +1556,7 @@ export async function start(saved = {}) {
     placeCamera(dt);
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
+    if (world.react) for (const c of world.react.rang.splice(0)) { music.chime(c.note, c.v); buzz(0, 0.16 * c.v, 40); } // a chime brushed: the band gives it its note, the hands a tick. (The sea's surface, at the end, is a world with nothing in it to answer.)
     lessons(dt);
     hud(dt);
     music.update(dt, {

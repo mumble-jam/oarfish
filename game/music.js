@@ -448,6 +448,17 @@ export function createMusic({ context = null } = {}) {
       st.intensity += (target - st.intensity) * (1 - Math.exp(-dt * (target > st.intensity ? 3.2 : 0.55)));
       st.tension += (s.coil * P.react - st.tension) * (1 - Math.exp(-dt * 2.5));
     },
+    // A ruin chime, brushed. `i` is the bar's place in its set, 0 the longest; the note is taken from the chord the band is on at
+    // this moment (the same voicing the piano comps with), so whatever is rung belongs. Returns the note, or null if the band is not playing.
+    chime(i, strength = 1) {
+      if (!st.started || !n) return null;
+      const t = now() + 0.008, up = voicing(chordAt(st.bar), 72), m = up[i % up.length] + 12 * Math.floor(i / up.length), f = mtof(m), v = 0.35 + 0.65 * clamp(strength, 0, 1);
+      for (const [k, level, decay] of [[1, 0.2, 2.0], [2.76, 0.07, 0.75], [5.4, 0.03, 0.28]]) tone(t, { f0: f * k, decay, gain: level * v, out: n.keysIn }); // a struck bar: its own three partials, the high ones gone first
+      st.rung = m;
+      return m;
+    },
+    // the notes the chimes may ring right now, low to high
+    chimeNotes() { const up = voicing(chordAt(st.bar), 72); return [...up, ...up.map((m) => m + 12)]; },
     // something just happened: answer it now, not on the next bar
     hit(kind, strength = 1) {
       if (!st.started) return;

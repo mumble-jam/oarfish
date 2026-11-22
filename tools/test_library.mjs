@@ -33,7 +33,7 @@ const vis = (sel) => ev((s) => { const el = document.querySelector(s); return !!
 // ---- opening it from the pause menu
 await page.keyboard.press('KeyP'); await page.waitForTimeout(200); await page.click('#btn-library'); await frame();
 let s = await ev(() => ({ open: window.__game.lib.isOpen, paused: window.__game.paused, list: [...document.querySelectorAll('#lib-list button')].map((b) => b.dataset.id), groups: [...document.querySelectorAll('#lib-list h3')].map((h) => h.textContent), name: document.getElementById('lib-name').textContent, hash: location.hash }));
-check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 60 && s.groups.join() === 'The oarfish,Swarms,Hunters,Keepers of the rifts,The Sum,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
+check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 62 && s.groups.join() === 'The oarfish,Swarms,Company,Hunters,Keepers of the rifts,The Sum,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
 await snap('l-oarfish');
 
 // ---- one playground: the biter
@@ -90,6 +90,15 @@ await page.goto(`${url}#library/angler`, { waitUntil: 'domcontentloaded' }); awa
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 }); await frame();
 s = await ev(() => ({ open: window.__game.lib.isOpen, id: window.__game.lib.state.id, lure: !!window.__game.lib.scene.getObjectByProperty('isSprite', true) }));
 check('a link ending in #library/angler opens the library on the angler, lure and all', s.open && s.id === 'angler' && s.lure, JSON.stringify(s));
+// what answers the fish shows that answer on the stand: the anemone shut, the kelp leaning; and the pilot fish is a creature like the rest
+s = await ev(async () => { const g = window.__game, L = g.lib, held = () => { let v = null; L.scene.traverse((o) => { if (o.isInstancedMesh && o.material.userData.near) v = o.material.userData.near.value; }); return v; }, out = {};
+  for (const id of ['anemone', 'kelp']) { L.pick(id); const states = [...document.querySelectorAll('[data-set="state"] button')]; out[id] = { states: states.map((b) => b.textContent), open: held() }; states[1].click(); for (let i = 0; i < 40; i++) L.frame(1 / 30); out[id].near = held(); document.querySelector('[data-set="state"] button').click(); for (let i = 0; i < 150; i++) L.frame(1 / 30); out[id].back = held(); }
+  const N = await import('/game/npc.js'), tuck = N.NPC.anemone.build().attributes.tuck; let most = 0; for (let i = 0; i < tuck.count; i++) most = Math.max(most, tuck.getW(i));
+  L.pick('pilot'); out.pilot = { name: document.getElementById('lib-name').textContent, states: [...document.querySelectorAll('[data-set="state"] button')].map((b) => b.textContent), tris: parseInt(document.getElementById('lib-tris').textContent, 10) };
+  L.pick('chime'); out.chime = document.getElementById('lib-name').textContent;
+  return { ...out, most, kelpTuck: !!N.NPC.kelp.build().attributes.tuck, give: N.NPC.kelp.material.give, shy: N.NPC.anemone.material.shy }; });
+check('on the stand, an anemone can be shown shut and kelp leaning, each opening again slowly; the pilot fish and the chime are there with the rest',
+  s.anemone.states.length === 2 && s.anemone.open === 0 && s.anemone.near > 0.95 && s.anemone.back < 0.05 && s.kelp.near > 0.95 && s.most > 0.8 && !s.kelpTuck && s.give > 0 && s.shy === 1 && s.pilot.name === 'Pilot fish' && s.pilot.states.length === 2 && s.pilot.tris > 60 && s.pilot.tris < 200 && s.chime === 'Chime', JSON.stringify(s));
 console.log(failures ? `${failures} check(s) failed` : 'all library checks passed');
 await browser.close(); server.close();
 process.exit(failures ? 1 : 0);

@@ -76,13 +76,13 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
       const pal = resolve(spec.paletteFrom || S.id).palette, geo = spec.build(pal), show = spec.show || {}, n = show.n || 1, mm = spec.material || {};
       const mat = spec.kind === 'shell' ? shellMaterial() : mm.stone ? new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: mm.double ? THREE.DoubleSide : THREE.FrontSide }) : spec.baked ? alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })) : growing(mm, clock);
       const own = Object.keys(pal).filter((k) => /^tone\d+$/.test(k)).map((k) => pal[k]);
-      const tones = spec.tintWith === 'paint' ? [paintOf(S.band)] : spec.tintWith === 'clay' ? [tint('#c98f6c', paintOf(S.band), 0.28)] : spec.tintWith ? stoneOf(S.band) : own.length ? own : ['#ffffff'];
+      const tones = spec.tintWith === 'paint' ? [paintOf(S.band)] : spec.tintWith === 'clay' ? [tint('#c98f6c', paintOf(S.band), 0.28)] : spec.tintWith === 'bronze' ? [tint('#d9ab5a', paintOf(S.band), 0.2)] : spec.tintWith ? stoneOf(S.band) : own.length ? own : ['#ffffff'];
       const mesh = new THREE.InstancedMesh(geo, mat, n), c = new THREE.Color(), rand = rng(11), base = [].concat(show.scale ?? 1), sc3 = base.length === 3 ? base : [base[0], base[0], base[0]], k0 = spec.kind === 'shell' ? preview.scale : 1;
       for (let i = 0; i < n; i++) { const a = i * 2.4 + rand(), d = i ? (show.spread || 1) * (0.55 + 0.45 * Math.sqrt(i / n)) * (0.8 + 0.4 * rand()) : 0, k = (i ? 0.7 + 0.35 * rand() : 1) * k0;
         mesh.setMatrixAt(i, m4.compose(v.set(Math.sin(a) * d, 0, Math.cos(a) * d), q.setFromAxisAngle(v2.set(0, 1, 0), i ? rand() * 6.28 : 0), v2.set(sc3[0] * k, sc3[1] * k, sc3[2] * k)));
         mesh.setColorAt(i, c.set(tones[(S.tone + i) % tones.length])); }
       mesh.frustumCulled = false; stand.add(mesh); tris = geo.attributes.position.count / 3;
-      shown = { mesh, body: mesh, spin: !!show.spin, tall: spec.length * (show.flat ? 0.15 : 1), tones: tones.length, dispose() { mesh.dispose(); mat.dispose(); if (spec.baked) geo.dispose(); } };
+      shown = { mesh, body: mesh, spin: !!show.spin, near: (mm.shy || mm.give) && mat.userData.near ? mat.userData.near : null, tall: spec.length * (show.flat ? 0.15 : 1), tones: tones.length, dispose() { mesh.dispose(); mat.dispose(); if (spec.baked) geo.dispose(); } };
       S.lift = show.lift || 0;
     } else {
       const actor = make(S.id, { preview });
@@ -114,6 +114,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
       if (spec.spin) { o.rotation.y += dt * spec.spin[1]; o.rotation.x += dt * spec.spin[0]; }
       if (state.sway) o.rotation.y = Math.sin(S.t * 0.4) * 0.6;
       if (a.parts.glow && state.lure !== undefined) a.parts.glow.scale.setScalar(state.lure * (1 + 0.08 * Math.sin(S.t * 5)));
+    } else if (shown?.near) { shown.near.value += ((state.near || 0) - shown.near.value) * (1 - Math.exp(-(state.near ? 7 : 1.6) * dt)); // what answers the fish: shut or leaning at once, open again slowly
     } else if (shown?.spin) { stand.rotation.y += dt * 0.5; stand.position.y = S.lift + 0.12 * Math.sin(S.t * 1.6); // a thing adrift turns and bobs
     } else if (shown?.fish) {
       const sc = { x: 0, y: 0, z: 0, ball: SWARMS[S.tier].r, pack: state.pack ?? 1, threat: state.threat ?? 0, burst: state.burst || 0 }, kit = shown.kit;

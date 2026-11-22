@@ -33,6 +33,23 @@ export function swarmFish(kind, pal) {
   return m.geometry();
 }
 
+// ---------------------------------------------------------------- the pilot fish, which keeps the oarfish company
+// The real one (Naucrates ductor) is bluish with six or seven broad dark bars and white tips to the lobes of its tail, and
+// goes about beside sharks. Here the tips are lit, so that in the dark bands it is two small lights at the fish's side.
+export function pilot(pal) {
+  const m = mesher(), { back, flank, bar, belly, fin, tip } = pal;
+  hull(m, [[0.2, 0.005, 0.009, 0.009], [0.165, 0.022, 0.034, 0.03], [0.115, 0.034, 0.052, 0.05], [0.065, 0.039, 0.062, 0.06], [0.01, 0.04, 0.064, 0.062], [-0.045, 0.036, 0.056, 0.056], [-0.095, 0.027, 0.042, 0.042], [-0.14, 0.014, 0.024, 0.024], [-0.175, 0.006, 0.013, 0.013]],
+    (i, k, n) => (k === 2 || k === 3 ? belly : i % 2 ? bar : k === 0 || k === n - 1 ? back : flank));
+  // a forked tail, the lobes tipped white
+  for (const up of [1, -1]) { const root = [0, up * 0.011, -0.172], mid = [0, 0, -0.2], out = [0, up * 0.085, -0.265], end = [0, up * 0.105, -0.3];
+    m.tri(root, mid, out, fin).tri(mid, out, [0, up * 0.03, -0.235], fin).tri(out, end, [0, up * 0.07, -0.285], tip, true); }
+  m.tri([0, 0.06, 0.02], [0, 0.092, -0.05], [0, 0.05, -0.12], [fin, fin, tip]); // the back fin, long and low
+  m.tri([0, -0.058, -0.03], [0, -0.084, -0.08], [0, -0.045, -0.12], [fin, fin, tip]);
+  both((s) => { m.tri([s * 0.036, -0.012, 0.085], [s * 0.075, -0.04, 0.03], [s * 0.037, -0.03, 0.05], fin);
+    m.tri([s * 0.024, 0.02, 0.158], [s * 0.03, 0.035, 0.14], [s * 0.03, 0.011, 0.138], '#14121c'); }); // the eye
+  return m.geometry();
+}
+
 // ---------------------------------------------------------------- the tail-biter: a deep-chested thing with an underbite
 export function biter(pal) {
   const m = mesher(), { back, flank, bar, belly, fins: red, finDark: redDark, jaw: dark } = pal;

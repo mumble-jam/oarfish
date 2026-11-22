@@ -63,6 +63,17 @@ Flat-shaded triangles with a colour at each corner, no textures, no imported mod
 
 One material a creature. The Keeper is about 700 triangles in 21 pieces; the Shearer is one piece. A keeper may cost that much; something there are twenty of may not: a swarm fish stays a single instanced model, and gets its character from how the swarm moves.
 
+## 9. What grows, and what only answers
+
+Not creatures, but the first rule holds: look at the real thing. A touched anemone draws its crown in, a tube worm is gone down its tube before anything reaches it, a sea pen folds and sinks into the bed, kelp only leans.
+
+A thing that grows answers the fish in one of two ways, chosen where it is registered in `world.js`:
+
+- `give`: it leans out of the way, by that part of its own height. Nothing to mark in the model.
+- `shy`: it pulls in. In the model, say what pulls in and to where with `m.tuck(home)` before making those parts, and `m.tuck()` after: a tentacle to its root, a plume to a point inside its tube. Only what is marked moves, so the tube stays and the plume goes.
+
+The library shows the answer as a second pose without being asked. None of this may ever matter to the rules: the fish swims through all of it as before.
+
 ## Where each creature stands
 
 | Creature | Real animal | Trait | State |
@@ -75,3 +86,4 @@ One material a creature. The Keeper is about 700 triangles in 21 pieces; the She
 | Tail-biter | | | Being redrawn in the soft style, in another branch: leave it |
 | Angler, Hook, Spined drifter, Leech | | | To do |
 | Sprat, Lanternfish, Ghost fish | | | To do: as swarms, not one by one |
+| Pilot fish | *Naucrates ductor*, which goes about beside sharks | dark bars, and lit white tips to the tail | Done as company: waits, rides the wake, is left behind. One model, five to a band |

@@ -39,6 +39,12 @@ export const NPCS = [
   { id: 'ghostfish', name: 'Ghost fish', bands: [4], about: 'What swims in the palace: pale, with one lit line down each side.', ...swarmOf(2),
     palette: { back: '#a2bcd4', line: '#fff3d0', ...SCHOOL } },
 
+  { id: 'pilot', group: 'Company', name: 'Pilot fish', bands: [0, 1, 2, 3, 4], length: 0.5, role: 'Not food, and no danger. A few wait along the way in every band; they fall in beside the body as it passes and ride there, keeping up with a swim but not with a sprint.',
+    about: 'Blue, with dark bars and white tips to the tail, as the real ones are that go about beside sharks. The tips are lit, so in the dark it is two small lights at your side.',
+    palette: { back: '#274a7a', flank: '#a9cbe6', bar: '#1f3050', belly: '#f2f8fc', fin: '#35598a', tip: '#ffffff' },
+    build: (pal) => model.pilot(pal), swim: { amp: 0.022, waves: 2.4, nose: 0.2, length: 0.5 }, beat: [5, 2.4],
+    states: [{ id: 'wait', name: 'Waiting', speed: 0.7 }, { id: 'ride', name: 'Riding the wake', speed: 3.3 }] },
+
   { id: 'biter', group: 'Hunters', name: 'Tail-biter', bands: [1, 2, 3, 4], length: 0.9, role: 'Goes for the back half of the body. A dash head-first breaks it.',
     about: 'Deep-chested, with an underbite and a tall fin. It lives in the shearing stalls, and on the Sum as cleaner fish live on a whale.',
     palette: { back: '#3f2550', flank: '#6d4180', bar: '#583369', belly: '#a981b3', fins: '#e2566b', finDark: '#b8364f', jaw: '#2d1a3a', eye: '#eaff7c' },
@@ -122,7 +128,7 @@ NPCS.push(
     palette: { band1: '#c3cfae', band2: '#d2d8c2', band3: '#dde0cf', band4: '#e2e3d8', band5: '#e8e8e0' }, swim: null, beat: [0, 0], states: [{ id: 'row', name: 'The five bands' }] });
 export const NPC = Object.fromEntries(NPCS.map((s) => [s.id, s]));
 // The library lists its groups in this order. Other files add their own things to it with register().
-export const GROUPS = ['The oarfish', 'Swarms', 'Hunters', 'Keepers of the rifts', 'The Sum', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
+export const GROUPS = ['The oarfish', 'Swarms', 'Company', 'Hunters', 'Keepers of the rifts', 'The Sum', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
 export function register(spec) { const full = { bands: [0, 1, 2, 3, 4], swim: null, beat: [0, 0], palette: {}, states: [{ id: 'still', name: 'As it stands' }], kind: 'thing', fixed: true, ...spec }; NPCS.push(full); NPC[full.id] = full; return full; }
 export const inOrder = () => [...NPCS].sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
 export const swarmFor = (band) => ['sprat', 'sprat', 'lanternfish', 'lanternfish', 'ghostfish'][band] || 'sprat';

@@ -389,6 +389,42 @@ s = await ev(() => { const g = window.__game; const code = g.presetCode(); const
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);
   return { code, r1, dream1: p1.dream, r2, dreamHere: here.dream, dreamThere: there.dream, menaceThere: there.menace, code3, r3 }; });
 check('preset codes copy, paste for all depths, and paste for one depth', /^oarfish-music:1:dream=\d+/.test(s.code) && s.dream1 === 0.9 && s.dreamHere === 0.9 && s.dreamThere === 0.3 && s.menaceThere === 0.95 && /zone=3$/.test(s.code3) && /not a preset/.test(s.r3), JSON.stringify(s));
+// ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
+  // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake
+  const pull = (x, y, z, tall = 0.6) => Math.max(...R.wake.value.map((w) => { const dy = w.y - Math.min(Math.max(w.y, y), y + tall), d = Math.hypot(w.x - x, dy, w.z - z), k = Math.min(1, Math.max(0, (d - 0.7) / 1.9)); return w.w * (1 - k * k * (3 - 2 * k)); }));
+  T.put(A.x + 30, A.y + 3, A.z); T.idle(0.3); const far = pull(A.x, A.y, A.z);
+  T.put(A.x - 4, A.y + 1.5, A.z, Math.PI / 2); let over = 0, under = 1, tail = -1; const J = () => g.rig.joints;
+  for (let i = 0; i < 80 && tail < 0; i++) { T.swim(0.1, 1, 0); const p = pull(A.x, A.y, A.z); over = Math.max(over, p); if (J()[0].x > A.x + 1 && J()[J().length - 1].x < A.x - 1) under = Math.min(under, p); if (J()[J().length - 1].x > A.x + 4.5) tail = p; }
+  T.swim(4, 1, 0); const gone = pull(A.x, A.y, A.z);
+  return { far, over, under, tail, gone, kinds: Object.keys(R.grown).filter((k) => R.grown[k].length).join(), points: R.wake.value.length }; });
+check('an anemone shuts as the fish goes over, stays shut for its whole length and a moment more, and opens again', s.far === 0 && s.over > 0.9 && s.under > 0.5 && s.tail > 0.1 && s.gone === 0 && /anemone/.test(s.kinds) && /kelp/.test(s.kinds) && /seagrass/.test(s.kinds) && /clam/.test(s.kinds), JSON.stringify(s));
+s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f = R.pilots[0], h = (x, z) => g.world.height(x, z);
+  const yaw = Math.atan2(g.world.goal.x - f.hx, g.world.goal.z - f.hz), dx = Math.sin(yaw), dz = Math.cos(yaw), x0 = f.hx - dx * 14 + dz * 9, z0 = f.hz - dz * 14 - dx * 9;
+  T.put(x0, h(x0, z0) + 5, z0, yaw); T.idle(0.2); const p0 = R.puffed; g.sim(2.5, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); const high = R.puffed - p0, clearHigh = g.rig.pos.y - h(g.rig.pos.x, g.rig.pos.z);
+  T.put(x0, h(x0, z0) + 1.5, z0, yaw); T.idle(0.1); const p1 = R.puffed; g.sim(2.5, { ...T.none(), dir: { x: dx, y: 0, z: dz }, vertical: -1 }); const low = R.puffed - p1, live = R.puffs, clearLow = g.rig.pos.y - h(g.rig.pos.x, g.rig.pos.z);
+  T.idle(4); return { high, low, live, after: R.puffs, clearHigh: +clearHigh.toFixed(2), clearLow: +clearLow.toFixed(2) }; });
+check('a fish held down against the bed raises silt behind it, one swimming free raises none, and the silt settles', s.high === 0 && s.low >= 8 && s.live >= 4 && s.after === 0 && s.clearHigh > 3 && s.clearLow < 1.8, JSON.stringify(s));
+s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f = R.pilots[0], h = (x, z) => g.world.height(x, z), near = () => Math.min(...g.rig.joints.map((j) => j.distanceTo(f.p)));
+  const yaw = Math.atan2(g.world.goal.x - f.hx, g.world.goal.z - f.hz), dx = Math.sin(yaw), dz = Math.cos(yaw), food = g.world.schools.reduce((a, sc) => a + sc.left, 0), segs = g.run.segs;
+  T.put(f.hx - dx * 16, f.hy, f.hz - dz * 16, yaw); T.idle(0.5); const waiting = !f.riding && Math.hypot(f.p.x - f.hx, f.p.z - f.hz) < 2.5;
+  g.sim(8, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); const riding = f.riding, beside = near(), moved = Math.hypot(f.p.x - f.hx, f.p.z - f.hz);
+  T.idle(3); const resting = f.riding && near() < 2.2; // the fish stops: it stays by
+  f.p.x -= dx * 30; f.p.z -= dz * 30; g.sim(4, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); const left = !f.riding; const at = f.p.clone(); T.idle(2); const stays = f.p.distanceTo(at) < 3.5;
+  return { n: R.pilots.length, waiting, riding, beside: +beside.toFixed(2), moved: +moved.toFixed(1), resting, left, stays, food: g.world.schools.reduce((a, sc) => a + sc.left, 0) === food, segs: g.run.segs === segs }; });
+check('a pilot fish waits on the way, falls in beside the body as it passes and stays by it; left far behind, it waits where it is', s.n === 5 && s.waiting && s.riding && s.beside < 1.6 && s.moved > 4 && s.resting && s.left && s.stays && s.food && s.segs, JSON.stringify(s));
+s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, h = (x, z) => g.world.height(x, z), r = g.world.rift;
+  const cs = R.chimes.reduce((a, c) => (Math.hypot(c.x - g.rig.pos.x, c.z - g.rig.pos.z) < Math.hypot(a.x - g.rig.pos.x, a.z - g.rig.pos.z) ? c : a)), long = cs.bars.reduce((a, b) => (b.len > a.len ? b : a));
+  const yaw = 2 * Math.atan2(cs.q.y, cs.q.w) + Math.PI / 2, dx = Math.sin(yaw), dz = Math.cos(yaw), y = long.y - long.len * 0.8;
+  T.put(long.x - dx * 7, y, long.z - dz * 7, yaw); T.idle(0.3); const before = R.rings, x0 = g.rig.pos.x, z0 = g.rig.pos.z;
+  let swung = 0; for (let i = 0; i < 40; i++) { g.sim(0.1, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); swung = Math.max(swung, Math.hypot(long.ox, long.oz)); }
+  const rang = R.rings - before, went = Math.hypot(g.rig.pos.x - x0, g.rig.pos.z - z0); T.put(long.x + 40, y, long.z + 40); T.idle(9);
+  const rest = Math.max(...cs.bars.map((b) => Math.hypot(b.ox, b.oz)));
+  g.music.unlock(); const here = g.music.chimeNotes(), a = g.music.chime(0, 1), b = g.music.chime(1, 1); g.enterFloor(2, false); const below = g.music.chimeNotes(); g.enterFloor(0, false);
+  return { sets: R.chimes.length, bars: R.chimes.reduce((n, c) => n + c.bars.length, 0), atRift: R.chimes.filter((c) => Math.hypot(c.x - r.x, c.z - r.z) < 16).length, rang, swung: +swung.toFixed(2), went: +went.toFixed(1), rest: +rest.toFixed(3), queue: R.rang.length,
+    started: !!g.music.describe(), a, b, inChord: here.includes(a) && here.includes(b), moves: here.join() !== below.join(), notes: here.length }; });
+check('a chime brushed swings aside and rings once, stops nobody, and hangs still again; its note is from the chord the band is on, and changes with the key',
+  s.sets >= 4 && s.bars >= 12 && s.atRift === 0 && s.rang >= 1 && s.rang <= 3 && s.swung > 0.15 && s.went > 9 && s.rest < 0.02 && s.queue === 0 && s.started && s.a !== s.b && s.inChord && s.moves, JSON.stringify(s));
 await page.evaluate(() => { try { localStorage.clear(); } catch {} });
 await snap(page, 'g-drawer');
 await page.close();

@@ -12,7 +12,8 @@ export const bright = (k) => [k, k, k];
 const isRGB = (c) => Array.isArray(c) && typeof c[0] === 'number';
 
 export function mesher() {
-  const pos = [], col = [];
+  const pos = [], col = [], tuck = [];
+  let home = null, shy = 0, tucked = false; // see m.tuck
   const lin = (c) => { if (isRGB(c)) return c; C.set(c); return [C.r, C.g, C.b]; };
   const A = new THREE.Vector3(), B = new THREE.Vector3(), N = new THREE.Vector3(), P = new THREE.Vector3();
   const three = (colour) => (Array.isArray(colour) && !isRGB(colour) ? colour : [colour, colour, colour]);
@@ -20,9 +21,13 @@ export function mesher() {
     // one triangle. colour: one colour, or one for each corner
     tri(a, b, c, colour, glow = false) {
       const cs = three(colour);
-      [a, b, c].forEach((p, i) => { const k = lin(cs[i]); pos.push(p[0], p[1], p[2]); col.push(k[0], k[1], k[2], glow ? 0 : 1); });
+      [a, b, c].forEach((p, i) => { const k = lin(cs[i]), h = typeof home === 'function' ? home(p) : home || p; pos.push(p[0], p[1], p[2]); col.push(k[0], k[1], k[2], glow ? 0 : 1); tuck.push(h[0], h[1], h[2], home ? shy : 0); });
       return m;
     },
+    // What is made from here on pulls in when something big comes by (kit.growing, `shy`): a tentacle to its root, a plume into its
+    // tube. to: the point it pulls in to, or a function giving that point for each corner; k: how far it goes, 1 all the way.
+    // m.tuck() ends it.
+    tuck(to = null, k = 1) { home = to; shy = k; tucked ||= !!to; return m; },
     // a triangle that must face away from `from`, a point inside the model
     out(a, b, c, from, colour, glow) {
       A.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); B.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]); N.crossVectors(A, B);
@@ -73,7 +78,7 @@ export function mesher() {
     // any three.js geometry, placed with a matrix
     add(geo, matrix, colour, glow = false) {
       const g = geo.index ? geo.toNonIndexed() : geo, a = g.attributes.position, k = lin(colour || '#ffffff');
-      for (let i = 0; i < a.count; i++) { P.fromBufferAttribute(a, i); if (matrix) P.applyMatrix4(matrix); pos.push(P.x, P.y, P.z); col.push(k[0], k[1], k[2], glow ? 0 : 1); }
+      for (let i = 0; i < a.count; i++) { P.fromBufferAttribute(a, i); if (matrix) P.applyMatrix4(matrix); pos.push(P.x, P.y, P.z); col.push(k[0], k[1], k[2], glow ? 0 : 1); tuck.push(P.x, P.y, P.z, 0); }
       return m;
     },
     // an eye on the side of a head, looking along `n`: a dark ring, an iris, a pupil
@@ -87,6 +92,7 @@ export function mesher() {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+      if (tucked) g.setAttribute('tuck', new THREE.Float32BufferAttribute(tuck, 4));
       g.computeVertexNormals();
       return g;
     },
@@ -135,19 +141,55 @@ export function alive(material, { glow = 1, swim = null } = {}) {
 
 // The material of everything that grows. It may sway with the water (each one at its own place in the swell, taken from
 // where it stands), and faces marked for it give off light. time: { value } in seconds, the owner's clock.
-export function growing({ sway = 0, glow = 0, double = true } = {}, time) {
+// It also answers something big going by. wake: { value: WAKE points, each (x, y, z, how much it counts), bound: { value: (x, z,
+// radius) } }, the owner's: the points are kept along the body of whatever is passing and for a moment behind it, and the bound is a
+// circle on the bed outside which nothing need look at them, so that only what stands near the fish does the sum. `give` is how far a thing leans out of its way, as a part
+// of its own height (kelp parts, grass lies over); `shy` is how much of the way what the model marked with m.tuck pulls in
+// (and only a model that has such marks may be given it). material.userData.near is the same answer held on, 0 to 1, for
+// showing it where nothing is passing.
+export const WAKE = 12;
+const STILL = { value: Array.from({ length: WAKE }, () => new THREE.Vector4()), bound: { value: new THREE.Vector3() } };
+export function growing({ sway = 0, glow = 0, double = true, give = 0, shy = 0 } = {}, time, wake = STILL) {
   const m = new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: double ? THREE.DoubleSide : THREE.FrontSide }), amp = { value: sway }, lit = { value: glow };
+  const react = give > 0 || shy > 0, near = { value: 0 };
+  m.userData.near = near;
+  if (react) m.defines = { ...(shy > 0 ? { TUCK: '' } : {}), WAKE };
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = time; sh.uniforms.uSway = amp; sh.uniforms.uGlow = lit;
-    sh.vertexShader = 'uniform float uTime;\nuniform float uSway;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    if (react) { sh.uniforms.uWake = wake; sh.uniforms.uWakeBound = wake.bound || STILL.bound; sh.uniforms.uGive = { value: give }; sh.uniforms.uShy = { value: shy }; sh.uniforms.uNear = near; }
+    sh.vertexShader = `uniform float uTime;\nuniform float uSway;\n${react ? 'uniform vec4 uWake[WAKE];\nuniform vec3 uWakeBound;\nuniform float uGive;\nuniform float uShy;\nuniform float uNear;\n#ifdef TUCK\nattribute vec4 tuck;\n#endif\n' : ''}` + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   #ifdef USE_INSTANCING
     float kph = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.53;
     float kb = position.y * position.y * uSway;
-    transformed.x += sin(uTime * 1.1 + kph + position.y * 2.4) * 0.17 * kb;
+${react ? `    vec3 kroot = instanceMatrix[3].xyz;
+    float ktall = length(instanceMatrix[1].xyz);
+    float kpull = uNear;
+    vec2 kpush = vec2(uNear, 0.0);
+    if (distance(kroot.xz, uWakeBound.xy) < uWakeBound.z) {
+      for (int i = 0; i < WAKE; i++) {
+        vec3 kd = kroot - uWake[i].xyz;
+        kd.y = uWake[i].y - clamp(uWake[i].y, kroot.y, kroot.y + ktall); // how far above its top, or below its foot
+        float kw = uWake[i].w * (1.0 - smoothstep(0.7, 2.6, length(kd)));
+        kpull = max(kpull, kw);
+        kpush += kd.xz * (kw / (length(kd.xz) + 0.05));
+      }
+    }
+    #ifdef TUCK
+      transformed = mix(transformed, tuck.xyz, tuck.w * kpull * uShy);
+    #endif
+    kb *= 1.0 - 0.6 * kpull;
+    float kl = length(kpush);
+    if (kl > 0.001 && uGive > 0.0) {
+      vec3 kaway = vec3(kpush.x, 0.0, kpush.y) * (min(kl, 1.0) / kl) * uGive * ktall * position.y * position.y; // in the world, metres
+      transformed.x += dot(instanceMatrix[0].xyz, kaway) / dot(instanceMatrix[0].xyz, instanceMatrix[0].xyz);
+      transformed.z += dot(instanceMatrix[2].xyz, kaway) / dot(instanceMatrix[2].xyz, instanceMatrix[2].xyz);
+      transformed.y -= 0.67 * min(kl, 1.0) * min(kl, 1.0) * uGive * uGive * position.y * position.y * position.y; // leaning, not stretching
+    }
+` : ''}    transformed.x += sin(uTime * 1.1 + kph + position.y * 2.4) * 0.17 * kb;
     transformed.z += cos(uTime * 0.9 + kph * 1.7 + position.y * 2.0) * 0.13 * kb;
   #endif`);
     sh.fragmentShader = 'uniform float uGlow;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR_ALPHA\n  totalEmissiveRadiance += vColor.rgb * (1.0 - vColor.a) * uGlow;\n#endif');
   };
-  m.customProgramCacheKey = () => 'growing';
+  m.customProgramCacheKey = () => `growing${react ? (shy > 0 ? '-shy' : '-give') : ''}`;
   return m;
 }

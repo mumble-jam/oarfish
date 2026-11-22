@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from './geo.js';
-import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing } from './kit.js';
+import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing, WAKE } from './kit.js';
 import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf } from './npc.js';
 
 export const T = 144;
@@ -163,10 +163,12 @@ function geometries() {
     return m.geometry(); })();
   // an anemone: a short column and a crown of tentacles with pale ends
   const anemone = (() => { const m = mesher();
+    m.tuck((p) => [p[0] * 1.12, p[1] * 0.72, p[2] * 1.12]); // touched, the column squats and the crown is drawn in over the mouth
     m.limb([0, 0, 0], [0, 0.2, 0], 0.17, 0.22, 7, [grey(0.5), grey(0.75)]).cap(m.last, [0, 1, 0], grey(0.45), -0.03);
     for (let i = 0; i < 11; i++) { const yaw = (i / 11) * Math.PI * 2 + rand() * 0.3, t0 = 0.5 + rand() * 0.5, a = [Math.sin(yaw) * 0.16, 0.2, Math.cos(yaw) * 0.16], b = add3(a, aim(yaw, t0), 0.22), c = add3(b, aim(yaw, t0 - 0.5), 0.2 + rand() * 0.12);
+      m.tuck([Math.sin(yaw) * 0.1, 0.15, Math.cos(yaw) * 0.1], 0.86);
       m.limb(a, b, 0.04, 0.03, 3, [grey(0.7), grey(0.95)]).limb(b, c, 0.03, 0.008, 3, [grey(0.95), bright(1.6)]); }
-    return m.geometry(); })();
+    return m.tuck().geometry(); })();
   // a starfish (arm 0.38) or, with thin arms, a brittle star
   const star = (waist, lift) => { const m = mesher(), top = [0, lift, 0], pts = Array.from({ length: 10 }, (_, k) => { const a = (k / 10) * Math.PI * 2, r = k % 2 ? waist : 1; return [Math.sin(a) * r, k % 2 ? lift * 0.45 : 0.01, Math.cos(a) * r]; });
     for (let k = 0; k < 10; k++) m.out(top, pts[k], pts[(k + 1) % 10], [0, -1, 0], k % 2 ? [grey(0.72), grey(0.8), bright(1.25)] : [grey(0.72), bright(1.25), grey(0.8)]);
@@ -178,32 +180,36 @@ function geometries() {
   // a clam, or what is left of one: two ribbed valves, standing open
   const clam = (() => { const m = mesher();
     for (const [open, k] of [[0.06, 1], [0.8, 0.85]]) { const rim = Array.from({ length: 6 }, (_, i) => { const a = -0.95 + (i / 5) * 1.9, d = 1 - 0.07 * (i % 2); return [Math.sin(a) * d * 0.9, Math.sin(open) * Math.cos(a) * d + (i % 2 ? 0.03 : 0), Math.cos(open) * Math.cos(a) * d]; });
+      if (open > 0.5) { const c = Math.cos(open - 0.14), sn = Math.sin(open - 0.14); m.tuck((p) => [p[0], p[1] * c - p[2] * sn, p[2] * c + p[1] * sn]); } // the standing valve shuts, turning on the hinge
       for (let i = 0; i < 5; i++) m.tri([0, 0, 0], rim[i], rim[i + 1], [grey(0.5 * k), i % 2 ? bright(1.15 * k) : grey(0.86 * k), i % 2 ? grey(0.86 * k) : bright(1.15 * k)]); }
-    return m.geometry(); })();
+    return m.tuck().geometry(); })();
   const pebble = (() => { const g = new THREE.OctahedronGeometry(1, 0), a = g.attributes.position; for (let i = 0; i < a.count; i++) a.setXYZ(i, a.getX(i) * 1.1, a.getY(i) * 0.5 + 0.2, a.getZ(i) * 0.8); return grounded(plain([[g, null]]), 0.7, 1.06); })();
   // a sea lily: a jointed stalk and a cup of arms that curl in
   const lily = (() => { const m = mesher(), top = [0.05, 0.6, 0.02];
     m.limb([0, 0, 0], [0.03, 0.3, 0], 0.03, 0.026, 4, grey(0.55)).limb([0.03, 0.3, 0], top, 0.026, 0.035, 4, grey(0.65));
     for (let i = 0; i < 9; i++) { const yaw = (i / 9) * Math.PI * 2, o = aim(yaw, 1.0), s = [Math.cos(yaw), 0, -Math.sin(yaw)], w = 0.03;
       const at = (t) => [top[0] + o[0] * 0.3 * Math.sin(t * 2.0), top[1] + 0.42 * t, top[2] + o[2] * 0.3 * Math.sin(t * 2.0)], side = (p, sg, k) => [p[0] + s[0] * w * sg * k, p[1], p[2] + s[2] * w * sg * k];
+      m.tuck((p) => [top[0] + (p[0] - top[0]) * 0.22, top[1] + (p[1] - top[1]) * 0.8, top[2] + (p[2] - top[2]) * 0.22]); // the arms close up over the cup
       for (let j = 0; j < 3; j++) { const p = at(j / 3), q = at((j + 1) / 3); m.quad(side(p, -1, 1 - j * 0.25), side(p, 1, 1 - j * 0.25), side(q, 1, 0.75 - j * 0.25), side(q, -1, 0.75 - j * 0.25), [grey(0.7 + 0.1 * j), grey(0.7 + 0.1 * j), j === 2 ? bright(1.4) : grey(0.8 + 0.1 * j)]); } }
-    return m.geometry(); })();
+    return m.tuck().geometry(); })();
   // a glass sponge: a pale vase of lattice
   const glass = (() => { const rings = [[0.05, 0], [0.13, 0.3], [0.19, 0.68], [0.25, 1]].map(([r, y]) => ringY(y, r, 7, { x: 0.05 * y * y }));
     return mesher().skin(rings, (i, k) => grey((i + k) % 2 ? 1 : 0.66)).cap(rings[3], [0, 1, 0], grey(0.3), -0.42).geometry(); })();
   // tube worms: white tubes, red plumes. Coloured in itself
   const worms = (() => { const m = mesher();
     for (let i = 0; i < 6; i++) { const yaw = i * 1.9 + rand(), d = 0.05 + 0.13 * (i % 3), a = [Math.sin(yaw) * d, 0, Math.cos(yaw) * d], h = 0.4 + rand() * 0.6, b = add3(a, aim(yaw, 0.1 + rand() * 0.25), h);
-      m.limb(a, b, 0.05, 0.042, 5, ['#9a968c', '#efeadc']);
+      m.tuck().limb(a, b, 0.05, 0.042, 5, ['#9a968c', '#efeadc']);
+      m.tuck(add3(b, aim(yaw, 0.1), -0.07)); // the plume is gone down the tube before anything can touch it
       for (let k = 0; k < 4; k++) { const t = add3(b, aim(yaw + k * 1.57, 0.6), 0.2); m.tri(b, [t[0] - 0.03, t[1], t[2] - 0.03], [t[0] + 0.03, t[1], t[2] + 0.03], ['#a81f3c', '#ff5b6e', '#ff5b6e']); } }
-    return m.geometry(); })();
+    return m.tuck().geometry(); })();
   // a sea pen: a quill that makes its own light along its vanes
   const pen = (() => { const m = mesher(), spine = (t) => [0.1 * t * t, t, 0.02 * Math.sin(t * 5)];
+    m.tuck((p) => { const s = spine(p[1]); return [s[0] * 0.3, p[1] * 0.3, s[2] * 0.3]; }, 0.9); // the vanes fold to the quill and the quill goes down into the bed
     m.limb(spine(0), spine(0.3), 0.03, 0.022, 3, grey(0.3));
     for (let i = 0; i < 7; i++) { const t = 0.3 + i * 0.1, p = spine(t), q = spine(t + 0.1), L = 0.2 * (1 - i / 9);
       m.limb(p, q, 0.022 - i * 0.002, 0.02 - i * 0.002, 3, grey(0.4));
       for (const sg of [-1, 1]) m.tri(p, [p[0] + 0.02, p[1] + 0.13, p[2] + sg * L], q, [grey(0.5), bright(1.1), grey(0.6)], true); }
-    return m.geometry(); })();
+    return m.tuck().geometry(); })();
   // the lantern flower of the dark bands: the stalk bows over and the light hangs from it in its sepals
   const lantern = (() => { const m = mesher(), arc = [[0, 0, 0], [0.03, 0.45, 0], [0.09, 0.82, 0], [0.2, 0.98, 0], [0.31, 0.9, 0]];
     for (let i = 0; i < 4; i++) m.limb(arc[i], arc[i + 1], 0.03 - i * 0.004, 0.026 - i * 0.004, 3, grey(0.22 + 0.04 * i));
@@ -213,8 +219,15 @@ function geometries() {
     for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2; m.tri([c[0], c[1] + 0.17, 0], [c[0] + Math.sin(a - 0.5) * 0.09, c[1] + 0.06, Math.cos(a - 0.5) * 0.09], [c[0] + Math.sin(a + 0.5) * 0.09, c[1] + 0.06, Math.cos(a + 0.5) * 0.09], grey(0.3)); }
     return m.geometry(); })();
   const rockGeo = (() => { const m = mesher().add(rock, null, '#ffffff'); const g = grounded(m.geometry(), 0.66, 1.06); return g; })();
+  // a chime: a flat bar of bronze on a cord, hanging from where it is put, one long (it is stretched to its length). The band near its
+  // foot is painted, and lit where there is no other light to find it by
+  const chime = (() => { const m = mesher(), at = (y, k = 1) => ringY(y, 0.115 * k, 4, { turn: Math.PI / 4, squash: 0.3 });
+    m.limb([0, 0, 0], [0, -0.43, 0], 0.011, 0.011, 3, grey(0.3));
+    m.cap(at(-0.42, 0.8), [0, 1, 0], grey(0.75), 0.012).skin([at(-0.42, 0.8), at(-0.47), at(-0.83)], (i) => (i ? [grey(0.95), bright(1.08)] : [grey(0.75), grey(0.95)]));
+    m.skin([at(-0.83), at(-0.9)], bright(1.7), true).skin([at(-0.9), at(-1)], [bright(1.08), grey(0.8)]).cap(at(-1), [0, -1, 0], grey(0.6), 0.01);
+    return m.geometry(); })();
   GEO = {
-    rock: rockGeo, kelp: kelpGeo, tuft, stag, brain, seaFan, sponge, anemone, star: star(0.38, 0.14), brittle: star(0.13, 0.07), urchin, clam, pebble, lily, glass, worms, pen, lantern,
+    rock: rockGeo, kelp: kelpGeo, chime, tuft, stag, brain, seaFan, sponge, anemone, star: star(0.38, 0.14), brittle: star(0.13, 0.07), urchin, clam, pebble, lily, glass, worms, pen, lantern,
     finger: stag, table: tableGeo,
     drum: grounded(plain([[new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1).translate(0, 0.5, 0), null]]), 0.8, 1.02),
     block: grounded(plain([[new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), null]]), 0.8, 1.03),
@@ -235,25 +248,27 @@ function geometries() {
 // stone carries none: it takes its band's stone, or its band's paint, from the two sets in npc.js.
 {
   const pal = (list) => Object.fromEntries(list.map((c, i) => [`tone${i + 1}`, c]));
-  const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show });
+  // what answers the fish has a second pose to show: pulled in (`shy`), or leaning out of its way (`give`). See kit.growing
+  const answers = (m) => (m.shy ? [{ id: 'still', name: 'As it stands' }, { id: 'near', name: 'Pulled in, the fish going by', near: 1 }] : m.give ? [{ id: 'still', name: 'As it stands' }, { id: 'near', name: 'Leaning, the fish going by', near: 1 }] : undefined);
+  const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
-  grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1 });
-  grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3 });
+  grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.4 });
+  grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.55 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
   grows('tablecoral', 'Table coral', 'table', [0, 1, 2, 3, 4], 2.4, 'Tiers of plates on a stalk, with a scalloped, paler rim and dark underneath.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 1 }, { double: false });
   grows('braincoral', 'Brain coral', 'brain', [0, 1], 1.8, 'A dome, its ridges and valleys in two tones. The big ones are solid: the fish goes round.', ['#f6b95f', '#d9a86a', '#9fc59a', '#f28d7d', '#e8c9a0'], { scale: 0.9, n: 1 }, { double: false });
-  grows('seafan', 'Sea fan', 'seaFan', [0, 1, 2], 1.5, 'One flat spray of branches, standing across the current.', ['#b47be0', '#f08a4b', '#e2566b', '#f6d040', '#ff9fb0'], { scale: 1.5, n: 3, spread: 1.3 }, { sway: 0.5 });
+  grows('seafan', 'Sea fan', 'seaFan', [0, 1, 2], 1.5, 'One flat spray of branches, standing across the current.', ['#b47be0', '#f08a4b', '#e2566b', '#f6d040', '#ff9fb0'], { scale: 1.5, n: 3, spread: 1.3 }, { sway: 0.5, give: 0.22 });
   grows('sponge', 'Tube sponge', 'sponge', [0, 1, 2], 1.1, 'Open chimneys, wider at the lip, dark inside.', ['#f6d040', '#c98fe3', '#f08a4b', '#7fd6c8'], { scale: 1.1, n: 3, spread: 1.2 }, { double: false });
-  grows('anemone', 'Anemone', 'anemone', [0, 1, 2], 0.6, 'A short column and a crown of tentacles with pale ends, moving with the water.', ['#f4a4b9', '#9fe0b0', '#fff1d0', '#c98fe3', '#ff9f7a'], { scale: 0.95, n: 5, spread: 1 }, { sway: 0.9 });
-  grows('sealily', 'Sea lily', 'lily', [1, 2, 3, 4], 1.3, 'A jointed stalk and a cup of arms that curl in. An animal, for all it looks like a flower.', ['#f6d040', '#f6b95f', '#fff1d0', '#f4a4b9'], { scale: 1.3, n: 3, spread: 1.1 }, { sway: 0.5 });
+  grows('anemone', 'Anemone', 'anemone', [0, 1, 2], 0.6, 'A short column and a crown of tentacles with pale ends, moving with the water. It shuts when the fish comes by.', ['#f4a4b9', '#9fe0b0', '#fff1d0', '#c98fe3', '#ff9f7a'], { scale: 0.95, n: 5, spread: 1 }, { sway: 0.9, shy: 1 });
+  grows('sealily', 'Sea lily', 'lily', [1, 2, 3, 4], 1.3, 'A jointed stalk and a cup of arms that curl in. An animal, for all it looks like a flower: the arms close when the fish comes by.', ['#f6d040', '#f6b95f', '#fff1d0', '#f4a4b9'], { scale: 1.3, n: 3, spread: 1.1 }, { sway: 0.5, shy: 1 });
   grows('glasssponge', 'Glass sponge', 'glass', [2, 3, 4], 1, 'A pale vase of lattice, from the dark bands.', ['#e4f1ff', '#cfe3f2', '#f2faf7'], { scale: 1, n: 3, spread: 1 }, { double: false });
-  grows('tubeworms', 'Tube worms', 'worms', [3, 4], 1.1, 'White tubes with red plumes, in a clump by the rocks of the deepest bands. They are coloured in themselves: the tint only warms or cools them.', ['#ffffff'], { scale: 1.1, n: 3, spread: 0.9 }, { double: false });
-  grows('lantern', 'Lantern flower', 'lantern', [1, 2, 3, 4], 1.2, 'The stalk bows over and the light hangs from it in its sepals. Below the reach of the sun these are most of what there is to see by.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.25, 1.2, 1.25], n: 5, spread: 1 }, { sway: 0.3, glow: 1.15 });
-  grows('seapen', 'Sea pen', 'pen', [1, 2, 3, 4], 1.4, 'A quill that makes its own light along its vanes.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.5, 1.4, 1.5], n: 3, spread: 0.9 }, { sway: 0.3, glow: 1.15 });
+  grows('tubeworms', 'Tube worms', 'worms', [3, 4], 1.1, 'White tubes with red plumes, in a clump by the rocks of the deepest bands. They are coloured in themselves: the tint only warms or cools them. The plumes are gone down the tubes before the fish can touch them.', ['#ffffff'], { scale: 1.1, n: 3, spread: 0.9 }, { double: false, shy: 1 });
+  grows('lantern', 'Lantern flower', 'lantern', [1, 2, 3, 4], 1.2, 'The stalk bows over and the light hangs from it in its sepals. Below the reach of the sun these are most of what there is to see by.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.25, 1.2, 1.25], n: 5, spread: 1 }, { sway: 0.3, glow: 1.15, give: 0.3 });
+  grows('seapen', 'Sea pen', 'pen', [1, 2, 3, 4], 1.4, 'A quill that makes its own light along its vanes. Come near and it folds and goes down into the bed.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.5, 1.4, 1.5], n: 3, spread: 0.9 }, { sway: 0.3, glow: 1.15, shy: 1 });
   lies('starfish', 'Starfish', 'star', [0, 1, 2], 0.6, 'Five arms, paler at the tips, lying to the slope of the bed.', ['#f08a4b', '#e2566b', '#f6b95f', '#b47be0', '#f4a4b9'], { scale: 0.3, n: 5, spread: 0.7, flat: true }, { double: false });
   lies('brittlestar', 'Brittle star', 'brittle', [2, 3, 4], 0.9, 'The starfish of the dark bands: a small disc and long thin arms.', ['#e9dfc0', '#d7b9a0', '#f4a4b9', '#cfe3f2'], { scale: 0.45, n: 5, spread: 0.9, flat: true }, { double: false });
   lies('urchin', 'Urchin', 'urchin', [0, 1, 2, 3], 0.5, 'A small one on the bed, by the rocks. It is the spined drifter’s harmless cousin.', ['#3b2a4d', '#2b2038', '#5a2f4f', '#7a2f45'], { scale: 0.36, n: 5, spread: 0.8 });
-  lies('clam', 'Clam', 'clam', [0, 1, 2, 3, 4], 0.5, 'Two ribbed valves, standing open: or what is left of one.', ['#f3ead2', '#f9cdd6', '#d9c7a8', '#e7d3e8'], { scale: 0.26, n: 5, spread: 0.7 });
+  lies('clam', 'Clam', 'clam', [0, 1, 2, 3, 4], 0.5, 'Two ribbed valves, standing open, that shut as the fish goes over.', ['#f3ead2', '#f9cdd6', '#d9c7a8', '#e7d3e8'], { scale: 0.26, n: 5, spread: 0.7 }, { shy: 1 });
   lies('pebble', 'Pebbles', 'pebble', [0, 1, 2, 3, 4], 0.3, 'Pebbles and broken shell, in drifts.', ['#9aa39a', '#b7b8a6', '#8b9299', '#dcd9c6', '#7d8790', '#c9b9a0'], { scale: 0.14, n: 12, spread: 0.6, flat: true }, { double: false });
   lies('rock', 'Rock', 'rock', [0, 1, 2, 3, 4], 2.4, 'Darker toward the foot, where silt gathers. The big ones stand in reefs, and the corals keep to them.', ['#8f95a8', '#7f889c', '#a29dac', '#8c9aa3', '#969fb0'], { scale: [1.3, 0.95, 1.2], n: 1 }, { double: false });
   const built = (id, name, geo, length, about, tintWith = 'stone', show = { scale: 1, n: 1 }) => register({ id, group: 'Stonework', name, length, about, tintWith, role: `Has no colour of its own: it takes its band’s ${tintWith === 'paint' ? 'paint' : tintWith === 'clay' ? 'clay, warmed by its band’s paint' : 'stone'} (see Colours of the world).`, build: () => geometries()[geo], material: { stone: true, double: geo === 'shard' || geo === 'jarBroken' || geo === 'jar' }, show });
@@ -268,6 +283,8 @@ function geometries() {
   built('hoop', 'A young one’s hoop', 'hoop', 1.4, 'The stone hoops the young swam through, beside the houses and along the way to the first well.', 'paint');
   built('coil', 'The carved coil', 'coil', 1.4, 'A body that has almost closed on itself, with a crest where the head is. It sits at the middle of every hero’s ring.', 'paint', { scale: 1.2, n: 1, lift: 0.2 });
   built('coin', 'A tail, as coin', 'coin', 0.4, 'A tail segment: what the Long Ones paid with. Stacked on the market tables, heaped at the wells.', 'paint', { scale: 1, n: 6, spread: 0.3, lift: 0.1 });
+  register({ id: 'chime', group: 'Stonework', name: 'Chime', length: 2, tintWith: 'bronze', about: 'A flat bar of bronze on a cord. They hang in a row, the longest in the middle, under a lintel or on a line between two columns. The band near the foot is painted, and lit where there is nothing else to find it by.',
+    role: 'Brushed, it swings aside and rings, on a note of whatever chord the band is playing at that moment. It stops nobody.', build: () => geometries().chime, material: { double: false, glow: 0.7 }, show: { scale: [1, 2, 1], n: 5, spread: 0.9, lift: 2.3 } });
   built('jar', 'Jar', 'jar', 1, 'A storage jar: foot, belly, shoulder, neck, lip, two handles, a painted band. At nearly three times the size, sealed, it is the jar a dash breaks open.', 'clay');
   built('jarbroken', 'Broken jar', 'jarBroken', 0.8, 'What is left standing when a jar is broken.', 'clay');
   built('shard', 'Sherd', 'shard', 0.4, 'A potsherd, a roof tile, a broken plate: something thin with a curve to it.', 'clay', { scale: 1, n: 6, spread: 0.5, flat: true });
@@ -318,7 +335,9 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const rr = (a, b) => a + (b - a) * rand();
   const pick = (list) => list[Math.floor(rand() * list.length)];
   const drand = rng(seed * 977 + floor * 7919 + 4099), dr = (a, b) => a + (b - a) * drand(), dpick = (list) => list[Math.floor(drand() * list.length)]; // dressing only: never decides where anything that matters stands
+  const xrand = rng(seed * 977 + floor * 7919 + 9001), xr = (a, b) => a + (b - a) * xrand(); // for what answers the fish (chimes, pilot fish): a run of its own, so that nothing else moves to make room
   const time = { value: 0 }, seaLight = { value: F.seaLight };
+  const wake = { value: Array.from({ length: WAKE }, () => new THREE.Vector4()), bound: { value: new THREE.Vector3() } }; // where the fish's body is, and for a moment where its tail was: what grows leans from it or pulls in (kit.growing)
   const colliders = []; // { x, y, z, r } spheres and { x, z, r, top } upright cylinders
   const scatters = [], owned = [], materials = [];
   const add = (o) => { scene.add(o); owned.push(o); return o; };
@@ -532,7 +551,19 @@ float seaLight(vec2 p, float t) {
     for (let i = 0.15; i < 1; i += 0.3) colliders.push({ x: x + Math.sin(yaw) * len * i, y, z: z + Math.cos(yaw) * len * i, r: 0.7 });
   }
   // a beam across two columns: cut in two lengths, with a row of beam-ends and a painted course over them
-  function lintel(ax, az, bx, bz, top, thick = 0.6) {
+  // Chimes: bars on cords in a row, longest in the middle, under a lintel or on a line between two columns (`line`). Brushed, a bar
+  // swings aside and rings; the note is the band's to give (main.js, music.chime). They stop nobody, and nothing depends on them.
+  const chimeSets = [];
+  function hang(ax, az, bx, bz, y, line = false) {
+    const full = Math.hypot(bx - ax, bz - az), span = full - 1.7, n = clamp(Math.round(span / 0.95), 3, 7), gap = Math.min(0.72, span / n), yaw = Math.atan2(bx - ax, bz - az), ux = Math.sin(yaw), uz = Math.cos(yaw);
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2, long = clamp(y - height(mx, mz) - 2.9, 1.1, 3.2), turn = xrand() < 0.5 ? 1 : -1;
+    const order = Array.from({ length: n }, (_, k) => k).sort((a, b) => Math.abs(a - (n - 1) / 2 + 0.01 * turn) - Math.abs(b - (n - 1) / 2 + 0.01 * turn)); // from the middle out, a side at a time
+    const bars = Array.from({ length: n }, (_, k) => { const d = (k - (n - 1) / 2) * gap, rank = order.indexOf(k);
+      return { x: mx + ux * d, z: mz + uz * d, y, len: long * lerp(1, 0.52, rank / (n - 1)) * xr(0.97, 1.03), note: rank, ox: 0, oz: 0, vx: 0, vz: 0, held: 0, lit: 0, i: 0 }; });
+    chimeSets.push({ x: mx, z: mz, y, q: qY(yaw), bars, wx: NaN, wz: NaN, awake: 0 });
+    if (line) blocks.push({ x: mx, y: y - 0.025, z: mz, q: qY(yaw), s: S(0.05, 0.05, full - 0.9), color: '#4a4036' });
+  }
+  function lintel(ax, az, bx, bz, top, thick = 0.6, hung = true) {
     const yaw = Math.atan2(bx - ax, bz - az), len = Math.hypot(bx - ax, bz - az) + 1.5, tone = pick(stoneTones);
     const ux = Math.sin(yaw), uz = Math.cos(yaw), mx = (ax + bx) / 2, mz = (az + bz) / 2, cutAt = dr(0.38, 0.62), sag = drand() < 0.3 ? dr(0.04, 0.09) : 0;
     for (const [from, to, drop] of [[0, cutAt, 0], [cutAt, 1, sag]]) {
@@ -543,6 +574,12 @@ float seaLight(vec2 p, float t) {
     for (let d = -len / 2 + 0.45; d < len / 2 - 0.3; d += 0.78) blocks.push({ x: mx + ux * d, y: top + thick - 0.17, z: mz + uz * d, q: qY(yaw), s: S(1.5, 0.15, 0.3), color: tone });
     for (let i = 0; i < 2; i++) { const d = dr(-0.4, 0.4) * len; growOn(mx + ux * d, top + thick + 0.13, mz + uz * d, 0.5); }
     for (let i = 0; i <= 1.001; i += 0.25) colliders.push({ x: lerp(ax, bx, i), y: top + 0.3, z: lerp(az, bz, i), r: 0.75 });
+    if (hung) hang(ax, az, bx, bz, top - sag);
+  }
+  // a line of chimes between two neighbours of a row of standing columns ([x, z, top]), in `count` places
+  function strung(cols, closed, count) {
+    const pairs = cols.length - (closed ? 0 : 1), first = Math.floor(xrand() * pairs);
+    for (let k = 0; k < count && pairs > 1; k++) { const c = (first + Math.round((k * pairs) / count)) % pairs, a = cols[c], b = cols[(c + 1) % cols.length]; hang(a[0], a[1], b[0], b[1], Math.min(a[2], b[2]) - 0.14, true); }
   }
   // --- the pieces the story is told with
   const post = (x, z, h, r = 0.5) => { const y = height(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: dpick(stoneTones) }); drums.push({ x, y, z, q: qY(rand() * 3), s: S(r * 2, h, r * 2), color: pick(stoneTones) }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
@@ -554,7 +591,9 @@ float seaLight(vec2 p, float t) {
   function heroRing(cx, cz, n, { sawn = false, gap = 0, carved = true } = {}) {
     const R = Math.max(3.4, n * 0.5); // wide enough to swim between the columns
     sites.push([cx, cz, R + 3]);
-    for (let i = gap; i < n; i++) { const a = (i / n) * Math.PI * 2, x = cx + Math.sin(a) * R, z = cz + Math.cos(a) * R; column(x, z, sawn ? 1.1 : 4.4, { capital: !sawn, yaw: a, sawn }); }
+    const stood = [];
+    for (let i = gap; i < n; i++) { const a = (i / n) * Math.PI * 2, x = cx + Math.sin(a) * R, z = cz + Math.cos(a) * R; stood.push([x, z, column(x, z, sawn ? 1.1 : 4.4, { capital: !sawn, yaw: a, sawn })]); }
+    if (!sawn) strung(stood, gap === 0, n >= 14 ? 2 : 1);
     const py = height(cx, cz) - 0.3;
     blocks.push({ x: cx, y: py, z: cz, q: qY(0.2), s: S(2.6, 0.7, 2.6), color: pick(stoneTones) });
     blocks.push({ x: cx, y: py - 0.05, z: cz, q: qY(0.2), s: S(3.5, 0.4, 3.5), color: stoneLike(dpick(stoneTones)) });
@@ -635,7 +674,7 @@ float seaLight(vec2 p, float t) {
     for (let d = 10, i = 0; d < goalDist - 13; d += 7.5, i++) { // the arcade road from well to well
       const [ax, az] = along(d, -3.4), [bx, bz] = along(d, 3.4);
       sites.push([...along(d), 6]);
-      lintel(ax, az, bx, bz, Math.max(column(ax, az, 4.4, { yaw: goalAngle }), column(bx, bz, 4.4, { yaw: goalAngle })));
+      lintel(ax, az, bx, bz, Math.max(column(ax, az, 4.4, { yaw: goalAngle }), column(bx, bz, 4.4, { yaw: goalAngle })), 0.6, i % 2 === 0);
       const [tx, tz] = along(d + 3.7, i % 2 ? 5.2 : -5.2);
       table(tx, tz, 1.15 - i * 0.12, 2 + i * 2); // further along the road the tables shrink and the coin stacks grow
     }
@@ -663,7 +702,7 @@ float seaLight(vec2 p, float t) {
     }
     { const [cx, cz] = polar(goalAngle + 1.25, 30); // the temple: rings within rings round a pillar wrapped in a coil
       sites.push([cx, cz, 12]);
-      for (const [n, R, h] of [[14, 9.5, 4.2], [9, 6, 3.2], [5, 3, 2.3]]) for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + R; column(cx + Math.sin(a) * R, cz + Math.cos(a) * R, h, { yaw: a }); }
+      for (const [n, R, h] of [[14, 9.5, 4.2], [9, 6, 3.2], [5, 3, 2.3]]) { const stood = []; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + R, x = cx + Math.sin(a) * R, z = cz + Math.cos(a) * R; stood.push([x, z, column(x, z, h, { yaw: a })]); } if (n === 14) strung(stood, true, 3); }
       const top = post(cx, cz, 5.5, 0.45);
       for (let i = 0; i < 6; i++) coils.push({ x: cx, y: top - 5.2 + i * 0.9, z: cz, q: qY(i * 1.1), s: S(1.05), color: district });
       coinHeap(cx, cz, 2.6, 26); paveRing(cx, cz, 4.5, 1.2); paveRing(cx, cz, 7.7, 1.3); for (let i = 0; i < 4; i++) { const a = drand() * 6.28; jarAt(cx + Math.sin(a) * 1.6, cz + Math.cos(a) * 1.6); } }
@@ -758,7 +797,7 @@ float seaLight(vec2 p, float t) {
     const yaw = goalAngle, nx = Math.cos(yaw), nz = -Math.sin(yaw), dx = Math.sin(yaw), dz = Math.cos(yaw);
     const ax = goal.x - nx * 4.2, az = goal.z - nz * 4.2, bx = goal.x + nx * 4.2, bz = goal.z + nz * 4.2;
     const top = Math.max(column(ax, az, 8.5, { yaw }), column(bx, bz, 8.5, { yaw }));
-    lintel(ax - nx * 1.4, az - nz * 1.4, bx + nx * 1.4, bz + nz * 1.4, top, 0.8);
+    lintel(ax - nx * 1.4, az - nz * 1.4, bx + nx * 1.4, bz + nz * 1.4, top, 0.8, false);
     lintel(ax, az, bx, bz, top - 2.1, 0.5);
     for (let i = 1; i <= 4; i++) for (const sgn of [-1, 1]) column(goal.x - dx * i * 6 + nx * sgn * 5, goal.z - dz * i * 6 + nz * sgn * 5, 2.4, { capital: true, yaw });
     const glowMat = mat(new THREE.MeshBasicMaterial({ map: G.glow, color: '#ffcf8a', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
@@ -838,10 +877,11 @@ float seaLight(vec2 p, float t) {
   scatter(G.rock, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true })), rocks);
 
   // everything that grows shares one kind of material: it may sway with the water, and faces marked for it give light
-  const plant = (o) => mat(growing(o, time));
+  const plant = (o) => mat(growing(o, time, wake));
+  const grownAt = {}; // where the things that answer the fish stand, by kind, for the checks and the pictures
   // ------------------------------------------------------------ kelp, swaying
   if (F.kelp) {
-    const kelpMat = plant({ sway: 1 });
+    const kelpMat = plant({ sway: 1, give: 0.4 });
     const kelpTones = tonesOf('kelp'), kelp = [];
     for (let c = 0; c < F.kelp; c++) {
       const cx = rand() * T, cz = rand() * T, n = 3 + Math.floor(rand() * 7), tall = rr(3, 7.5);
@@ -851,7 +891,7 @@ float seaLight(vec2 p, float t) {
       }
     }
     for (const [x, z] of spots.kelpRows || []) kelp.push({ x, y: height(x, z) - 0.15, z, q: qY(rand() * 6.28), s: S(1.6, rr(3.6, 4.6), 1.6), color: pick(kelpTones) });
-    scatter(G.kelp, kelpMat, kelp, { receive: false });
+    scatter(G.kelp, kelpMat, (grownAt.kelp = kelp), { receive: false });
   }
 
   // ------------------------------------------------------------ coral near the big rocks; lower down, things that make their own light
@@ -874,9 +914,8 @@ float seaLight(vec2 p, float t) {
   }
   for (const [x, z] of spots.glowRows || []) lanterns.push({ x, y: height(x, z) - 0.05, z, q: qY(rand() * 6.28), s: S(1.3, rr(1.2, 1.6), 1.3), color: glowTones[0] });
   for (const g of grownBulbs) lanterns.push({ ...g, s: S(g.s.x * 1.1, g.s.y * 1.6 + 0.2, g.s.z * 1.1), color: dpick(glowTones) });
-  const glowMat = plant({ sway: 0.3, glow: 1.15 });
-  scatter(G.lantern, glowMat, lanterns, { cast: false, receive: false });
-  scatter(G.pen, glowMat, pens, { cast: false, receive: false });
+  scatter(G.lantern, plant({ sway: 0.3, glow: 1.15, give: 0.3 }), lanterns, { cast: false, receive: false });
+  scatter(G.pen, plant({ sway: 0.3, glow: 1.15, shy: 1 }), (grownAt.seapen = pens), { cast: false, receive: false });
 
   // ------------------------------------------------------------ the bed itself: what lives and lies on it, band by band
   {
@@ -886,10 +925,10 @@ float seaLight(vec2 p, float t) {
     const strew = (n, where, make) => { const out = []; for (let i = 0; i < n; i++) { const p = where(); if (p) { const it = make(p[0], p[1]); if (it) out.push(it); } } return out; };
     const flat = (tones, s0, s1, lift = 0.012) => (x, z) => ({ x, y: height(x, z) + lift, z, q: lie(x, z), s: S(dr(s0, s1)), color: dpick(tones) });
     const rooted = (tones, s0, s1, sink = 0.06) => (x, z) => { const sz = dr(s0, s1); return { x, y: height(x, z) - sink * sz, z, q: qY(drand() * 6.28, dr(-0.1, 0.1), dr(-0.1, 0.1)), s: S(sz), color: dpick(tones) }; };
-    const still = plant({ double: false }), stillBoth = plant(), soft = plant({ sway: 0.5 }), softer = plant({ sway: 0.9 });
+    const still = plant({ double: false }), stillBoth = plant();
     // seagrass in the green patches of the two bands that have light
     { const grass = []; for (let i = 0, n = at([1400, 700]); i < n * 7 && grass.length < n; i++) { const x = drand() * T, z = drand() * T; if (meadow(x, z) > 0.5 && clearOfSites(x, z, 0.5)) grass.push({ x, y: height(x, z) - 0.04, z, q: qY(drand() * 6.28), s: S(dr(1.1, 1.8), dr(0.4, 0.95), dr(1.1, 1.8)), color: dpick(tonesOf('seagrass')) }); }
-      if (grass.length) scatter(G.tuft, plant({ sway: 1.3 }), grass, { cast: false, receive: false, reach: 44 }); }
+      if (grass.length) scatter(G.tuft, plant({ sway: 1.3, give: 0.55 }), (grownAt.seagrass = grass), { cast: false, receive: false, reach: 44 }); }
     // pebbles and broken shell, in drifts
     { const stones = [], tones = tonesOf('pebble');
       for (let c = 0, n = at([170, 170, 190, 210, 200]); c < n; c++) { const p = open(0.5); if (!p) continue; for (let i = 0, k = 3 + Math.floor(drand() * 6); i < k; i++) { const x = p[0] + dr(-1.3, 1.3), z = p[1] + dr(-1.3, 1.3), sz = dr(0.05, 0.2); stones.push({ x, y: height(x, z) - sz * 0.25, z, q: lie(x, z), s: S(sz * dr(0.8, 1.5), sz, sz * dr(0.8, 1.3)), color: dpick(tones) }); } }
@@ -897,16 +936,16 @@ float seaLight(vec2 p, float t) {
     scatter(G.star, still, strew(at([70, 60, 30]), () => open(), flat(tonesOf('starfish'), 0.2, 0.38)), { cast: false, reach: 44 });
     scatter(G.brittle, still, strew(at([0, 0, 30, 60, 60]), () => open(), flat(tonesOf('brittlestar'), 0.3, 0.55)), { cast: false, reach: 44 });
     scatter(G.urchin, stillBoth, strew(at([44, 40, 30, 20]), () => byReef(1, 6), rooted(tonesOf('urchin'), 0.24, 0.46, 0.02)), { cast: false, reach: 44 });
-    scatter(G.clam, stillBoth, strew(at([60, 50, 34, 24, 24]), () => open(), flat(tonesOf('clam'), 0.16, 0.32)), { cast: false, reach: 44 });
+    scatter(G.clam, plant({ shy: 1 }), (grownAt.clam = strew(at([60, 50, 34, 24, 24]), () => open(), flat(tonesOf('clam'), 0.16, 0.32))), { cast: false, reach: 44 });
     { const domes = strew(at([30, 16]), () => byReef(2, 8), rooted(tonesOf('braincoral'), 0.5, 1.25, 0.1));
       for (const d of domes) if (d.s.x > 0.8) colliders.push({ x: d.x, y: d.y, z: d.z, r: d.s.x * 0.8 });
       scatter(G.brain, still, domes); }
-    scatter(G.seaFan, soft, strew(at([34, 30, 16]), () => byReef(1.5, 8), rooted(tonesOf('seafan'), 1.0, 2.0)), { receive: false });
+    scatter(G.seaFan, plant({ sway: 0.5, give: 0.22 }), strew(at([34, 30, 16]), () => byReef(1.5, 8), rooted(tonesOf('seafan'), 1.0, 2.0)), { receive: false });
     scatter(G.sponge, still, strew(at([30, 30, 20]), () => byReef(1.5, 7), rooted(tonesOf('sponge'), 0.7, 1.4)));
-    scatter(G.anemone, softer, strew(at([44, 30, 12]), () => byReef(1, 6), rooted(tonesOf('anemone'), 0.6, 1.25, 0.03)), { cast: false });
-    scatter(G.lily, soft, strew(at([0, 12, 40, 40, 22]), () => (drand() < 0.6 ? byReef(1, 8) : open()), rooted(tonesOf('sealily'), 0.9, 1.8, 0.02)), { receive: false });
+    scatter(G.anemone, plant({ sway: 0.9, shy: 1 }), (grownAt.anemone = strew(at([44, 30, 12]), () => byReef(1, 6), rooted(tonesOf('anemone'), 0.6, 1.25, 0.03))), { cast: false });
+    scatter(G.lily, plant({ sway: 0.5, shy: 1 }), (grownAt.sealily = strew(at([0, 12, 40, 40, 22]), () => (drand() < 0.6 ? byReef(1, 8) : open()), rooted(tonesOf('sealily'), 0.9, 1.8, 0.02))), { receive: false });
     scatter(G.glass, still, strew(at([0, 0, 14, 40, 40]), () => (drand() < 0.5 ? byReef(1, 8) : open()), rooted(tonesOf('glasssponge'), 0.6, 1.4)));
-    scatter(G.worms, still, strew(at([0, 0, 0, 30, 50]), () => byReef(0.8, 4), (x, z) => ({ ...rooted(tonesOf('tubeworms'), 0.8, 1.5)(x, z) })));
+    scatter(G.worms, plant({ double: false, shy: 1 }), (grownAt.tubeworms = strew(at([0, 0, 0, 30, 50]), () => byReef(0.8, 4), (x, z) => ({ ...rooted(tonesOf('tubeworms'), 0.8, 1.5)(x, z) }))));
   }
 
   // ------------------------------------------------------------ drifting specks and slow light shafts
@@ -955,6 +994,145 @@ float seaLight(vec2 p, float t) {
   scatter(G.shard, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: THREE.DoubleSide })), shards, { cast: false, reach: 40 });
   scatter(G.jar, stone, jars);
   scatter(G.jarBroken, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: THREE.DoubleSide })), jarsBroken);
+
+  // ------------------------------------------------------------ what answers the fish as it goes by. No rule hangs on any of it
+  // Silt: where a body moves close over the bed, puffs of it lift, spread and thin away. Close is as close as the fish can swim: it is
+  // held about a metre and a half off the bed (rig.js), so a fish kept down against it trails silt, and one swimming free does not.
+  const DUST = 72, dustGeo = new THREE.IcosahedronGeometry(1, 1), dustFade = new THREE.InstancedBufferAttribute(new Float32Array(DUST), 1);
+  dustGeo.setAttribute('fade', dustFade); owned.push({ dispose: () => dustGeo.dispose() });
+  const silt = new THREE.Color(F.bed).lerp(new THREE.Color('#f1e8c9'), 0.5);
+  const dustMat = mat(new THREE.MeshLambertMaterial({ color: silt, emissive: silt, emissiveIntensity: 0.2, transparent: true, opacity: 0.74, depthWrite: false }));
+  dustMat.onBeforeCompile = (sh) => { // each puff has its own fade, and none has an outline
+    sh.vertexShader = `attribute float fade;\nvarying float vFade;\n${sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFade = fade;')}`;
+    sh.fragmentShader = `varying float vFade;\n${sh.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a *= vFade * pow(smoothstep(0.05, 0.9, abs(dot(normalize(normal), isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition)))), 1.3);\n#include <opaque_fragment>')}`;
+  };
+  const dust = add(new THREE.InstancedMesh(dustGeo, dustMat, DUST)); dust.frustumCulled = false; dust.visible = false; // not drawn at all while there is none
+  const puffs = Array.from({ length: DUST }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), age: 1, life: 1, size: 0 }));
+  { const gone = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < DUST; i++) dust.setMatrixAt(i, gone); }
+  let puffNext = 0, puffsLive = 0;
+  const SILT = [1.35, 1.95]; // metres over the bed: all of it rises from under a body this low, none from under one this high
+  const puffUp = (x, z, vx, vz, k) => { const pf = puffs[puffNext]; puffNext = (puffNext + 1) % DUST;
+    pf.p.set(x + (Math.random() - 0.5) * 0.36, height(x, z) + 0.08, z + (Math.random() - 0.5) * 0.36); pf.v.set(vx * 0.2 + (Math.random() - 0.5) * 0.5, 0.28 + Math.random() * 0.4, vz * 0.2 + (Math.random() - 0.5) * 0.5);
+    pf.age = 0; pf.life = 1.0 + Math.random() * 1.1; pf.size = (0.16 + Math.random() * 0.22) * (0.7 + 0.6 * k); };
+
+  // Pilot fish: a few to a band, waiting along the way to the well. When the fish comes by they fall in beside its body and ride
+  // there. They keep up with a swim but not with a sprint; left behind, they wait where they are for it to come back.
+  const pilotKit = swarmKit('pilot', { glow: F.fishGlow }), pilotMat = mat(pilotKit.material), PILOTS = 5, pilotSize = new THREE.Vector3().setScalar(pilotKit.scale);
+  const pilotMesh = add(new THREE.InstancedMesh(pilotKit.geometry, pilotMat, PILOTS)); pilotMesh.frustumCulled = false; pilotMesh.castShadow = true;
+  const pilots = Array.from({ length: PILOTS }, (_, i) => { const [x, z] = along(9 + (i / (PILOTS - 1)) * Math.max(goalDist - 26, 12), (i % 2 ? -1 : 1) * xr(4, 8)), y = height(x, z) + xr(1.7, 2.8);
+    return { hx: x, hz: z, hy: y, p: new THREE.Vector3(x, y, z), v: new THREE.Vector3(), riding: false, wait: 0, lost: 0, slot: 0.14 + 0.66 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, out: xr(0.5, 0.8), lift: xr(-0.3, 0.22), ph: xr(0, 6.28), yaw: xr(0, 6.28), pitch: 0 }; });
+
+  // Chimes: every bar of every set is one instance, moved only while it swings.
+  const chimeBars = chimeSets.flatMap((cs) => cs.bars); chimeBars.forEach((b, i) => { b.i = i; });
+  const chimeTone = new THREE.Color(tint('#d9ab5a', district, 0.2)), chimeMat = mat(growing({ double: false, glow: lerp(0.25, 1.1, floor / 4) }, time));
+  const chimeMesh = chimeBars.length ? add(new THREE.InstancedMesh(G.chime, chimeMat, chimeBars.length)) : null;
+  if (chimeMesh) { chimeMesh.frustumCulled = false; chimeMesh.castShadow = true; }
+
+  const stirred = { head: new THREE.Vector3(), speed: 0, was: [], acc: [], ghosts: [0, 1, 2, 3, 4].map(() => ({ p: new THREE.Vector3(), t: 9 })), ghostT: 0, ghostI: 0, rang: [], rings: 0, puffed: 0, fresh: true };
+  const sv = new THREE.Vector3(), sw = new THREE.Vector3(), sq = new THREE.Quaternion(), sm = new THREE.Matrix4(), se = new THREE.Euler(0, 0, 0, 'YXZ'), sc3 = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0), sc = new THREE.Color(), still = new THREE.Quaternion();
+  // body: as update() has it, or null when there is no fish to answer
+  function stir(dt, focus, body) {
+    const S = stirred, J = body && body.joints.length > 2 ? body.joints : null, N = J ? J.length - 1 : 0, W = wake.value, t = time.value;
+    // how fast the head is going; a leap (a new dive, a fall down a rift) is not speed
+    if (J) { const leap = S.fresh || J[0].distanceToSquared(S.head) > 9; if (leap) { S.was.length = 0; for (const f of pilots) if (f.riding) { f.riding = false; f.wait = 1; f.hx = f.p.x; f.hz = f.p.z; f.hy = f.p.y; } }
+      const now = leap || dt <= 0 ? 0 : J[0].distanceTo(S.head) / dt; S.speed += (now - S.speed) * (dt > 0 ? 1 - Math.exp(-8 * dt) : 0); S.head.copy(J[0]); S.fresh = false; } else { S.speed = 0; S.fresh = true; }
+
+    // ---- the wake that what grows answers: along the body, and for a moment where the tail has just been
+    const BODY = WAKE - stirred.ghosts.length, LINGER = 2.5; // seconds a thing stays shut after the tail has gone by
+    for (let i = 0; i < BODY; i++) { if (J) { const p = J[Math.round((i / (BODY - 1)) * N)]; W[i].set(p.x, p.y, p.z, 1); } else W[i].w = 0; }
+    if (J) { S.ghostT += dt; if (S.ghostT > LINGER / S.ghosts.length) { S.ghostT = 0; const g = S.ghosts[S.ghostI]; S.ghostI = (S.ghostI + 1) % S.ghosts.length; g.p.copy(J[N]); g.t = 0; } }
+    S.ghosts.forEach((g, i) => { g.t += dt; const k = J ? clamp(1 - g.t / LINGER, 0, 1) : 0; W[BODY + i].set(g.p.x, g.p.y, g.p.z, k * k * (3 - 2 * k)); });
+    { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const w of W) if (w.w > 0) { x0 = Math.min(x0, w.x); x1 = Math.max(x1, w.x); z0 = Math.min(z0, w.z); z1 = Math.max(z1, w.z); }
+      if (x1 >= x0) wake.bound.value.set((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0) / 2 + 2.8); else wake.bound.value.set(0, 0, 0); } // the circle on the bed outside which nothing is near enough to answer
+
+    // ---- silt
+    if (J && dt > 0) {
+      const each = Math.min(5.5, 34 / (Math.floor(N / 3) + 1)); // a long body raises no more of it than there are puffs to show
+      for (let e = 0, j = 0; j <= N; e++, j += 3) {
+        const p = J[j], was = S.was[e] || (S.was[e] = p.clone());
+        const vx = (p.x - was.x) / dt, vz = (p.z - was.z) / dt, sp = Math.hypot(vx, (p.y - was.y) / dt, vz); was.copy(p);
+        if (sp < 1.3 || sp > 40) { S.acc[e] = 0; continue; }
+        const clear = p.y - height(p.x, p.z);
+        if (clear > SILT[1] || clear < -0.6) continue;
+        S.acc[e] = (S.acc[e] || 0) + dt * each * clamp((sp - 1) / 4, 0.25, 1.5) * clamp((SILT[1] - clear) / (SILT[1] - SILT[0]), 0, 1);
+        while (S.acc[e] >= 1) { S.acc[e] -= 1; puffUp(p.x, p.z, vx, vz, clamp(sp / 6, 0, 1)); S.puffed++; puffsLive = DUST; }
+      }
+    }
+    if (puffsLive > 0) { puffsLive = 0;
+      for (let i = 0; i < DUST; i++) { const pf = puffs[i]; if (pf.age >= pf.life) continue;
+        pf.age += dt; const k = pf.age / pf.life;
+        if (k >= 1) { dustFade.array[i] = 0; dust.setMatrixAt(i, sm.makeScale(0, 0, 0)); continue; }
+        pf.v.multiplyScalar(Math.exp(-1.7 * dt)); pf.p.addScaledVector(pf.v, dt);
+        const s = pf.size * (1 + 2.5 * (1 - (1 - k) * (1 - k)));
+        dustFade.array[i] = Math.min(1, k * 9) * (1 - k) * (1 - k); dust.setMatrixAt(i, sm.compose(pf.p, still, sc3.set(s, s * 0.6, s))); puffsLive++; }
+      dust.instanceMatrix.needsUpdate = true; dustFade.needsUpdate = true; }
+    dust.visible = puffsLive > 0;
+
+    // ---- pilot fish
+    let swum = 0;
+    pilots.forEach((f, i) => {
+      let tx, ty, tz, top, ahead = null;
+      f.wait = Math.max(0, f.wait - dt);
+      if (!f.riding && J && f.wait <= 0 && S.speed > 0.4 && f.p.distanceToSquared(J[0]) < 64) { f.riding = true; f.lost = 0; }
+      if (f.riding && J) {
+        const j = clamp(Math.round(f.slot * N), 1, N - 1), c = J[j];
+        sv.subVectors(J[j - 1], J[j + 1]); sv.y = 0; if (sv.lengthSq() < 1e-6) sv.set(0, 0, 1); sv.normalize(); ahead = sv;
+        const slow = clamp(1 - S.speed / 1.2, 0, 1), out = f.out * (1 + 0.8 * slow) + 0.1 * Math.sin(t * 1.3 + f.ph); // it gives the body more room when the body is still
+        tx = c.x + sv.z * f.side * out + sv.x * 0.3 * Math.sin(t * 0.8 + f.ph); tz = c.z - sv.x * f.side * out + sv.z * 0.3 * Math.sin(t * 0.8 + f.ph); ty = c.y + f.lift + 0.12 * Math.sin(t * 1.1 + f.ph * 2); top = 5.2;
+        if (f.p.distanceToSquared(c) > 144) { f.lost += dt; if (f.lost > 2.5) { f.riding = false; f.wait = 1.5; f.hx = f.p.x; f.hz = f.p.z; f.hy = f.p.y; } } else f.lost = 0;
+      } else { // waiting: a slow turn about its place
+        f.riding = false;
+        const hx = f.hx + T * Math.round((focus.x - f.hx) / T), hz = f.hz + T * Math.round((focus.z - f.hz) / T);
+        if (Math.abs(hx - f.p.x) > T / 2 || Math.abs(hz - f.p.z) > T / 2) f.p.set(hx, f.hy, hz); // the world came round: it is on the nearer copy now
+        tx = hx + Math.sin(t * 0.5 + f.ph) * 1.3; tz = hz + Math.cos(t * 0.4 + f.ph * 1.3) * 1.3; ty = f.hy + Math.sin(t * 0.7 + f.ph) * 0.3; top = 1.5;
+      }
+      sw.set(tx - f.p.x, ty - f.p.y, tz - f.p.z); const d = sw.length(); if (d > 1e-4) sw.multiplyScalar(Math.min(top, d * 3.2) / d);
+      f.v.lerp(sw, 1 - Math.exp(-5 * dt)); f.p.addScaledVector(f.v, dt); f.p.y = Math.max(f.p.y, height(f.p.x, f.p.z) + 0.35);
+      const sp = f.v.length(); swum += sp;
+      let yaw = f.yaw, pitch = 0;
+      if (sp > 0.3) { yaw = Math.atan2(f.v.x, f.v.z); pitch = -Math.asin(clamp(f.v.y / sp, -0.6, 0.6)); } else if (ahead) yaw = Math.atan2(ahead.x, ahead.z);
+      const k = dt > 0 ? 1 - Math.exp(-9 * dt) : 1; f.yaw += Math.atan2(Math.sin(yaw - f.yaw), Math.cos(yaw - f.yaw)) * k; f.pitch += (pitch - f.pitch) * k;
+      pilotMesh.setMatrixAt(i, sm.compose(f.p, sq.setFromEuler(se.set(f.pitch, f.yaw, 0)), pilotSize));
+    });
+    pilotMesh.instanceMatrix.needsUpdate = true;
+    pilotMat.userData.swim.value += dt * (pilotKit.spec.beat[0] + pilotKit.spec.beat[1] * (swum / PILOTS));
+
+    // ---- chimes
+    if (chimeMesh) {
+      let moved = false;
+      for (const cs of chimeSets) {
+        const ox = T * Math.round((focus.x - cs.x) / T), oz = T * Math.round((focus.z - cs.z) / T), reseat = ox !== cs.wx || oz !== cs.wz;
+        const near = !!J && Math.hypot(cs.x + ox - J[0].x, cs.z + oz - J[0].z) < body.total + 5;
+        if (!near && !reseat && cs.awake <= 0) continue;
+        cs.wx = ox; cs.wz = oz; cs.awake = Math.max(0, cs.awake - dt);
+        for (const b of cs.bars) {
+          const bx = b.x + ox, bz = b.z + oz, ox0 = b.ox, oz0 = b.oz;
+          let touched = false;
+          if (near) { // a body shoulders the bar aside; only the bar itself, not its cord
+            const y0 = b.y - b.len - 0.2, y1 = b.y - b.len * 0.42 + 0.15;
+            const press = (p, r) => { if (p.y < y0 || p.y > y1) return; const dx = bx + b.ox - p.x, dz = bz + b.oz - p.z, d = Math.hypot(dx, dz); if (d >= r) return; const k = (r - d) / (d || 1e-3); b.ox += (d ? dx : 1e-3) * k; b.oz += dz * k; touched = true; };
+            press(body.snout, 0.4); for (let j = 0; j <= N; j++) press(J[j], 0.42);
+          }
+          if (touched) {
+            if (b.held <= 0) { const v = clamp(0.3 + S.speed / 6.4, 0.3, 1); S.rang.push({ note: b.note, v, x: bx, y: b.y - b.len * 0.8, z: bz }); if (S.rang.length > 24) S.rang.shift(); S.rings++; b.lit = 1; }
+            b.held = 0.3;
+            if (dt > 0) { b.vx = clamp((b.ox - ox0) / dt, -2.2, 2.2); b.vz = clamp((b.oz - oz0) / dt, -2.2, 2.2); }
+          } else { // let go, it swings back through the water: slowly, and not for long
+            b.held = Math.max(0, b.held - dt);
+            b.vx += (-b.ox * 5.5 - b.vx * 1.5) * dt; b.vz += (-b.oz * 5.5 - b.vz * 1.5) * dt; b.ox += b.vx * dt; b.oz += b.vz * dt;
+          }
+          const far = Math.hypot(b.ox, b.oz), most = b.len * 0.5; if (far > most) { b.ox *= most / far; b.oz *= most / far; }
+          b.lit = Math.max(0, b.lit - dt * 1.5);
+          if (far > 0.004 || Math.abs(b.vx) + Math.abs(b.vz) > 0.01 || b.lit > 0) cs.awake = 0.5;
+          sv.set(b.ox, -Math.sqrt(Math.max(b.len * b.len - far * far, 0.01)), b.oz).normalize();
+          chimeMesh.setMatrixAt(b.i, sm.compose(sw.set(bx, b.y, bz), sq.setFromUnitVectors(down, sv).multiply(cs.q), sc3.set(1, b.len, 1)));
+          chimeMesh.setColorAt(b.i, sc.copy(chimeTone).multiplyScalar(1 + 1.6 * b.lit));
+          moved = true;
+        }
+      }
+      if (moved) { chimeMesh.instanceMatrix.needsUpdate = true; if (chimeMesh.instanceColor) chimeMesh.instanceColor.needsUpdate = true; }
+    }
+  }
 
   // ------------------------------------------------------------ per-frame
   const m4 = new THREE.Matrix4(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), none = new THREE.Vector3(0, 0, 0);
@@ -1051,6 +1229,7 @@ float seaLight(vec2 p, float t) {
       b.rotation.y = Math.atan2(camera.position.x - b.position.x, camera.position.z - b.position.z);
     }
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
+    stir(dt, focus, body);
   }
 
   // Where a foot comes down (legs.js): on the bed, or on top of whatever low stone is there. A foot that would land inside something too
@@ -1227,6 +1406,8 @@ float seaLight(vec2 p, float t) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
+  const react = { rang: stirred.rang, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }
