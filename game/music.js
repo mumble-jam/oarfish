@@ -1,0 +1,388 @@
+// A small jazz trio that plays the game: drummer, upright bass, electric piano, with a pad underneath.
+// Nothing is sampled; every sound is synthesised with Web Audio. The band reads the game state each
+// tick (speed, coiling, danger, depth) and answers events at once with cymbals, stabs and fills.
+//
+// Sliders (all 0..1): volume, dream (reverb, darkness, sustain), energy (tempo, how busy the band is at rest),
+// menace (which harmony is used, low brass, toms), react (how hard the game pushes the band around),
+// swing (straight to hard swing), band (drummer forward to harmony forward).
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+// chord colours: tones for the bass, a rootless voicing for the piano, a scale for runs
+const QUAL = {
+  maj9: { tones: [0, 4, 7, 11], voice: [4, 7, 11, 14], scale: [0, 2, 4, 6, 7, 9, 11] },
+  m9: { tones: [0, 3, 7, 10], voice: [3, 7, 10, 14], scale: [0, 2, 3, 5, 7, 9, 10] },
+  dom13: { tones: [0, 4, 7, 10], voice: [4, 9, 10, 14], scale: [0, 2, 4, 6, 7, 9, 10] },
+  sus: { tones: [0, 5, 7, 10], voice: [5, 7, 10, 14], scale: [0, 2, 4, 5, 7, 9, 10] },
+  mMaj7: { tones: [0, 3, 7, 11], voice: [3, 7, 11, 14], scale: [0, 2, 3, 5, 7, 9, 11] },
+  m7b5: { tones: [0, 3, 6, 10], voice: [3, 6, 10, 17], scale: [0, 2, 3, 5, 6, 8, 10] },
+  alt: { tones: [0, 4, 6, 10], voice: [4, 8, 10, 13], scale: [0, 1, 3, 4, 6, 8, 10] },
+  phryg: { tones: [0, 5, 7, 10], voice: [1, 5, 7, 10], scale: [0, 1, 3, 5, 7, 8, 10] },
+};
+// four vamps from sweet to feral; each chord lasts two bars
+export const MOODS = [
+  { name: 'drifting', bars: [[0, 'maj9'], [9, 'm9'], [5, 'maj9'], [7, 'sus']] },
+  { name: 'cool', bars: [[0, 'm9'], [5, 'dom13'], [0, 'm9'], [10, 'maj9']] },
+  { name: 'noir', bars: [[0, 'mMaj7'], [8, 'maj9'], [2, 'm7b5'], [7, 'alt']] },
+  { name: 'feral', bars: [[0, 'm9'], [1, 'maj9'], [0, 'phryg'], [6, 'alt']] },
+];
+const KEYS = [2, 0, 10, 9, 7]; // the key sinks as the dive goes down: D, C, B flat, A, G
+// where the piano may land in a bar, in swung-eighth ticks (12 to the bar), from sparse to busy
+const COMPS = [[[0]], [[0, 5], [5], [2, 8]], [[0, 5, 9], [2, 8], [5, 11], [3, 8]], [[0, 2, 5, 8, 11], [2, 5, 9, 11], [0, 3, 5, 8]]];
+const RIDE = [0, 3, 5, 6, 9, 11];
+
+export function createMusic({ context = null } = {}) {
+  const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  let ctx = context, virtual = context ? 0 : null, timer = null;
+  let n = null; // audio nodes
+  let noiseBuf = null, pad = [], plan = null, lastBass = 40;
+  const now = () => (virtual !== null ? virtual : ctx.currentTime);
+
+  // ---------------------------------------------------------------- the room: buses, reverb, the water itself
+  function build() {
+    const g = (v) => { const x = ctx.createGain(); x.gain.value = v; return x; };
+    n = { drums: g(1), bass: g(1), keys: g(1), pad: g(1), dry: g(1), send: g(1), wet: g(0.4), master: g(0), sendOf: {} };
+    n.water = ctx.createBiquadFilter(); n.water.type = 'lowpass'; n.water.frequency.value = 9000; n.water.Q.value = 0.4;
+    n.comp = ctx.createDynamicsCompressor();
+    n.comp.threshold.value = -16; n.comp.ratio.value = 5; n.comp.attack.value = 0.004; n.comp.release.value = 0.2;
+    // a long dark tail, made from decaying noise
+    const len = Math.floor(ctx.sampleRate * 3.4), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate, k = 0.25 + 0.6 * Math.exp(-t * 2.2); // the tail darkens as it fades
+        lp += k * ((Math.random() * 2 - 1) - lp);
+        d[i] = lp * Math.exp(-t / 0.85) * (t < 0.012 ? t / 0.012 : 1);
+      }
+    }
+    n.verb = ctx.createConvolver(); n.verb.buffer = ir;
+    // the piano goes through a slow chorus and drifts from ear to ear
+    n.keysIn = g(1);
+    n.chorus = ctx.createDelay(0.05); n.chorus.delayTime.value = 0.019;
+    n.chorusMix = g(0.5);
+    const lfo = ctx.createOscillator(), lfoGain = g(0.0035);
+    lfo.frequency.value = 0.31; lfo.connect(lfoGain); lfoGain.connect(n.chorus.delayTime); lfo.start();
+    n.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : g(1);
+    if (n.pan.pan) { const p = ctx.createOscillator(); n.panDepth = g(0.4); p.frequency.value = 0.19; p.connect(n.panDepth); n.panDepth.connect(n.pan.pan); p.start(); }
+    n.keysIn.connect(n.pan); n.keysIn.connect(n.chorus); n.chorus.connect(n.chorusMix); n.chorusMix.connect(n.pan); n.pan.connect(n.keys);
+    for (const [name, amt] of [['drums', 0.22], ['bass', 0.08], ['keys', 0.6], ['pad', 0.9]]) {
+      n[name].connect(n.dry);
+      n.sendOf[name] = g(amt); n[name].connect(n.sendOf[name]); n.sendOf[name].connect(n.send);
+    }
+    n.send.connect(n.verb); n.verb.connect(n.wet);
+    n.dry.connect(n.water); n.wet.connect(n.water);
+    n.limit = ctx.createDynamicsCompressor(); // a ceiling, so a crash on top of a loud bar cannot clip
+    n.limit.threshold.value = -4; n.limit.knee.value = 0; n.limit.ratio.value = 20; n.limit.attack.value = 0.001; n.limit.release.value = 0.09;
+    n.water.connect(n.comp); n.comp.connect(n.master); n.master.connect(n.limit); n.limit.connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    applyParams(0.01);
+  }
+  // how much treble the water lets through: less with more dream, less with depth, almost none once the fish is gone
+  function cutoff() {
+    const depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0;
+    return Math.exp(lerp(Math.log(16000), Math.log(2200), clamp(params.dream * 0.5 + depth * 0.3, 0, 1))) * (st.alive ? 1 : 0.15);
+  }
+  function applyParams(tc = 0.25) {
+    if (!n) return;
+    const t = now(), depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0, P = params;
+    const set = (p, v) => p.setTargetAtTime(v, t, tc);
+    set(n.master.gain, st.muted ? 0 : P.volume * 1.15 * st.duck);
+    set(n.wet.gain, 0.1 + 0.62 * P.dream + 0.12 * depth);
+    set(n.water.frequency, cutoff());
+    set(n.drums.gain, lerp(1.2, 0.5, P.band) * (1 - 0.25 * P.dream));
+    set(n.keys.gain, lerp(0.55, 1.15, P.band));
+    set(n.pad.gain, (0.25 + 0.9 * P.dream) * lerp(0.6, 1.1, P.band));
+    set(n.bass.gain, 0.95);
+    set(n.chorusMix.gain, 0.15 + 0.6 * P.dream);
+    if (n.panDepth) set(n.panDepth.gain, 0.1 + 0.6 * P.dream);
+  }
+
+  // ---------------------------------------------------------------- instruments
+  function env(gain, t, attack, peak, decay) {
+    gain.setValueAtTime(0.0001, t);
+    gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack);
+    gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+  }
+  function noise(t, { hp, bp, q = 0.7, lp, attack = 0.002, decay, gain, out = n.drums }) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    let node = src;
+    const filt = (type, f, qq) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (qq) b.Q.value = qq; node.connect(b); node = b; };
+    if (hp) filt('highpass', hp);
+    if (bp) filt('bandpass', bp, q);
+    if (lp) filt('lowpass', lp);
+    const g = ctx.createGain();
+    env(g.gain, t, attack, gain, decay);
+    node.connect(g); g.connect(out);
+    src.start(t, Math.random() * 1.5); src.stop(t + attack + decay + 0.05);
+  }
+  function tone(t, { type = 'sine', f0, f1 = 0, glide = 0.08, attack = 0.003, decay, gain, out = n.drums }) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + glide);
+    env(g.gain, t, attack, gain, decay);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t + attack + decay + 0.05);
+  }
+  const kit = {
+    ride(t, v, bell) { const soft = 1 - 0.35 * params.dream; noise(t, { hp: 3600, bp: 6200, q: 0.5, decay: 0.3 + 0.35 * v, gain: 0.62 * v * soft }); tone(t, { type: 'triangle', f0: bell ? 2640 : 3520, decay: bell ? 0.5 : 0.16, gain: (bell ? 0.16 : 0.09) * v * soft }); if (bell) tone(t, { f0: 3962, decay: 0.4, gain: 0.09 * v * soft }); },
+    hat(t, v) { noise(t, { hp: 5500, decay: 0.05, gain: 0.42 * v }); },
+    brush(t, v) { noise(t, { bp: 2600, q: 0.6, attack: 0.05, decay: 0.22, gain: 0.3 * v }); },
+    snare(t, v) { noise(t, { hp: 900, bp: 2100, q: 0.6, decay: 0.09 + 0.07 * v, gain: 0.85 * v }); tone(t, { type: 'triangle', f0: 205, f1: 160, glide: 0.05, decay: 0.07, gain: 0.3 * v }); },
+    rim(t, v) { tone(t, { type: 'square', f0: 1650, decay: 0.03, gain: 0.2 * v }); tone(t, { type: 'triangle', f0: 420, decay: 0.05, gain: 0.26 * v }); },
+    kick(t, v) { tone(t, { f0: 118, f1: 46, glide: 0.09, attack: 0.002, decay: 0.2, gain: 0.6 * v }); },
+    tom(t, v, f = 120) { tone(t, { f0: f * 1.35, f1: f, glide: 0.1, decay: 0.26, gain: 0.5 * v }); noise(t, { bp: f * 6, q: 1, decay: 0.05, gain: 0.05 * v }); },
+    crash(t, v) { noise(t, { hp: 3000, attack: 0.004, decay: 1.5, gain: 0.6 * v }); noise(t, { bp: 5200, q: 1.4, decay: 0.9, gain: 0.5 * v }); },
+    splash(t, v) { noise(t, { hp: 4200, decay: 0.32, gain: 0.6 * v }); },
+    swell(t, v, len = 1.4) { noise(t, { hp: 2600, attack: len, decay: 0.5, gain: 0.55 * v }); },
+  };
+  function bassNote(t, midi, dur, v) {
+    const f = mtof(midi), filt = ctx.createBiquadFilter(), g = ctx.createGain();
+    filt.type = 'lowpass'; filt.Q.value = 1.2;
+    filt.frequency.setValueAtTime(600 + 1500 * v, t); filt.frequency.exponentialRampToValueAtTime(380 + 260 * v, t + 0.25);
+    for (const [type, level] of [['triangle', 0.55], ['sawtooth', 0.16 + 0.2 * params.menace], ['sine', 0.3]]) {
+      const o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = type; og.gain.value = level;
+      o.frequency.setValueAtTime(f * 0.972, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.035); // the finger sliding onto the note
+      o.connect(og); og.connect(filt);
+      o.start(t); o.stop(t + dur + 0.2);
+    }
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34 * v, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.16);
+    g.gain.setValueAtTime(0.13 * v, t + Math.max(dur - 0.02, 0.17));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.12);
+    filt.connect(g); g.connect(n.bass);
+  }
+  // electric piano: one sine bent by another, with a bell on the attack
+  function pianoNote(t, midi, dur, v, out = n.keysIn) {
+    const f = mtof(midi), car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
+    car.frequency.value = f; mod.frequency.value = f;
+    mg.gain.setValueAtTime(f * (0.9 + 1.9 * v), t); mg.gain.exponentialRampToValueAtTime(f * 0.18, t + 0.35);
+    mod.connect(mg); mg.connect(car.frequency);
+    const tail = dur + 0.5 + 1.4 * params.dream;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3 * v, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.22);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tail);
+    car.connect(g); g.connect(out);
+    car.start(t); mod.start(t); car.stop(t + tail + 0.05); mod.stop(t + tail + 0.05);
+    tone(t, { f0: f * 5.02, decay: 0.09, gain: 0.04 * v, out });
+  }
+  // low brass: two saws opening and closing a filter, for the nasty moments
+  function brass(t, midis, dur, v) {
+    const filt = ctx.createBiquadFilter(), g = ctx.createGain();
+    filt.type = 'lowpass'; filt.Q.value = 3;
+    filt.frequency.setValueAtTime(260, t); filt.frequency.exponentialRampToValueAtTime(900 + 2200 * v, t + 0.05); filt.frequency.exponentialRampToValueAtTime(380, t + dur);
+    env(g.gain, t, 0.015, 0.16 * v, dur + 0.1);
+    for (const m of midis) for (const cents of [-9, 8]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = mtof(m); o.detune.value = cents;
+      o.connect(filt); o.start(t); o.stop(t + dur + 0.2);
+    }
+    filt.connect(g); g.connect(n.keys);
+  }
+  function padChord(t, midis) {
+    for (const p of pad) { p.g.gain.cancelScheduledValues(t); p.g.gain.setTargetAtTime(0, t, 0.9); for (const o of p.os) o.stop(t + 5); }
+    pad = midis.map((m) => {
+      const g = ctx.createGain(), filt = ctx.createBiquadFilter(), os = [];
+      filt.type = 'lowpass'; filt.frequency.value = 1200;
+      g.gain.setValueAtTime(0, t); g.gain.setTargetAtTime(0.05, t, 0.8);
+      for (const cents of [-7, 7]) { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = mtof(m); o.detune.value = cents; o.connect(filt); o.start(t); os.push(o); }
+      filt.connect(g); g.connect(n.pad);
+      return { g, os };
+    });
+  }
+  // a few rising blips, like bubbles, on notes of the chord
+  function bubbles(t, midis, v) {
+    midis.forEach((m, i) => tone(t + i * 0.06, { f0: mtof(m + 12), f1: mtof(m + 12) * 1.5, glide: 0.07, decay: 0.09, gain: 0.14 * v, out: n.keysIn }));
+  }
+
+  // ---------------------------------------------------------------- harmony
+  const tonic = () => KEYS[Math.min(st.floor, KEYS.length - 1)];
+  function chordAt(bar) {
+    const [off, q] = MOODS[st.mood].bars[Math.floor((((bar % 8) + 8) % 8) / 2)];
+    return { root: (tonic() + off) % 12, q: QUAL[q] };
+  }
+  const voicing = (ch, lowest = 55) => ch.q.voice.map((iv) => { let m = 48 + ch.root + iv; while (m < lowest) m += 12; while (m > lowest + 19) m -= 12; return m; }).sort((a, b) => a - b);
+  // the octave of pitch class `pc` nearest to `near`, kept inside the bass's range
+  function bassPitch(pc, near) {
+    let best = 0, bd = 99;
+    for (let m = 28 + ((pc - 28 % 12) + 120) % 12; m <= 52; m += 12) if (Math.abs(m - near) < bd) { bd = Math.abs(m - near); best = m; }
+    return best;
+  }
+  function pickMood() {
+    const depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0;
+    return clamp(Math.round(params.menace * 2.4 + depth * 1.1 + (st.low ? 0.4 : 0) - 0.3), 0, MOODS.length - 1);
+  }
+
+  // ---------------------------------------------------------------- one bar of decisions, then twelve ticks of playing
+  function planBar(bar, t) {
+    const I = st.intensity, ch = chordAt(bar), next = chordAt(bar + 1), rnd = Math.random;
+    if (bar % 8 === 0) st.mood = pickMood();
+    if (bar % 2 === 0 || !pad.length) padChord(t, voicing(chordAt(bar), 50).slice(0, 3).concat(bassPitch(chordAt(bar).root, 43) + 12));
+    plan = { bass: [], comp: [], fill: false, roots: voicing(ch) };
+    // bass: two in the bar when calm, four when moving, with a lead-in to the next chord
+    const root = bassPitch(ch.root, lastBass > 46 ? 40 : lastBass), tones = ch.q.tones;
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+    if (I < 0.26) {
+      plan.bass.push([0, root, 1.9], [6, bassPitch(ch.root + 7, root), 1.7]);
+    } else {
+      const b2 = bassPitch(ch.root + pick(ch.q.scale.slice(1, 4)), root);
+      const b3 = bassPitch(ch.root + pick(tones.slice(1)), b2);
+      const target = bassPitch(next.root, b3);
+      const b4 = target + (rnd() < 0.35 + 0.4 * params.menace ? (rnd() < 0.5 ? 1 : -1) : (rnd() < 0.5 ? 2 : -2)); // chromatic or a step away
+      plan.bass.push([0, bar % 2 ? bassPitch(ch.root + pick(tones), root) : root, 0.9], [3, b2, 0.9], [6, b3, 0.9], [9, b4, 0.9]);
+      if (I > 0.72 && rnd() < 0.5) plan.bass.push([11, b4 + (rnd() < 0.5 ? 12 : 7), 0.3]); // a skip into the next bar
+    }
+    lastBass = plan.bass[plan.bass.length - 1][1];
+    // piano: how often it lands depends on how hot things are
+    const level = I < 0.22 ? 0 : I < 0.5 ? 1 : I < 0.78 ? 2 : 3;
+    plan.comp = rnd() < 0.12 && level > 0 ? [] : pick(COMPS[level]);
+    plan.fill = bar % 4 === 3 && I > 0.42 && rnd() < I;
+  }
+  function playTick(bar, tick, t) {
+    const I = st.intensity, P = params, rnd = Math.random, beat = Math.floor(tick / 3), sub = tick % 3;
+    if (tick === 0) planBar(bar, t);
+    const human = () => (rnd() - 0.5) * 0.012;
+    // --- drummer
+    const fillNow = plan.fill && tick >= 6;
+    if (I < 0.24) { // brushes and almost nothing else
+      if (sub === 0) kit.brush(t, 0.6 + 0.4 * (beat % 2));
+      if (tick === 0 || tick === 6) kit.ride(t + human(), 0.35);
+    } else if (!fillNow && RIDE.includes(tick)) {
+      const accent = tick === 3 || tick === 9 ? 1 : sub === 2 ? 0.55 : 0.8;
+      kit.ride(t + human(), accent * lerp(0.5, 1, I), I > 0.8 && tick === 0 && rnd() < 0.6);
+    }
+    if ((tick === 3 || tick === 9) && I > 0.12) kit.hat(t, 0.5 + 0.5 * I);
+    if (sub === 0 && I > 0.34 && !fillNow) kit.kick(t, 0.16 + 0.12 * I); // feathered, felt more than heard
+    if (!fillNow && I > 0.25) {
+      const upbeat = sub === 2;
+      if (rnd() < (upbeat ? 0.04 + 0.34 * I : 0.09 * I)) kit.snare(t + human(), 0.18 + 0.4 * I * rnd());
+      if (upbeat && rnd() < 0.03 + 0.22 * I * I) kit.kick(t, 0.5 + 0.4 * I); // a bomb
+      if (tick === 9 && I > 0.7 && rnd() < 0.5) kit.rim(t, 0.9);
+    }
+    if (P.menace > 0.55 && I > 0.5 && (tick === 5 || tick === 11) && rnd() < P.menace * 0.7) kit.tom(t, 0.5 * I, tick === 5 ? 92 : 74); // jungle toms when things are ugly
+    if (fillNow) { // triplets down the kit into the next bar
+      const k = tick - 6, v = 0.45 + 0.09 * k;
+      if (k < 2) kit.snare(t, v); else kit.tom(t, v, [150, 150, 112, 84][k - 2]);
+    }
+    if (tick === 0 && bar % 4 === 0 && st.fillEnded) { kit.crash(t, 0.5 + 0.4 * I); kit.kick(t, 0.9); st.fillEnded = false; }
+    if (fillNow && tick === 11) st.fillEnded = true;
+    // a press roll that tightens while the fish coils
+    if (st.tension > 0.22) {
+      const v = 0.1 + 0.42 * st.tension * st.tension;
+      kit.snare(t, v);
+      if (st.tension > 0.6) kit.snare(t + st.tickLen * 0.5, v * 0.85);
+    }
+    // --- bass
+    for (const [at, midi, beats] of plan.bass) if (at === tick) bassNote(t + human() * 0.5, midi, beats * st.beatDur, lerp(0.55, 1, I));
+    // --- piano
+    if (plan.comp.includes(tick)) {
+      const ch = tick === 11 ? chordAt(bar + 1) : chordAt(bar); // a hit on the last eighth belongs to the next chord
+      const long = I < 0.3, v = lerp(0.5, 0.95, I) * (tick === 0 ? 1 : 0.85);
+      voicing(ch).forEach((m, i) => pianoNote(t + i * (long ? 0.018 : 0.004) + human(), m, long ? st.beatDur * 2.5 : 0.16 + 0.2 * rnd(), v));
+      if (P.menace > 0.6 && I > 0.75 && rnd() < 0.35) brass(t, [bassPitch(ch.root, 40) + 12, bassPitch(ch.root + 6, 46) + 12], 0.22, 0.7);
+    }
+  }
+
+  // ---------------------------------------------------------------- the clock
+  function schedule(until) {
+    if (!st.started) return;
+    while (st.nextTime < until) {
+      if (st.alive) playTick(st.bar, st.tick, st.nextTime);
+      // step to the next swung eighth: three ticks to a beat, the middle one a true triplet, the last pushed late by swing
+      if (st.tick % 3 === 0) {
+        const bpm = lerp(108, 172, params.energy) * (1 + 0.1 * st.intensity) * (st.alive ? 1 : 0.6);
+        st.beatDur = 60 / bpm;
+      }
+      const late = lerp(0.5, 0.74, params.swing), frac = [0, 1 / 3, late, 1];
+      const sub = st.tick % 3;
+      st.tickLen = (frac[sub + 1] - frac[sub]) * st.beatDur;
+      st.nextTime += st.tickLen;
+      if (++st.tick === 12) { st.tick = 0; st.bar++; }
+    }
+  }
+  function begin() {
+    if (st.started || !ctx) return;
+    build();
+    st.started = true; st.bar = 0; st.tick = 0; st.beatDur = 0.42; st.tickLen = 0.14; st.nextTime = now() + 0.12;
+    st.mood = pickMood();
+    if (virtual === null) timer = setInterval(() => schedule(ctx.currentTime + 0.16), 30);
+  }
+
+  // ---------------------------------------------------------------- what the game tells the band
+  const api = {
+    params, state: st,
+    // what the band is doing right now, for the drawer
+    describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity } : null; },
+    get muted() { return st.muted; },
+    get running() { return st.started && ctx?.state === 'running'; },
+    // call from a click or key press: browsers only let sound start from a gesture
+    unlock() {
+      try {
+        if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; ctx = new AC(); }
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        begin();
+        return true;
+      } catch { return false; }
+    },
+    set(name, value) { if (name in params) { params[name] = clamp(value, 0, 1); applyParams(); } },
+    mute(m) { st.muted = !!m; applyParams(0.05); },
+    duck(k) { st.duck = clamp(k, 0, 1); applyParams(0.18); }, // step back without touching the volume slider: the pause menu
+    setScene(floor, floors) { st.floor = floor; st.floors = floors; st.alive = true; applyParams(1.2); },
+    update(dt, s) {
+      Object.assign(st, { speed: s.speed, coil: s.coil, danger: s.danger, low: !!s.low });
+      if (s.alive !== st.alive) { st.alive = s.alive; applyParams(s.alive ? 0.3 : 1.2); }
+      const P = params;
+      st.pulse *= Math.exp(-dt / 1.6);
+      const target = clamp(0.02 + 0.36 * P.energy + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse), 0, 1);
+      st.intensity += (target - st.intensity) * (1 - Math.exp(-dt * (target > st.intensity ? 3.2 : 0.55)));
+      st.tension += (s.coil * P.react - st.tension) * (1 - Math.exp(-dt * 2.5));
+    },
+    // something just happened: answer it now, not on the next bar
+    hit(kind, strength = 1) {
+      if (!st.started) return;
+      const t = now() + 0.012, ch = chordAt(st.bar), v = (0.45 + 0.55 * strength) * lerp(0.35, 1, params.react), up = voicing(ch, 62);
+      const low = bassPitch(ch.root, 36);
+      st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
+      if (kind === 'loop') { kit.rim(t, 0.8 * v); kit.splash(t, 0.35 * v); }
+      else if (kind === 'burst') { kit.splash(t, 0.7 * v); kit.rim(t, v); kit.tom(t + 0.07, 0.6 * v, 112); } // ringed a swarm too big to hold
+      else if (kind === 'catch') { kit.crash(t, 0.75 * v); kit.kick(t, 0.9 * v); up.forEach((m, i) => pianoNote(t + i * 0.012, m + 12, 0.5, 0.8 * v)); bubbles(t + 0.05, up.slice(0, 3), v); st.tension *= 0.3; }
+      else if (kind === 'kill') { kit.crash(t, v); kit.kick(t, v); kit.snare(t, 0.9 * v); kit.tom(t + 0.11, 0.8 * v, 84); brass(t, [low + 12, low + 19, low + 24], 0.4, v); up.forEach((m) => pianoNote(t, m + 12, 0.6, 0.9 * v)); st.tension *= 0.2; }
+      else if (kind === 'grow') { up.forEach((m, i) => pianoNote(t + i * 0.07, m + 12, 0.7, 0.7 * v)); kit.ride(t + 0.28, 0.9 * v, true); }
+      else if (kind === 'bite') { kit.snare(t, v); kit.rim(t, v); kit.tom(t + 0.08, 0.9 * v, 70); kit.kick(t, v); brass(t, [low + 12, low + 18, low + 25], 0.5, v); n.water.frequency.cancelScheduledValues(t); n.water.frequency.setTargetAtTime(500, t, 0.03); n.water.frequency.setTargetAtTime(cutoff(), t + 0.22, 0.45); } // the hit muffles everything for a moment
+      else if (kind === 'snag') { for (const [f, g] of [[2093, 0.09], [3136 * 1.01, 0.06], [4699, 0.04]]) tone(t, { f0: f, decay: 0.7, gain: g * v, out: n.keysIn }); kit.snare(t, 0.8 * v); kit.tom(t + 0.09, 0.7 * v, 84); }
+      else if (kind === 'shed') { kit.splash(t, v); kit.tom(t, 0.8 * v, 112); kit.tom(t + 0.1, 0.8 * v, 84); const f = mtof(low + 24); tone(t, { type: 'triangle', f0: f, f1: f / 3, glide: 0.5, decay: 0.55, gain: 0.3 * v, out: n.bass }); }
+      else if (kind === 'descend') { kit.swell(t, 0.9, 0.9); kit.crash(t + 0.9, 0.7); n.water.frequency.cancelScheduledValues(t); n.water.frequency.setTargetAtTime(300, t, 0.3); }
+      else if (kind === 'dead') { kit.crash(t, 0.6); kit.tom(t, 1, 60); kit.tom(t + 0.18, 1, 46); brass(t, [low + 12, low + 13, low + 18], 1.6, 0.9); }
+      else if (kind === 'win') { kit.crash(t, 0.9); const major = [0, 4, 7, 11, 14, 19].map((iv) => 60 + tonic() + iv); major.forEach((m, i) => pianoNote(t + i * 0.11, m, 2.2, 0.8)); }
+      else if (kind === 'start') { st.alive = true; applyParams(0.3); kit.splash(t, 0.5); }
+      else if (kind === 'dash') { kit.splash(t, 0.3 * v); }
+      else if (kind === 'ram') { kit.kick(t, v); kit.rim(t, v); kit.tom(t + 0.05, 0.9 * v, 70); kit.splash(t, 0.5 * v); }
+      // the Sum: it wakes; its circle opens; its circle closes
+      else if (kind === 'wake') { kit.swell(t, 0.9, 1.4); kit.crash(t + 1.4, 0.8); kit.tom(t + 1.4, 1, 46); kit.tom(t + 1.62, 1, 40); brass(t + 1.4, [low + 12, low + 13, low + 19], 2.2, 1); }
+      else if (kind === 'open') { kit.crash(t, 1); kit.kick(t, 1); kit.snare(t, 0.9); brass(t, [low + 12, low + 19, low + 26], 2.4, 0.9); up.forEach((m, i) => pianoNote(t + 0.5 + i * 0.16, m + 12, 2.4, 0.8)); st.tension = 0; }
+      else if (kind === 'close') { kit.swell(t, 0.8, 2.2); [0, 7, 12, 16, 19].map((iv) => 48 + tonic() + iv).forEach((m, i) => pianoNote(t + 2.2 + i * 0.22, m, 3.5, 0.7)); kit.ride(t + 2.2, 0.9, true); }
+    },
+    // for measuring the band without a speaker: render `seconds` of sound against a scripted game
+    async render(seconds, script) {
+      begin();
+      for (let t = 0; t < seconds; t += 0.05) {
+        virtual = t;
+        const s = script(t) || {};
+        api.update(0.05, { speed: 0, coil: 0, danger: 0, low: false, alive: true, ...s });
+        for (const h of s.hits || []) api.hit(h[0], h[1] ?? 1);
+        schedule(t + 0.1);
+      }
+      return ctx.startRendering();
+    },
+  };
+  return api;
+}

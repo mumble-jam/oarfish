@@ -1,0 +1,217 @@
+// The animals of the dive, modelled the way the oarfish is: a skin over cross-sections, back darker than belly,
+// fins of rays, eyes with pupils, teeth. Head toward +z, back toward +y, the animal's left toward +x.
+// Each function returns one geometry; self-lit faces (eyes, photophores, lures) are marked in it.
+// Every colour comes in as `pal`, the animal's palette: the palettes themselves, and everything else about how each
+// one looks and moves, are its component in npc.js. Nothing here should be called from the game directly.
+
+import * as THREE from 'three';
+import { mesher, ringZ, ringY, shaded, tint, dim, bright } from './kit.js';
+
+const CREAM = '#fff6e4';
+// a skin through [z, half-width, up, down, lift] sections
+const hull = (m, secs, paint, n = 6) => m.skin(secs.map(([z, w, up, dn = up, y = 0]) => ringZ(z, w, up, dn, y, n)), paint);
+const tooth = (m, at, to, r = 0.016, colour = CREAM) => m.limb(at, to, r, 0.001, 3, colour);
+const both = (fn) => { fn(1); fn(-1); };
+
+// ---------------------------------------------------------------- the small fish of the swarms, one kind to a depth
+// White, to be tinted by its swarm: the back takes a cool shadow, the belly stays pale. `kind`:
+//   0 sprat (the two bands with light)  1 lanternfish, lights along its belly (the twilight)  2 a pale ghost of the palace
+export function swarmFish(kind, pal) {
+  const m = mesher(), deep = kind === 1, back = pal.back, flank = bright(kind === 2 ? 0.86 : 1), belly = bright(1.2), stripe = kind === 0 ? pal.stripe : flank;
+  const secs = deep
+    ? [[0.15, 0.012, 0.02, 0.022], [0.11, 0.034, 0.052, 0.05], [0.04, 0.04, 0.066, 0.07], [-0.05, 0.03, 0.05, 0.052], [-0.12, 0.013, 0.024, 0.024], [-0.155, 0.005, 0.013, 0.013]]
+    : [[0.16, 0.004, 0.008, 0.008], [0.11, 0.022, 0.034, 0.03], [0.04, 0.034, 0.058, 0.056], [-0.05, 0.03, 0.052, 0.052], [-0.12, 0.014, 0.025, 0.025], [-0.155, 0.005, 0.013, 0.013]];
+  hull(m, secs, (i, k, n) => (k === 0 || k === n - 1 ? back : k === 2 || k === 3 ? belly : i > 0 && i < 4 ? stripe : flank));
+  m.fin([[0, 0.012, -0.15], [0, 0, -0.155], [0, -0.012, -0.15]], [[0, 0.09, -0.275], [0, 0, -0.2], [0, -0.09, -0.275]], [bright(0.85), bright(0.7)]);
+  m.tri([0, 0.054, 0.03], [0, 0.105, -0.035], [0, 0.05, -0.085], back);
+  m.tri([0, -0.05, -0.04], [0, -0.085, -0.09], [0, -0.04, -0.1], bright(0.8));
+  both((s) => { m.tri([s * 0.03, -0.012, 0.07], [s * 0.065, -0.05, 0.0], [s * 0.03, -0.035, 0.03], bright(0.8));
+    m.tri([s * 0.026, 0.02, 0.118], [s * 0.031, 0.034, 0.1], [s * 0.031, 0.01, 0.098], '#14121c'); // the eye
+    if (deep) for (let i = 0; i < 4; i++) m.tri([s * 0.03, -0.045, 0.075 - i * 0.045], [s * 0.031, -0.03, 0.06 - i * 0.045], [s * 0.031, -0.05, 0.05 - i * 0.045], pal.lights, true); // photophores
+    if (kind === 2) m.tri([s * 0.034, 0.008, 0.08], [s * 0.031, 0.008, -0.1], [s * 0.034, -0.004, -0.02], pal.line, true); // the line down its side
+  });
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the tail-biter: a deep-chested thing with an underbite
+export function biter(pal) {
+  const m = mesher(), { back, flank, bar, belly, fins: red, finDark: redDark, jaw: dark } = pal;
+  hull(m, [[0.44, 0.014, 0.022, 0.022, -0.02], [0.36, 0.06, 0.075, 0.06, -0.01], [0.24, 0.1, 0.14, 0.12], [0.08, 0.125, 0.2, 0.18], [-0.1, 0.11, 0.17, 0.15], [-0.26, 0.06, 0.09, 0.08], [-0.36, 0.025, 0.045, 0.045]],
+    (i, k, n) => (k === 0 || k === n - 1 ? back : k === 2 || k === 3 ? belly : i === 2 || i === 4 ? bar : flank));
+  // the lower jaw, longer than the upper, and the teeth that give it its name
+  hull(m, [[0.47, 0.012, 0.012, 0.012, -0.085], [0.37, 0.055, 0.022, 0.035, -0.125], [0.2, 0.075, 0.03, 0.045, -0.15]], dark, 4);
+  m.quad([-0.05, -0.075, 0.38], [0.05, -0.075, 0.38], [0.07, -0.115, 0.22], [-0.07, -0.115, 0.22], '#3d1830');
+  for (const [x, z, l] of [[0, 0.455, 0.07], [0.04, 0.41, 0.075], [-0.04, 0.41, 0.075], [0.058, 0.33, 0.06], [-0.058, 0.33, 0.06]]) tooth(m, [x, -0.105, z], [x * 0.9, -0.105 + l, z + 0.01]);
+  for (const [x, z, l] of [[0.035, 0.385, 0.06], [-0.035, 0.385, 0.06], [0.06, 0.29, 0.055], [-0.06, 0.29, 0.055]]) tooth(m, [x, -0.055, z], [x, -0.055 - l, z + 0.012]);
+  m.fin([[0, 0.185, 0.14], [0, 0.2, 0.04], [0, 0.19, -0.06], [0, 0.15, -0.16], [0, 0.11, -0.23]], [[0, 0.25, 0.08], [0, 0.38, -0.05], [0, 0.35, -0.15], [0, 0.25, -0.23], [0, 0.13, -0.27]], [redDark, red]);
+  m.fin([[0, 0.045, -0.35], [0, 0, -0.36], [0, -0.045, -0.35]], [[0, 0.26, -0.63], [0, 0, -0.47], [0, -0.26, -0.63]], [red, redDark]);
+  m.fin([[0, -0.15, -0.06], [0, -0.1, -0.22]], [[0, -0.29, -0.2], [0, -0.15, -0.29]], red);
+  both((s) => { m.fin([[s * 0.11, -0.03, 0.12], [s * 0.115, -0.11, 0.06]], [[s * 0.23, -0.1, -0.06], [s * 0.15, -0.2, -0.02]], [red]);
+    m.tri([s * 0.105, 0.1, 0.19], [s * 0.118, -0.06, 0.16], [s * 0.116, 0.02, 0.13], dark); // the gill
+    m.eye([s * 0.079, 0.055, 0.285], [s, 0.2, 0.35], 0.034, { iris: pal.eye, glow: true, slit: true }); });
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the angler, and at three times the size the Lamplighter
+// the lure itself is the game's to light: the rod ends at rodTip
+export const ANGLER_ROD = [0, 0.98, 0.84];
+export function angler(pal, big = false) {
+  const m = mesher(), { back, skin, wart, belly, gum, fins, finTip } = pal;
+  hull(m, [[0.6, 0.2, 0.08, 0.07, 0.14], [0.5, 0.42, 0.26, 0.17, 0.1], [0.25, 0.56, 0.46, 0.4, 0.04], [-0.05, 0.56, 0.5, 0.46], [-0.32, 0.4, 0.36, 0.32], [-0.52, 0.2, 0.18, 0.16], [-0.62, 0.07, 0.08, 0.08]],
+    (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i * 3 + k) % 4 === 0 ? wart : skin), 8);
+  // the mouth: a scoop of a lower jaw, the dark behind the teeth, and the teeth, long and uneven
+  hull(m, [[0.74, 0.16, 0.03, 0.05, -0.12], [0.52, 0.42, 0.04, 0.13, -0.25], [0.2, 0.52, 0.06, 0.16, -0.36]], (i, k, n) => (k === 0 || k === n - 1 ? '#3b3558' : skin), 6);
+  m.quad([-0.36, 0.0, 0.52], [0.36, 0.0, 0.52], [0.4, -0.24, 0.5], [-0.4, -0.24, 0.5], gum).quad([-0.2, 0.06, 0.6], [0.2, 0.06, 0.6], [0.36, 0.0, 0.52], [-0.36, 0.0, 0.52], gum);
+  const upper = big ? 9 : 7, lower = big ? 8 : 6;
+  for (let i = 0; i < upper; i++) { const u = i / (upper - 1) - 0.5, x = u * 0.62, z = 0.62 - Math.abs(u) * 0.2, l = 0.1 + 0.09 * ((i * 5) % 3) / 2; tooth(m, [x, 0.02 - Math.abs(u) * 0.06, z], [x * 1.05, 0.02 - Math.abs(u) * 0.06 - l, z + 0.03], 0.022); }
+  for (let i = 0; i < lower; i++) { const u = i / (lower - 1) - 0.5, x = u * 0.7, z = 0.7 - Math.abs(u) * 0.36, l = 0.15 + 0.12 * ((i * 7) % 3) / 2; tooth(m, [x, -0.2 - Math.abs(u) * 0.03, z], [x * 0.95, -0.2 + l, z + 0.02], 0.024); }
+  m.fin([[0, 0.08, -0.6], [0, 0, -0.62], [0, -0.08, -0.6]], [[0, 0.34, -1.02], [0, 0, -0.9], [0, -0.34, -1.02]], [fins, finTip]);
+  m.fin([[0, 0.48, -0.1], [0, 0.4, -0.3], [0, 0.26, -0.46]], [[0, 0.62, -0.26], [0, 0.56, -0.44], [0, 0.34, -0.56]], [finTip, fins]);
+  both((s) => { m.fin([[s * 0.5, -0.02, -0.02], [s * 0.52, -0.16, -0.1], [s * 0.48, -0.26, -0.06]], [[s * 0.88, 0.1, -0.34], [s * 0.86, -0.12, -0.36], [s * 0.74, -0.3, -0.26]], [fins, finTip]);
+    m.eye([s * 0.38, 0.27, 0.38], [s, 0.45, 0.5], 0.05, { iris: pal.eye, glow: true }); });
+  for (const [y, z, l] of [[0.5, 0.12, 0.14], [0.47, -0.02, 0.1]]) tooth(m, [0, y, z], [0, y + l, z - 0.06], 0.03, wart); // spines along the back
+  // the rod it fishes with, in three joints
+  const rod = [[0, 0.4, 0.42], [0, 0.74, 0.5], [0, 0.95, 0.66], ANGLER_ROD];
+  for (let i = 0; i < 3; i++) m.limb(rod[i], rod[i + 1], 0.03 - i * 0.006, 0.024 - i * 0.006, 4, i === 2 ? finTip : fins);
+  if (big) both((s) => { for (let i = 0; i < 2; i++) m.limb([s * 0.12, 0.44, 0.3 - i * 0.2], [s * (0.3 + i * 0.1), 0.86 - i * 0.1, 0.36 - i * 0.3], 0.02, 0.006, 3, finTip); }); // feelers
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the spined drifter: an urchin adrift, plates in five bands, spines lit at the tip
+export function drifter(pal) {
+  const m = mesher(), g = new THREE.IcosahedronGeometry(0.3, 1).toNonIndexed(), a = g.attributes.position, seen = new Map();
+  for (let i = 0; i < a.count; i += 3) {
+    const p = [0, 1, 2].map((k) => [a.getX(i + k), a.getY(i + k) * 0.88, a.getZ(i + k)]), c = [0, 1, 2].map((k) => (p[0][k] + p[1][k] + p[2][k]) / 3);
+    m.tri(p[0], p[1], p[2], Math.sin(Math.atan2(c[0], c[2]) * 5) > 0.2 ? pal.band : pal.test);
+    for (const q of p) seen.set(q.map((v) => v.toFixed(2)).join(), q);
+  }
+  [...seen.values()].forEach((q, i) => { const l = Math.hypot(...q), d = q.map((v) => v / l), long = i % 3 === 0 ? 0.5 : 0.24, mid = q.map((v, k) => v + d[k] * long * 0.6), tip = q.map((v, k) => v + d[k] * long);
+    m.limb(q.map((v) => v * 0.9), mid, 0.04, 0.022, 3, [dim(pal.test, 0.8), pal.spine]).limb(mid, tip, 0.022, 0.002, 3, [pal.tip, tint(pal.tip, '#ffffff', 0.6)], true); });
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the leech: a lamprey, all mouth at one end
+export function leech(pal) {
+  const m = mesher(), { back, flank, belly, fin: pink } = pal;
+  const secs = [[0.5, 0.1, 0.1, 0.1, -0.03], [0.4, 0.115, 0.11, 0.11, -0.01], [0.15, 0.12, 0.12, 0.11], [-0.15, 0.1, 0.1, 0.1], [-0.38, 0.05, 0.07, 0.06], [-0.5, 0.008, 0.03, 0.03]];
+  hull(m, secs, shaded(back, flank, belly));
+  const lip = ringZ(0.5, 0.1, 0.1, 0.1, -0.03, 6);
+  m.cap(lip, [0, 0, 1], ['#1a0d1a', CREAM, CREAM], -0.07);
+  for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2 + 0.5; tooth(m, [Math.sin(a2) * 0.07, -0.03 + Math.cos(a2) * 0.07, 0.5], [Math.sin(a2) * 0.03, -0.03 + Math.cos(a2) * 0.03, 0.53], 0.014); }
+  m.fin([[0, 0.12, 0.05], [0, 0.1, -0.15], [0, 0.07, -0.38], [0, 0.03, -0.5]], [[0, 0.17, -0.02], [0, 0.2, -0.2], [0, 0.17, -0.42], [0, 0.07, -0.6]], [pink, dim(pink, 0.84)]);
+  m.fin([[0, -0.06, -0.38], [0, -0.03, -0.5]], [[0, -0.13, -0.44], [0, -0.07, -0.6]], pink);
+  both((s) => { m.eye([s * 0.1, 0.045, 0.36], [s, 0.3, 0.2], 0.022, { iris: pal.eye, glow: true });
+    for (let i = 0; i < 5; i++) m.tri([s * 0.118, 0.0, 0.27 - i * 0.05], [s * 0.118, 0.022, 0.255 - i * 0.05], [s * 0.118, -0.018, 0.245 - i * 0.05], '#150c1c'); }); // gill pores
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- a hook on a line from above: steel, a lead, and the tally tag of whoever set it
+export function hook(pal) {
+  const m = mesher(), { steel, shade } = pal;
+  const M4 = (x, y, z, rx = 0, ry = 0, rz = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')), new THREE.Vector3(1, 1, 1));
+  m.add(new THREE.TorusGeometry(0.2, 0.03, 5, 10, Math.PI * 1.3), M4(0, 0.2, 0, 0, 0, Math.PI * 1.02), steel);
+  m.limb([-0.2, 0.2, 0], [-0.17, 0.38, 0], 0.03, 0.002, 4, [shade, steel]).limb([-0.185, 0.27, 0], [-0.1, 0.2, 0], 0.016, 0.002, 3, shade); // the point and its barb
+  m.limb([0.2, 0.2, 0], [0.2, 0.72, 0], 0.03, 0.026, 5, [shade, steel]);
+  m.add(new THREE.TorusGeometry(0.05, 0.016, 4, 7), M4(0.2, 0.77, 0, 0, Math.PI / 2, 0), steel); // the eye the line is tied to
+  m.skin([ringY(1.3, 0.004, 5, { x: 0.2 }), ringY(1.42, 0.06, 5, { x: 0.2 }), ringY(1.62, 0.004, 5, { x: 0.2 })], [dim(pal.lead, 0.72), pal.lead]); // the lead
+  m.quad([0.2, 2.05, 0], [0.5, 2.0, 0.03], [0.5, 1.86, 0.03], [0.2, 1.9, 0], [pal.tag, pal.tag, dim(pal.tag, 0.8)]).tri([0.5, 2.0, 0.03], [0.62, 1.93, 0.05], [0.5, 1.86, 0.03], CREAM); // the tag
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- a length of the oarfish's own tail, loose in the water
+export function tailPiece(pal) { // pal: the oarfish's own palette
+  const m = mesher(), gold = pal.body, top = pal.bodyTop, silver = pal.belly;
+  const secs = [[0.3, 0.05, 0.1, 0.1], [0.0, 0.045, 0.09, 0.09], [-0.3, 0.022, 0.05, 0.05], [-0.34, 0.004, 0.02, 0.02]];
+  hull(m, secs, (i, k, n) => (k === 0 || k === n - 1 ? top : k === 2 || k === 3 ? silver : (i + k) % 3 === 0 ? pal.spots : gold));
+  m.cap(ringZ(0.3, 0.05, 0.1, 0.1, 0, 6), [0, 0, 1], ['#f4a4b9', '#7a2f45', '#7a2f45']);
+  m.fin([[0, 0.1, 0.28], [0, 0.095, 0.08], [0, 0.085, -0.1], [0, 0.06, -0.28]], [[0, 0.27, 0.2], [0, 0.26, 0.04], [0, 0.2, -0.14], [0, 0.1, -0.3]], [pal.finPink, pal.finMid, pal.finPale]);
+  return m.geometry();
+}
+
+// ================================================================ the keepers of the wells, and the Sum
+const grey = (k) => dim('#ffffff', k);
+
+// ---------------------------------------------------------------- the Keeper: a great crab under a dome of plates
+export function keeper(pal) {
+  const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8);
+  const rings = [[0.2, 1.62], [0.62, 1.5], [1.1, 1.05], [1.42, 0.45]].map(([y, r]) => ringY(y, r, 10, { squash: 0.92 }));
+  m.skin(rings, (i, k) => (i === 0 ? pale : (k + i) % 2 ? tone : shade)).cap(rings[3], [0, 1, 0], [pale, shade, shade], 0.14).cap(rings[0], [0, -1, 0], deep);
+  for (let i = 0; i < 10; i += 2) { const p = rings[2][i]; m.limb([p[0] * 0.95, p[1] - 0.05, p[2] * 0.95], [p[0] * 1.28, p[1] + 0.3, p[2] * 1.28], 0.13, 0.01, 4, [shade, pale]); } // knobs where the plates meet
+  m.limb([0, 1.5, 0], [0, 2.25, -0.2], 0.24, 0.02, 5, [tone, pale]);
+  m.add(new THREE.BoxGeometry(1.3, 0.34, 0.5), new THREE.Matrix4().makeTranslation(0, 0.2, 1.38), deep); // the face under the shell's lip
+  both((s) => {
+    m.limb([s * 0.32, 0.33, 1.45], [s * 0.44, 0.74, 1.74], 0.08, 0.06, 4, dark).eye([s * 0.44, 0.8, 1.78], [s * 0.35, 0.3, 1], 0.14, { iris: pal.eye, glow: true });
+    for (let i = 0; i < 2; i++) m.limb([s * 0.14, 0.12, 1.6], [s * (0.2 + i * 0.16), -0.05, 1.95 - i * 0.1], 0.05, 0.02, 3, pale); // mouth parts
+    const sh = [s * 1.0, 0.3, 1.05], el = [s * 1.6, 0.5, 1.7], wr = [s * 1.25, 0.42, 2.35]; // a claw: arm, forearm, two fingers held open
+    m.limb(sh, el, 0.2, 0.18, 5, [dark, deep]).limb(el, wr, 0.2, 0.3, 5, [deep, dark]).limb(wr, [s * 0.78, 0.68, 2.98], 0.29, 0.04, 5, [dark, pale]).limb(wr, [s * 0.88, 0.1, 2.86], 0.2, 0.03, 5, [dark, pale]);
+    for (let i = 0; i < 3; i++) { const z = 0.5 - i * 0.75, hip = [s * 1.35, 0.35, z], knee = [s * 2.15, 0.95, z - 0.15], foot = [s * 2.55, -0.25, z - 0.3]; m.limb(hip, knee, 0.13, 0.1, 4, [dark, deep]).limb(knee, foot, 0.1, 0.03, 4, [deep, pale]); }
+  });
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the Shearer: a sawfish, the saw toothed in the district's colour
+export function shearer(pal) {
+  const m = mesher(), { tone, back, flank, belly, saw: pale } = pal, shade = dim(tone, 0.8);
+  hull(m, [[2.0, 0.3, 0.1, 0.1, -0.2], [1.5, 0.62, 0.28, 0.2, -0.1], [0.9, 0.76, 0.5, 0.3], [0.2, 0.7, 0.62, 0.34], [-0.6, 0.5, 0.5, 0.3], [-1.4, 0.26, 0.3, 0.2], [-2.0, 0.1, 0.14, 0.1]],
+    (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 3 === 0 ? '#4a375e' : flank), 8);
+  const sawEnd = ringZ(3.15, 0.13, 0.035, 0.035, -0.2, 4);
+  m.skin([ringZ(1.95, 0.27, 0.07, 0.07, -0.2, 4), sawEnd], [pale, CREAM]).cap(sawEnd, [0, 0, 1], pale);
+  both((s) => {
+    for (let i = 0; i < 8; i++) { const z = 2.1 + i * 0.135, w = 0.255 - i * 0.015; tooth(m, [s * w, -0.2, z], [s * (w + 0.2), -0.2, z + 0.03], 0.04, tone); }
+    m.fin([[s * 0.7, -0.08, 1.1], [s * 0.72, -0.1, 0.5], [s * 0.6, -0.1, -0.05]], [[s * 1.2, -0.16, 0.75], [s * 1.8, -0.24, 0.05], [s * 0.95, -0.16, -0.32]], [flank, back]); // the wings
+    m.fin([[s * 0.4, -0.2, -0.8], [s * 0.3, -0.18, -1.2]], [[s * 0.8, -0.3, -1.15], [s * 0.4, -0.22, -1.4]], flank);
+    m.eye([s * 0.52, 0.28, 1.3], [s * 0.7, 0.7, 0.2], 0.12, { iris: pal.eye, glow: true, slit: true });
+    for (let i = 0; i < 4; i++) m.tri([s * 0.72, 0.02, 0.75 - i * 0.13], [s * 0.74, 0.2, 0.7 - i * 0.13], [s * 0.72, 0.02, 0.69 - i * 0.13], '#241833'); // gill slits
+  });
+  m.fin([[0, 0.6, 0.35], [0, 0.58, -0.1], [0, 0.5, -0.5]], [[0, 1.3, -0.15], [0, 1.12, -0.55], [0, 0.56, -0.75]], [tone, shade]);
+  m.fin([[0, 0.3, -1.15], [0, 0.26, -1.5]], [[0, 0.64, -1.45], [0, 0.3, -1.7]], tone);
+  m.fin([[0, 0.14, -1.98], [0, 0, -2.02], [0, -0.1, -1.98]], [[0, 1.05, -2.95], [0, 0.12, -2.45], [0, -0.52, -2.65]], [tone, shade]);
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the Lamplighter: the angler grown huge, its fins in the district's colour
+export const LAMP_SCALE = 2.1;
+export function lamplighter(pal) { const g = angler({ ...pal, fins: dim(pal.tone, 0.75), finTip: pal.tone }, true); g.scale(LAMP_SCALE, LAMP_SCALE, LAMP_SCALE); return g; }
+
+// ---------------------------------------------------------------- the Warden: a moray's head, and one length of its body
+export function wardenHead(pal) {
+  const m = mesher(), { tone, pale, gum } = pal, shade = dim(tone, 0.72);
+  hull(m, [[1.42, 0.1, 0.1, 0.07, 0.02], [1.05, 0.34, 0.24, 0.14, 0.02], [0.6, 0.5, 0.42, 0.26], [0, 0.5, 0.52, 0.44], [-0.5, 0.45, 0.5, 0.44]], (i, k, n) => (k === 0 || k === n - 1 ? shade : k === n / 2 - 1 || k === n / 2 ? pale : (i + k) % 2 ? tone : dim(tone, 0.88)), 8);
+  hull(m, [[1.38, 0.08, 0.03, 0.05, -0.2], [0.95, 0.3, 0.05, 0.11, -0.3], [0.45, 0.42, 0.06, 0.14, -0.4]], (i, k, n) => (k === 0 || k === n - 1 ? shade : pale), 6);
+  m.quad([-0.3, -0.12, 1.0], [0.3, -0.12, 1.0], [0.4, -0.3, 0.5], [-0.4, -0.3, 0.5], gum);
+  both((s) => {
+    for (let i = 0; i < 4; i++) { const z = 1.25 - i * 0.2, x = s * (0.12 + i * 0.07); tooth(m, [x, -0.1, z], [x, -0.24, z + 0.03], 0.03); tooth(m, [x * 1.05, -0.26, z - 0.08], [x * 1.05, -0.1, z - 0.05], 0.028); }
+    m.eye([s * 0.38, 0.24, 0.78], [s, 0.45, 0.3], 0.1, { iris: pal.eye, glow: true });
+    m.limb([s * 0.09, 0.1, 1.36], [s * 0.15, 0.24, 1.5], 0.035, 0.03, 4, pale); // the nostril tubes of a moray
+  });
+  m.fin([[0, 0.4, 0.7], [0, 0.52, 0.2], [0, 0.5, -0.5]], [[0, 0.72, 0.5], [0, 0.94, 0], [0, 0.8, -0.5]], [pale, CREAM]);
+  return m.geometry();
+}
+// white, to be tinted: one length of an eel or of the Sum, along z, half a unit in radius, a fin along its back
+export function eelSegment() {
+  const m = mesher(), top = grey(0.7), belly = bright(1.12);
+  hull(m, [[0.52, 0.5, 0.5, 0.5], [0, 0.52, 0.54, 0.5], [-0.52, 0.5, 0.5, 0.5]], (i, k, n) => (k === 0 || k === n - 1 ? top : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 2 ? bright(1) : grey(0.86)), 8);
+  m.fin([[0, 0.5, 0.52], [0, 0.54, 0], [0, 0.5, -0.52]], [[0, 0.8, 0.36], [0, 0.86, -0.12], [0, 0.72, -0.52]], [bright(1.2), grey(0.9)]);
+  m.fin([[0, -0.5, 0.4], [0, -0.5, -0.4]], [[0, -0.62, 0.2], [0, -0.6, -0.5]], grey(0.8));
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- one length of the Sum: a paid tail, joined to the next
+// White, to take its district's colour. A ribbonfish in section, pinched and dark at each end where it was joined,
+// spotted on the flank, and still carrying its length of the dorsal fin. Both faces of the fin are built: its material is one-sided.
+export function sumSegment() {
+  const m = mesher(), back = grey(0.74), belly = bright(1.16), seam = grey(0.5);
+  hull(m, [[0.5, 0.4, 0.44, 0.44], [0.4, 0.5, 0.5, 0.5], [-0.4, 0.5, 0.5, 0.5], [-0.5, 0.4, 0.44, 0.44]], (i, k, n) => (i !== 1 ? seam : k === 0 || k === n - 1 ? back : k === 2 || k === 3 ? belly : k === 1 ? bright(1) : grey(0.9)), 6);
+  both((s) => { for (const [y, z, r] of [[0.16, 0.22, 0.07], [-0.02, -0.08, 0.09], [0.2, -0.26, 0.06]]) { const x = s * 0.5 * Math.sin(Math.acos(Math.min(1, Math.abs(y) / 0.5))) + s * 0.004; m.tri([x, y + r, z], [x, y - r * 0.6, z + r], [x, y - r * 0.6, z - r], grey(0.6)); } }); // the spots of the flank
+  const root = [[0, 0.5, 0.42], [0, 0.5, 0.14], [0, 0.5, -0.14], [0, 0.5, -0.42]], tip = [[0, 0.68, 0.34], [0, 0.74, 0.08], [0, 0.72, -0.2], [0, 0.62, -0.46]];
+  m.fin(root, tip, [bright(1.3), bright(1.05)]).fin([...root].reverse(), [...tip].reverse(), [bright(1.05), bright(1.3)]);
+  return m.geometry();
+}
+
+// the seal across the mouth of a guarded well: a wheel of light, not a sheet of it
+export function sealGeo(R = 6.1) {
+  const m = mesher(), flat = (g) => g.rotateX(-Math.PI / 2);
+  m.add(flat(new THREE.RingGeometry(R * 0.86, R, 36)), null, '#ffffff').add(flat(new THREE.RingGeometry(R * 0.54, R * 0.6, 28)), null, '#ffffff').add(flat(new THREE.CircleGeometry(R * 0.16, 12)), null, '#ffffff');
+  for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), w = 0.16, at = (r, side) => [s * r + c * w * side, 0, c * r - s * w * side]; m.quad(at(R * 0.2, -1), at(R * 0.2, 1), at(R * 0.84, 1), at(R * 0.84, -1), '#ffffff'); }
+  return m.geometry();
+}
