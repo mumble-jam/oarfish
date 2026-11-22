@@ -1040,6 +1040,7 @@ float seaLight(vec2 p, float t) {
     }
     // the goal sits on the nearest copy of the world; its beam turns to face the camera
     const ox = T * Math.round((focus.x - goal.x) / T), oz = T * Math.round((focus.z - goal.z) / T);
+    mists.forEach((m, i) => { m.mesh.position.set(ox, Math.sin(t * 0.35 + i * 1.3) * 0.2, oz); m.mesh.material.opacity = m.opacity * (0.88 + 0.12 * Math.sin(t * 0.5 + i * 2.1)); }); // it breathes
     for (const b of beacons) {
       b.position.x = goal.x + ox; b.position.z = goal.z + oz;
       b.rotation.y = Math.atan2(camera.position.x - b.position.x, camera.position.z - b.position.z);
@@ -1079,6 +1080,27 @@ float seaLight(vec2 p, float t) {
     fishMesh.instanceMatrix.needsUpdate = true;
     return at;
   }
+  // Mist in the rift: sheets of it lying one under another between the walls, pale above and dark below, so that looking
+  // in there is no bottom to see, only the next band's water rising to meet this one. The fish sinks into it and is gone.
+  const mists = [], murk = rift ? pit.clone().multiplyScalar(0.8) : null;
+  if (rift) {
+    const pale = new THREE.Color(FLOORS[floor + 1].water).lerp(new THREE.Color(F.sky), 0.22);
+    const back = (t) => 0.5 - Math.sin(Math.asin(1 - 2 * clamp(t, 0, 1)) / 3); // smooth(), the other way round: how far in the wall is at a given depth
+    for (let k = 0; k < 7; k++) {
+      const depth = rift.step + 0.7 + k * 1.45, inset = rift.ledge + (rift.wall - rift.ledge) * back((depth - rift.step) / (rift.deep - rift.step)) - 0.8;
+      const m = mesher(), y = rift.y - depth, P = (u, a) => { const c = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * c, y, rift.z + rift.tz * u + rift.nz * c]; };
+      for (let u = -rift.half; u < rift.half; u += 2) {
+        const s0 = riftW(u) - inset, s1 = riftW(u + 2) - inset;
+        if (s0 < 0.3 && s1 < 0.3) continue;
+        m.quad(P(u, -Math.max(s0, 0.05)), P(u, Math.max(s0, 0.05)), P(u + 2, Math.max(s1, 0.05)), P(u + 2, -Math.max(s1, 0.05)), '#ffffff');
+      }
+      const geo = m.geometry(), opacity = k === 6 ? 0.72 : 0.2 + k * 0.03;
+      const mesh = add(new THREE.Mesh(geo, mat(new THREE.MeshBasicMaterial({ color: pale.clone().lerp(murk, k / 6), transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }))));
+      mesh.frustumCulled = false; mesh.renderOrder = k - 7; // the deepest first, and all of them before the light that lies over them
+      owned.push({ dispose: () => geo.dispose() });
+      mists.push({ mesh, opacity });
+    }
+  }
   // light across the mouth of the rift, for whoever keeps it (guards.js): bars from wall to wall, and a line along each wall
   function riftVeil() {
     const m = mesher(), y = rift.y - rift.step + 0.35, slot = (u) => riftW(u) - rift.ledge - 0.3;
@@ -1094,7 +1116,7 @@ float seaLight(vec2 p, float t) {
   // has the fish gone down the rift, or through the palace gate?
   function atGoal(p) {
     const dx = wrapD(p.x - goal.x), dz = wrapD(p.z - goal.z), d = Math.hypot(dx, dz);
-    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : riftIn(p.x, p.z) > rift.ledge + 1 && p.y < rift.y - rift.step - 4.5; // through the gate, or well down between the walls of the rift
+    return last ? d < 3 && Math.abs(p.y - goal.y) < 4.5 : riftIn(p.x, p.z) > rift.ledge + 2 && p.y < rift.y - rift.step - 6; // through the gate, or down in the mist between the walls of the rift, long before its bed
   }
   // a clear spot on the open seabed, for placing hunters and hooks
   function openSpot(minFromSpawn = 24) {
@@ -1112,6 +1134,6 @@ float seaLight(vec2 p, float t) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  return { update, pushOut, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

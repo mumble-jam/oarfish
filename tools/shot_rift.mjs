@@ -49,6 +49,9 @@ for (const band of bands.length ? bands : [0, 1, 2, 3]) {
     ['d-ledge', { u: 9, a: -9.4, up: -1.2, turn: -1.571, mode: 'look', pitch: 0.42 }],
     ['e-above', { a: -4, up: 9, pitch: 1.2, zoom: 1.5 }],
     ['f-open', { a: -17, up: 2.6, mode: 'look', fall: true }],
+    ['g-over-open', { a: -5, up: 5, mode: 'look', pitch: 0.8, fall: true }],
+    ['h-sinking', { a: 0, up: -5.4, mode: 'look', pitch: 0.3, fall: true }],
+    ['i-deep', { a: 0, up: -7.6, mode: 'look', pitch: 0.3, fall: true }],
   ];
   for (const [name, v] of views) { const at = await stand(band, v); await frame(); await page.screenshot({ path: out(`${band}-${name}`) }); console.log(`band ${band} ${name}`, JSON.stringify(at)); }
 }

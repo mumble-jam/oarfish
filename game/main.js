@@ -397,7 +397,8 @@ export async function start(saved = {}) {
     cam.ease = { yaw: cam.yaw, pitch: 1.12, t: 9, rate: 0.6 };
   }
   const fadeEl = $('fade');
-  function fade(on, colour = '', seconds = 0) { fadeEl.style.background = colour; fadeEl.style.transitionDuration = seconds ? `${seconds}s` : ''; fadeEl.classList.toggle('on', on); }
+  // the screen goes to one colour and comes back from it; it goes as it came, in the colour it came in
+  function fade(on, colour = '', seconds = 0) { if (on) fadeEl.style.background = colour; fadeEl.style.transitionDuration = seconds ? `${seconds}s` : ''; fadeEl.classList.toggle('on', on); }
   function riseInto(index) { // up out of the rift it once went down
     sum?.dispose(); sum = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
     world.dispose(); foes.dispose();
@@ -1258,6 +1259,15 @@ export async function start(saved = {}) {
     const F = world.floor;
     scene.fog.near = d * F.fog[0];
     scene.fog.far = d + F.fog[1] + end.vista * 80; // the closed circle is seen whole, from far above
+    // sinking into the rift, its mist closes round: sight comes in to a few metres and takes the mist's colour.
+    // A new band is arrived at the same way, out of it.
+    const R = world.rift, into = R && R.in(rig.pos.x, rig.pos.z) > R.ledge - 1.5 ? clamp((R.ledgeY - 0.4 - rig.pos.y) / 5, 0, 1) : 0;
+    cam.murk = dt ? damp(cam.murk || 0, into * into * (3 - 2 * into), 3.5, dt) : (cam.murk || 0);
+    if (cam.murk > 0.002 || cam.murky) {
+      scene.fog.near = lerp(scene.fog.near, 0.4, cam.murk); scene.fog.far = lerp(scene.fog.far, d + 6, cam.murk);
+      scene.fog.color.set(F.water); if (R) scene.fog.color.lerp(R.murk, cam.murk);
+      scene.background.copy(scene.fog.color); cam.murky = cam.murk > 0.002;
+    }
     sun.position.copy(focus).add(SUN_OFFSET);
     sun.target.position.copy(focus);
     lamp.position.set(rig.pos.x + sy * 2.4, rig.pos.y + 3, rig.pos.z + cy * 2.4); // above and on the viewer's side, so the flank is lit
@@ -1391,7 +1401,7 @@ export async function start(saved = {}) {
         }
       }
       if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7);
-      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { run.state = 'descend'; run.stateT = 0; fade(true); moment('descend'); know('down'); } // the palace gate only leads into the hall
+      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { run.state = 'descend'; run.stateT = 0; fade(true, `#${world.rift.murk.getHexString()}`); moment('descend'); know('down'); } // the palace gate only leads into the hall
     }
     ctx.joints = rig.joints; ctx.time = world.time.value; ctx.dash = rig.dashT > 0; ctx.coil = rig.coiling;
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
