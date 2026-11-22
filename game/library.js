@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { NPC, BANDS, inOrder, make, swarmKit, tweaks, resolve, paintOf, stoneOf, look as theLook } from './npc.js';
 import { shellMaterial } from './shells.js';
+import { softBody } from './soft.js';
 import { alive, growing, tint } from './kit.js';
 import { FLOORS, SWARMS } from './world.js';
 import { buildOarfish } from './oarfish.js';
@@ -71,6 +72,10 @@ export function createLibrary({ renderer, root, onClose }) {
         mesh.frustumCulled = false; stand.add(mesh); meshes.push(mesh); tris += mesh.geometry.attributes.position.count / 3; });
       shown = { body: meshes[0], dispose() { for (const mesh of meshes) mesh.dispose(); mat.dispose(); } };
       S.lift = 0; S.dist = 17;
+    } else if (spec.kind === 'shell' && preview.soft) { // a shell drawn as light: one, turning as a thing adrift does
+      const soft = softBody(spec.soft, preview.palette, null); soft.mesh.scale.setScalar((spec.show?.scale ?? 1) * preview.scale); soft.mesh.frustumCulled = false; stand.add(soft.mesh);
+      shown = { mesh: soft.mesh, body: soft.mesh, soft: true, spin: !!spec.show?.spin, tall: spec.length, tones: 1, dispose() { soft.material.dispose(); } };
+      S.lift = spec.show?.lift || 0;
     } else if (spec.kind === 'thing' || spec.kind === 'shell') { // something that stands, lies or drifts: one, or a few of it in its several tints
       const pal = resolve(spec.paletteFrom || S.id).palette, geo = spec.build(pal), show = spec.show || {}, n = show.n || 1, mm = spec.material || {};
       const mat = spec.kind === 'shell' ? shellMaterial() : mm.stone ? new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: mm.double ? THREE.DoubleSide : THREE.FrontSide }) : spec.baked ? alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })) : growing(mm, clock);
@@ -91,14 +96,14 @@ export function createLibrary({ renderer, root, onClose }) {
       shown = { actor, body: actor.body, extra, dispose() { actor.dispose(); } };
     }
     stand.position.set(0, spec.id === 'hook' ? S.lift + 0.6 : spec.run ? 0 : S.lift, 0); stand.rotation.set(0, 0, 0);
-    const wire = S.wire && !shown.actor?.soft; // a soft body has no wires to show
+    const wire = S.wire && !shown.actor?.soft && !shown.soft; // a soft body has no wires to show
     for (const o of stand.children) if (o.material && !o.isSprite) o.material.wireframe = wire;
     if (shown.actor) shown.actor.body.material.wireframe = wire;
     // the measure: as long as the creature, rounded up to the half metre
     const steps = Math.max(2, Math.ceil(spec.length / 0.5));
     if (!spec.swarm && !spec.run && spec.id !== 'warden' && spec.kind !== 'tokens' && !(spec.show?.n > 1)) for (let i = 0; i < steps; i++) { const b = new THREE.Mesh(ruleGeo, i % 2 ? ruleB : ruleA); b.position.set(0, 0.011, (i + 0.5) * 0.5 - steps * 0.25); b.rotation.y = Math.PI / 2; rule.add(b); } // lying under it, nose to tail
     if (fishModel) { fishModel.group.visible = S.fish; fishModel.group.position.set(-clamp(spec.length * 0.35 + 0.9, 1.2, 4), S.lift, 0); }
-    $('#lib-tris').textContent = shown.actor?.soft ? 'drawn as light, no triangles' : `${Math.round(tris)} triangles${theLook.soft && !spec.soft && spec.id !== 'oarfish' && spec.kind !== 'tokens' ? ', soft look to come' : ''}`;
+    $('#lib-tris').textContent = shown.actor?.soft || shown.soft ? 'drawn as light, no triangles' : `${Math.round(tris)} triangles${theLook.soft && !spec.soft && spec.id !== 'oarfish' && spec.kind !== 'tokens' ? ', soft look to come' : ''}`;
     if (state.speed !== undefined && !S.dirty) S.speed = state.speed;
     S.dirty = false;
   }

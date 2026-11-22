@@ -407,6 +407,85 @@ vec3 albedo(vec3 p, out vec4 M){
   return mix(body, mix(cPale, vec3(1., .96, .89), M.w), wF);
 }`;
 
+// ---------------------------------------------------------------- the ten shells
+// A shell is written in its model's own measure: it stands on y = 0, about one unit tall, and q and the distance are in
+// that measure. Each gives its distance (d), its colour there (col) and how far it gives its own light (lit).
+// cShell is the shell's one colour; PL is that colour worn pale.
+const SHELL = (body) => /* glsl */`
+#define ACCENT cShell
+#define EYE_COL vec3(0.)
+#define PL mix(cShell, vec3(1.), .55)
+const vec3 EYE = vec3(0.), EYE_OUT = vec3(0., 0., 1.), EMBER = vec3(0., 1.5, 0.);
+const float EMBER_R = .5, BLOOM = 0.;
+float shell(vec3 q, out vec3 col, out float lit){ lit = 0.; float d; ${body}
+  return d; }
+float map(vec3 p){ vec3 c; float l; return shell(vec3(p.z, p.y, p.x) / 3., c, l) * 3.; }
+vec3 albedo(vec3 p, out vec4 M){ vec3 c; float l; shell(vec3(p.z, p.y, p.x) / 3., c, l); M = vec4(l, 0., 0., 0.); return c; }`;
+const SHELL_BODIES = {
+  // an auger: whorl on whorl up to a point, a dark mouth at the foot
+  spire: `float w = q.y / .2, r = .42 * max(1. - q.y / 1.32, 0.) * (1. + .13 * sin(6.28318 * w + 1.6)) + .012;
+  d = max((length(q.xz) - r) * .7, max(-q.y, q.y - 1.27));
+  float f = fract(w);
+  col = mix(mix(mix(cShell, vec3(.85, .57, .37), .5), cShell, smoothstep(.2, .4, f)), cShell * .72, smoothstep(.7, .88, f));
+  col = mix(col, vec3(.23, .14, .20), smoothstep(.14, .06, length(q - vec3(.27, .11, .24))));`,
+  // a scallop: ribs fanning from the hinge, the rim scalloped, two ears
+  fan: `vec2 h = q.xy - vec2(0., .08); float r = length(h), a = atan(h.x, h.y), rib = cos(a * 13.1);
+  float th = .02 + .085 * max(1. - (r / .9) * (r / .9), 0.) + .012 * rib * smoothstep(.1, .5, r);
+  d = max(max(r - .86 + .03 * (.5 + .5 * rib), (abs(a) - 1.2) * r), abs(q.z - .015) - th) * .8;
+  d = min(d, sdEll(vec3(abs(q.x) - .2, q.y - .1, q.z), vec3(.16, .1, .03)));
+  col = q.z > 0. ? mix(cShell, PL, smoothstep(-.3, .3, rib)) : cShell * .7;`,
+  // a nautilus: the tube widening as it winds, striped across, the last chamber open
+  coil: `d = 1e9; float best = 0., r0 = .057; vec3 a0 = vec3(-.11, .62, 0.);
+  for(int i = 1; i <= 13; i++){ float a = float(i) * .53, R = .11 * exp(.19 * a), r1 = R * .52; vec3 a1 = vec3(-cos(a) * R, .62 + sin(a) * R, 0.);
+    float di = rcone(q, a0, a1, r0, r1); if(di < d){ d = di; best = float(i); } a0 = a1; r0 = r1; }
+  col = mod(best, 2.) < .5 ? vec3(.54, .35, .23) : best > 10. ? mix(cShell, vec3(1., .96, .89), .6) : cShell;
+  col = mix(col, vec3(.16, .10, .15), smoothstep(.20, .10, length(q - vec3(-.27, .95, 0.))));`,
+  // the people's ring in small: a body closed on itself, length by length, a crest where the head is
+  ring: `vec2 h = q.xy - vec2(0., .62); float seg = atan(h.y, h.x) * 12. / 6.28318, f = fract(seg);
+  d = length(vec2(length(h) - .5, q.z * 1.05)) - (.085 + .035 * sin(3.14159 * f));
+  for(int i = 0; i < 3; i++){ float k = float(i); d = min(d, rcone(q, vec3(.60, .72 - k * .1, 0.), vec3(.84 - k * .05, .82 - k * .16, 0.), .035, .005)); }
+  col = (mod(floor(seg), 3.) < .5 ? cShell * .7 : cShell) * (.75 + .25 * smoothstep(0., .25, f) * smoothstep(1., .75, f));`,
+  // a horn shell, to be blown: ridged, bent, flaring to a lip that is pink inside
+  horn: `d = 1e9; float best = 0.;
+  for(int i = 0; i < 7; i++){ float t0 = float(i) / 7., t1 = float(i + 1) / 7.;
+    vec3 a0 = vec3(.34 - .62 * t0 + .1 * sin(t0 * 3.), .2 + t0 * t0 + .25 * t0, .06 * sin(t0 * 4.)), a1 = vec3(.34 - .62 * t1 + .1 * sin(t1 * 3.), .2 + t1 * t1 + .25 * t1, .06 * sin(t1 * 4.));
+    float di = rcone(q, a0, a1, (.3 * (1. - t0) + .02) * (mod(float(i), 2.) < .5 ? 1.12 : 1.), .3 * (1. - t1) + .02); if(di < d){ d = di; best = float(i); } }
+  col = mod(best, 2.) < .5 ? cShell : cShell * .72;
+  float lip = sdEll(q - vec3(.47, .27, 0.), vec3(.07, .26, .44));
+  if(lip < d) col = mix(vec3(.98, .80, .84), PL, smoothstep(.2, .42, length(q.yz - vec2(.27, 0.))));
+  d = smin(d, lip, .05);`,
+  // a limpet: a low ribbed cone, off-centre at the top, worn pale along the ribs
+  cap: `float rib = cos(atan(q.z, q.x) * 14.), r = length(q.xz - vec2(.03 * smoothstep(0., .5, q.y), 0.));
+  float prof = q.y < .24 ? mix(.64, .36, max(q.y, 0.) / .24) : .36 * max(1. - (q.y - .24) / .27, 0.);
+  d = max((r - prof * (1. + .05 * rib)) * .7, max(-q.y - .03, q.y - .52));
+  col = mix(mix(cShell * .68, cShell, smoothstep(-.3, .3, rib)), PL, smoothstep(.3, .5, q.y));`,
+  // a murex: a small body, and a comb of spines down three sides of it
+  spine: `d = smin(sdEll(q - vec3(0., .46, 0.), vec3(.33, .48, .33)), sdCone(q - vec3(0., .72, 0.), .2, .01, .36), .12);
+  float st = 2.0944, a = floor(atan(q.x, q.z) / st + .5) * st; vec2 e = vec2(sin(a), cos(a)); vec3 f = vec3(dot(q.xz, e), q.y, dot(q.xz, vec2(e.y, -e.x)));
+  float sp = rcone(q, vec3(0., .02, 0.), vec3(.12, -.02, .32), .06, .02);
+  for(int j = 0; j < 4; j++){ float k = float(j), r = j == 0 ? .22 : j == 1 ? .33 : j == 2 ? .26 : .14; sp = min(sp, rcone(f, vec3(r - .04, .22 + k * .2, 0.), vec3(r + .36 - k * .04, .36 + k * .2, 0.), .05, .006)); }
+  vec3 body = mix(cShell, vec3(.96, .89, .76), .55);
+  col = sp < d ? cShell : mix(body, mix(body, cShell, .4), smoothstep(-.3, .3, sin(q.y * 18.)));
+  d = smin(d, sp, .04);`,
+  // a bubble shell thin enough to carry a light: every other panel lets it out
+  lamp: `d = sdEll(q - vec3(0., .51, 0.), vec3(.40, .50, .40));
+  float k = floor(atan(q.z, q.x) / .7854), i = floor((q.y - .04) / .235), on = mod(k + i, 2.) < .5 && i > .5 && i < 2.5 ? 1. : 0.;
+  col = mix(vec3(.54, .42, .23), cShell, on); lit = on * .9;`,
+  // a tusk shell: long, bent, banded finely, open at the broad end
+  tusk: `d = 1e9; float best = 0.;
+  for(int i = 0; i < 7; i++){ float t0 = float(i) / 7., t1 = float(i + 1) / 7.;
+    vec3 a0 = vec3(.08 * sin(t0 * 1.4), .06 + .5 * t0 - .12 * t0 * t0, 1.25 * t0 - .2 * t0 * t0 - .4), a1 = vec3(.08 * sin(t1 * 1.4), .06 + .5 * t1 - .12 * t1 * t1, 1.25 * t1 - .2 * t1 * t1 - .4);
+    float di = rcone(q, a0, a1, .19 * (1. - float(i) / 7.6), .19 * (1. - float(i + 1) / 7.6)); if(di < d){ d = di; best = float(i); } }
+  col = mix(mod(best, 2.) < .5 ? cShell : vec3(.85, .82, .77), vec3(.43, .41, .38), smoothstep(-.33, -.42, q.z));`,
+  // an oyster standing open, and what it made
+  pearl: `vec3 h = q - vec3(0., .06, -.28); vec2 zy = rot(1.05) * vec2(h.z, h.y); vec3 u = vec3(h.x, zy.y, zy.x);
+  float lo = sdEll(h - vec3(0., .02, .36), vec3(.60, .09, .58)), up = sdEll(u - vec3(0., -.02, .36), vec3(.60, .09, .58)), pe = length(q - vec3(0., .24, .08)) - .19;
+  d = min(min(lo, up), pe);
+  vec3 outer = vec3(.56, .65, .77), nacre = vec3(.93, .96, 1.);
+  col = pe <= d ? cShell : lo < up ? mix(outer, nacre, smoothstep(0., .05, h.y - .03)) : mix(outer, nacre, smoothstep(0., -.05, u.y + .02));
+  lit = pe <= d ? .85 : 0.;`,
+};
+
 // palette: which of the component's colours each of the shader's takes
 export const SHAPES = {
   biter: { glsl: BITER, unit: 0.33, offset: 0.021, box: [[-2.3, -1.3, -0.85], [1.7, 1.6, 0.85]],
@@ -421,6 +500,8 @@ export const SHAPES = {
   eel: { glsl: EEL, unit: 2.0, offset: 0, links: 12, box: [[-5.6, -1.2, -5.6], [5.6, 1.5, 5.6]], palette: { cTone: 'tone', cPale: 'pale' } },
   hook: { glsl: HOOK, unit: 0.26, offset: 0, box: [[-0.6, -0.35, -1.3], [0.6, 8.3, 2.75]], palette: { cSteel: 'steel', cShade: 'shade', cLead: 'lead', cTag: 'tag', cBait: 'bait' } },
 };
+
+for (const [name, body] of Object.entries(SHELL_BODIES)) SHAPES[`shell-${name}`] = { glsl: SHELL(body), unit: 1 / 3, offset: 0, box: [[-3, -0.4, -3], [3, 4.1, 3]], palette: { cShell: 'colour' } };
 
 // ---------------------------------------------------------------- the shader round a shape
 const VERT = /* glsl */`
@@ -659,6 +740,9 @@ function boxOf(key, k = 1) {
 // the colours as the screen shows them: the look is worked out in those, not in the renderer's linear light
 const shown = (hex) => { const n = parseInt(hex.slice(1), 16); return new THREE.Vector3((n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255); };
 const mix = (a, b, t) => a + (b - a) * t;
+
+// the colours of a soft material, set again from a palette (a shell recoloured in the library changes where it lies)
+export function softColours(material, soft, palette) { for (const [name, key] of Object.entries(SHAPES[soft.shape].palette)) material.uniforms[name].value.copy(shown(palette[key])); }
 
 // soft: the component's soft look ({ shape, rim, deep, turn, edge, halo, rimLight, inner, eyeGlow, grain }); palette: its colours
 // as they stand now; swim: its tail-beat. Returns { mesh, material }; material.userData.swim.value is the beat's phase,

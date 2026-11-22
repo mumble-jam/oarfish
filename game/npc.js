@@ -31,7 +31,7 @@ const SHADE = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false
 // dark bands, where its colours also turn by `turn` degrees round the colour wheel (purple to blue, coral to violet).
 // The rest, 0 to 1: how far the edge goes out of focus, how far its glow reaches into the water, how strong the rim is,
 // the light held inside it, the light of its eye, and film grain.
-const SOFT = { rim: '#ffb9a6', deep: '#72f0de', turn: -80, edge: 0.46, halo: 0.38, rimLight: 0.72, inner: 0.34, eyeGlow: 0.9, grain: 0.3 };
+export const SOFT = { rim: '#ffb9a6', deep: '#72f0de', turn: -80, edge: 0.46, halo: 0.38, rimLight: 0.72, inner: 0.34, eyeGlow: 0.9, grain: 0.3 };
 const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the rifts carry a little light of their own, so they read in the dark
 const SCHOOL = { tone1: '#f3f7fa', tone2: '#ffd96b', tone3: '#9fe0ea', tone4: '#ffb38a' }; // the tints a swarm may take, one to a swarm
 // where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp); sc: its swarm (x, y, z, ball, pack, threat, burst)

@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { T, wrapD } from './world.js';
 import { rng, glowTexture } from './geo.js';
 import { mesher, ringY, alive, tint, dim } from './kit.js';
-import { register, resolve } from './npc.js';
+import { register, resolve, look as theLook, SOFT, NPC } from './npc.js';
+import { softBody, softColours } from './soft.js';
 
 // worn: what it does while it rides on the body. shed: what the bait does when this shell goes with it.
 export const SHELLS = {
@@ -104,25 +105,29 @@ const SHAPES = {
 // what the game makes. The colour is also the shell's mark on the scale bar and the stripe on its message.
 const DEFAULTS = Object.fromEntries(SHELL_TYPES.map((t) => [t, SHELLS[t].colour]));
 for (const t of SHELL_TYPES) register({ id: `shell-${t}`, group: 'Shells', kind: 'shell', name: SHELLS[t].name, length: 1.2, fixed: false, baked: true,
-  role: `Worn: ${SHELLS[t].worn}`, about: `Shed with the segment it rides on, ${SHELLS[t].shed}`, palette: { colour: DEFAULTS[t] }, build: (pal) => SHAPES[t](pal.colour), show: { scale: 1.15, n: 1, lift: 0.9, spin: true } });
+  role: `Worn: ${SHELLS[t].worn}`, about: `Shed with the segment it rides on, ${SHELLS[t].shed}`, palette: { colour: DEFAULTS[t] }, build: (pal) => SHAPES[t](pal.colour), show: { scale: 1.15, n: 1, lift: 0.9, spin: true },
+  soft: { ...SOFT, shape: `shell-${t}`, edge: 0.34, inner: 0.3, eyeGlow: 0 } });
 export const shellMaterial = () => alive(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0.16 }), { glow: 0.9 });
 
 // One set of meshes for the whole game: the geometry of each shell, and the material they share.
 export function createShellKit() {
-  const geo = {}, size = {};
+  const geo = {}, size = {}, softOf = {}; // softOf: the makings of a type's soft look, shared by every shell of the type
   // (re)make every shell as its component now stands. The geometries stay the same objects, so shells already lying
   // about or riding on the body change with them
   function refresh() {
     for (const t of SHELL_TYPES) { const look = resolve(`shell-${t}`), g = SHAPES[t](look.palette.colour); SHELLS[t].colour = look.palette.colour; size[t] = look.scale;
-      if (geo[t]) { geo[t].dispose(); geo[t].copy(g); g.dispose(); } else geo[t] = g; }
+      if (geo[t]) { geo[t].dispose(); geo[t].copy(g); g.dispose(); } else geo[t] = g;
+      if (softOf[t]) softColours(softOf[t].material, NPC[`shell-${t}`].soft, look.palette); }
   }
   refresh();
   const material = shellMaterial();
   const glow = glowTexture();
   return {
     geo, material, glow, refresh,
-    mesh(type, scale = 1) { const m = new THREE.Mesh(geo[type], material); m.scale.setScalar(scale * size[type]); m.frustumCulled = false; return m; },
-    dispose() { for (const t of SHELL_TYPES) geo[t].dispose(); material.dispose(); glow.dispose(); },
+    mesh(type, scale = 1) {
+      const s = theLook.soft ? (softOf[type] ||= softBody(NPC[`shell-${type}`].soft, resolve(`shell-${type}`).palette, null)) : null; // the look the game is in: light, or triangles
+      const m = s ? new THREE.Mesh(s.mesh.geometry, s.material) : new THREE.Mesh(geo[type], material); m.scale.setScalar(scale * size[type]); m.frustumCulled = false; return m; },
+    dispose() { for (const t of SHELL_TYPES) { geo[t].dispose(); softOf[t]?.material.dispose(); } material.dispose(); glow.dispose(); },
   };
 }
 

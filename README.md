@@ -52,7 +52,7 @@ There are three ways to change one:
 
 **This branch redraws the game in a soft look**, batch by batch: the same animal as a glowing, out-of-focus shape instead of flat triangles. Everything that has a soft look wears it; a playground whose fact line ends "soft look to come" is still waiting. The oarfish stays as it is. *Look* in any playground switches the whole game between **Low-poly** and **Soft**; the choice is kept in your browser and the game uses it from the next band or dive. A soft creature wears its component's colours, so the swatches work on both looks. In the dark bands its colours turn toward blue and violet and its rim goes sea-green.
 
-Done so far: the five hunters (Tail-biter, Angler, Spined drifter, Leech, Hook) and the four keepers of the rifts (Keeper, Shearer, Lamplighter, Warden).
+Done so far: the five hunters (Tail-biter, Angler, Spined drifter, Leech, Hook) the four keepers of the rifts (Keeper, Shearer, Lamplighter, Warden) and the ten shells, lying about and worn. Swarms stay low-poly for now, and so does a shed tail: it is the oarfish's own body.
 
 Two components are colour sets rather than things: **District paint** (one colour per band, used on column tops, well curbs, the guards and the Sum) and **Stone** (the ruins of each band). Change one and everything built from it follows.
 
