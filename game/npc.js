@@ -6,8 +6,9 @@
 // A palette can also be changed from the library without touching this file: those changes are kept in the browser
 // and laid over the defaults below, in the library and in the game alike, until they are reset or written in here.
 //
-// A component may also carry a second way of being drawn, `soft`: light instead of triangles (soft.js). It is on trial,
-// chosen in the library like a colour, and wears the same palette. Without that choice everything is low-poly.
+// A component may also carry a second way of being drawn, `soft`: light instead of triangles (soft.js). It wears the same
+// palette. On this branch everything that has a soft look is drawn that way; the library's Look row turns the whole game
+// back to low-poly, and forth again (`look`, below).
 
 import * as THREE from 'three';
 import { alive } from './kit.js';
@@ -24,6 +25,11 @@ const glowMap = () => (GLOW ||= glowTexture());
 const sprite = (a, color, size) => { const m = new THREE.SpriteMaterial({ map: glowMap(), color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }); a.owned.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(size); return s; };
 const BULB = new THREE.IcosahedronGeometry(0.1, 0), LINE = new THREE.CylinderGeometry(0.014, 0.014, 1, 4).translate(0, 0.5, 0), BAIT = new THREE.OctahedronGeometry(0.07, 0);
 const SHADE = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide }); // seen by the shadow pass only
+// What every soft look starts from. rim: the colour of the light on its edges where there is daylight; deep: the same in the
+// dark bands, where its colours also turn by `turn` degrees round the colour wheel (purple to blue, coral to violet).
+// The rest, 0 to 1: how far the edge goes out of focus, how far its glow reaches into the water, how strong the rim is,
+// the light held inside it, the light of its eye, and film grain.
+const SOFT = { rim: '#ffb9a6', deep: '#72f0de', turn: -80, edge: 0.46, halo: 0.38, rimLight: 0.72, inner: 0.34, eyeGlow: 0.9, grain: 0.3 };
 const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the wells carry a little light of their own, so they read in the dark
 const SCHOOL = { tone1: '#f3f7fa', tone2: '#ffd96b', tone3: '#9fe0ea', tone4: '#ffb38a' }; // the tints a swarm may take, one to a swarm
 // where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp); sc: its swarm (x, y, z, ball, pack, threat, burst)
@@ -46,30 +52,28 @@ export const NPCS = [
     about: 'Deep-chested, with an underbite and a tall fin. It lives in the shearing stalls, and on the Sum as cleaner fish live on a whale.',
     palette: { back: '#3f2550', flank: '#6d4180', bar: '#583369', belly: '#a981b3', fins: '#e2566b', finDark: '#b8364f', jaw: '#2d1a3a', eye: '#eaff7c' },
     build: (pal) => model.biter(pal), swim: { amp: 0.055, waves: 2.4, nose: 0.44, length: 0.9 }, beat: [4, 3],
-    // its soft look. rim: the colour of the light on its edges. The rest, 0 to 1: how far the edge goes out of focus, how far
-    // its glow reaches into the water, how strong the rim is, the light in its chest, the light of its eye, and film grain
-    soft: { shape: 'biter', rim: '#ffb9a6', edge: 0.46, halo: 0.38, rimLight: 0.72, inner: 0.34, eyeGlow: 0.9, grain: 0.3 },
+    soft: { ...SOFT, shape: 'biter' },
     states: [{ id: 'roam', name: 'Roaming', speed: 1.2 }, { id: 'hunt', name: 'Hunting', speed: 3.8 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
   { id: 'angler', group: 'Hunters', name: 'Angler', bands: [2, 3, 4], length: 1.6, role: 'Hangs behind one warm light and lunges at what comes to it. It swallows a bait whole.',
     about: 'A globe of a fish, all mouth, with a rod over its head. It sits on the old lamp plinths, where the lamps used to be.',
     palette: { back: '#221d36', skin: '#322d4b', wart: '#2a2540', belly: '#4d4770', gum: '#2a0f20', fins: '#474066', finTip: '#6a6190', eye: '#c8ecff', lure: '#ffd27a', glow: '#ffc56a' },
-    build: (pal) => model.angler(pal), swim: { amp: 0.07, waves: 1.5, nose: 0.6, length: 1.6 }, beat: [1.6, 4.4],
-    assemble(a, pal) { const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: pal.lure }), bulb = new THREE.Mesh(BULB, m), glow = sprite(a, pal.glow, 1.7); a.owned.push(m); bulb.position.set(...model.ANGLER_ROD); glow.position.copy(bulb.position); g.add(a.body, bulb, glow); a.object = g; a.parts = { bulb, glow }; },
+    build: (pal) => model.angler(pal), swim: { amp: 0.07, waves: 1.5, nose: 0.6, length: 1.6 }, beat: [1.6, 4.4], soft: { ...SOFT, shape: 'angler', inner: 0.5 },
+    assemble(a, pal) { const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: pal.lure }), bulb = new THREE.Mesh(BULB, m), glow = sprite(a, pal.glow, 1.7); a.owned.push(m); bulb.position.set(...model.ANGLER_ROD); bulb.visible = !a.soft; glow.position.copy(bulb.position); g.add(a.body, bulb, glow); a.object = g; a.parts = { bulb, glow }; }, // a soft angler draws its own lure
     states: [{ id: 'lurk', name: 'Lurking', speed: 0, lure: 1.7 }, { id: 'lunge', name: 'Lunging', speed: 1, lure: 2.6 }, { id: 'stun', name: 'Dazzled', speed: 0, lure: 0.3, wobble: true }] },
   { id: 'drifter', group: 'Hunters', name: 'Spined drifter', bands: [1, 2, 3, 4], length: 1.3, role: 'Hunts nothing. Costs a segment to brush against; head first, a dash breaks it.',
     about: 'An urchin adrift: plates in five bands, and spines lit at the tip so it can be seen coming.',
     palette: { test: '#4a2f63', band: '#6a4585', spine: '#c2577e', tip: '#ff9db8' },
-    build: (pal) => model.drifter(pal), swim: null, beat: [0, 0], spin: [0.25, 0.4, 0],
+    build: (pal) => model.drifter(pal), swim: null, beat: [0, 0], spin: [0.25, 0.4, 0], soft: { ...SOFT, shape: 'drifter', inner: 0.55, edge: 0.4 },
     states: [{ id: 'drift', name: 'Drifting', speed: 0 }] },
   { id: 'leech', group: 'Hunters', name: 'Leech', bands: [2, 3, 4], length: 1.0, role: 'Fastens on the body and eats what you have eaten. A dash throws it off; a tight coil crushes it.',
     about: 'A lamprey: an eel of a body with a ring of teeth at one end and a row of gill pores behind the eye.',
     palette: { back: '#2b2038', flank: '#4a3560', belly: '#8d7aa0', fin: '#ff9db8', eye: '#eaff7c' },
-    build: (pal) => model.leech(pal), swim: { amp: 0.06, waves: 4.6, nose: 0.5, length: 1.0 }, beat: [5, 3],
+    build: (pal) => model.leech(pal), swim: { amp: 0.06, waves: 4.6, nose: 0.5, length: 1.0 }, beat: [5, 3], soft: { ...SOFT, shape: 'leech' },
     states: [{ id: 'roam', name: 'Searching', speed: 1 }, { id: 'fed', name: 'Fastened on', speed: 0, rate: 0.6 }] },
   { id: 'hook', group: 'Hunters', name: 'Hook', bands: [0, 1, 2, 3], length: 0.8, role: 'Hangs on a line from above and strikes at a body under it.',
     about: 'Steel, a lead, and the tally tag of whoever set it. The lines come down from the raft, far overhead.',
     palette: { steel: '#d5dee2', shade: '#93a4ad', lead: '#9aa6ad', tag: '#e2566b', bait: '#ffe89a', glow: '#fff1b8', line: '#e8f6f6' },
-    build: (pal) => model.hook(pal), swim: null, beat: [0, 0],
+    build: (pal) => model.hook(pal), swim: null, beat: [0, 0], soft: { ...SOFT, shape: 'hook', rim: '#ffffff', edge: 0.3, halo: 0.3, inner: 0.6 },
     assemble(a, pal) { const g = new THREE.Group(), lm = new THREE.MeshBasicMaterial({ color: pal.line, transparent: true, opacity: 0.5 }), bm = new THREE.MeshBasicMaterial({ color: pal.bait }), line = new THREE.Mesh(LINE, lm), bait = new THREE.Mesh(BAIT, bm); a.owned.push(lm, bm);
       line.position.y = 0.7; line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
@@ -128,10 +132,20 @@ export function register(spec) { const full = { bands: [0, 1, 2, 3, 4], swim: nu
 export const inOrder = () => [...NPCS].sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
 export const swarmFor = (band) => ['sprat', 'sprat', 'lanternfish', 'lanternfish', 'ghostfish'][band] || 'sprat';
 
+// ---------------------------------------------------------------- the look of the whole game, kept in this browser
+// soft: everything that has a soft look wears it (what this branch is for). Otherwise all of it is low-poly.
+// The checks set window.__lowpoly so they start on the models they were written for.
+let lookNow = null;
+export const look = {
+  get soft() { if (lookNow === null) { try { lookNow = localStorage.getItem('oarfish.look'); } catch { /* storage is off */ } lookNow ||= globalThis.__lowpoly ? 'flat' : 'soft'; } return lookNow !== 'flat'; },
+  set(soft) { lookNow = soft ? 'soft' : 'flat'; try { localStorage.setItem('oarfish.look', lookNow); } catch { /* it lasts as long as the page */ } },
+  has: (id) => !!NPC[id]?.soft,
+};
+
 // ---------------------------------------------------------------- changes made in the library, kept in this browser
 const HEX = /^#[0-9a-f]{6}$/i;
 let saved = null;
-const load = () => { if (!saved) { try { saved = JSON.parse(localStorage.getItem('oarfish.npc')) || {}; } catch { saved = {}; } } return saved; };
+const load = () => { if (!saved) { try { saved = JSON.parse(localStorage.getItem('oarfish.npc')) || {}; } catch { saved = {}; } for (const [id, o] of Object.entries(saved)) { delete o.soft; if (!Object.keys(o.palette || {}).length && o.scale === undefined) delete saved[id]; } } return saved; }; // (soft: an earlier trial kept the look here)
 const keep = () => { try { localStorage.setItem('oarfish.npc', JSON.stringify(saved)); } catch { /* storage is off: the changes last as long as the page */ } };
 export const tweaks = {
   of: (id) => load()[id] || null,
@@ -139,21 +153,20 @@ export const tweaks = {
   set(id, key, value) {
     const t = load(), o = (t[id] ||= { palette: {} }); o.palette ||= {};
     if (key === 'scale') { if (Math.abs(value - 1) < 0.005) delete o.scale; else o.scale = +value.toFixed(2); }
-    else if (key === 'soft') { if (value && NPC[id].soft) o.soft = true; else delete o.soft; }
     else if (!HEX.test(value) || value.toLowerCase() === NPC[id].palette[key].toLowerCase()) delete o.palette[key]; else o.palette[key] = value.toLowerCase();
-    if (!Object.keys(o.palette).length && o.scale === undefined && !o.soft) delete t[id];
+    if (!Object.keys(o.palette).length && o.scale === undefined) delete t[id];
     keep();
   },
   reset(id) { if (id) delete load()[id]; else saved = {}; keep(); },
   // the changes as a few lines to paste to whoever keeps the code, so they can be written in for everyone
-  text() { const ids = tweaks.changed(); return ids.length ? `Oarfish NPC changes, to write into npc.js:\n${ids.map((id) => { const o = load()[id]; return `${id}: ${[...Object.entries(o.palette || {}).map(([k, v]) => `${k} ${v}`), ...(o.scale !== undefined ? [`scale ${o.scale}`] : []), ...(o.soft ? ['look soft'] : [])].join(', ')}`; }).join('\n')}` : ''; },
+  text() { const ids = tweaks.changed(); return ids.length ? `Oarfish NPC changes, to write into npc.js:\n${ids.map((id) => { const o = load()[id]; return `${id}: ${[...Object.entries(o.palette || {}).map(([k, v]) => `${k} ${v}`), ...(o.scale !== undefined ? [`scale ${o.scale}`] : [])].join(', ')}`; }).join('\n')}` : ''; },
 };
 // a component as it stands now: its defaults with this browser's changes over them
 export function resolve(id, forced = null) {
   const spec = NPC[id], t = load()[id] || {}, palette = { ...spec.palette };
   if (spec.paintOf !== undefined && id !== 'paint') palette.tone = paintOf(spec.paintOf); // a keeper wears its band's colour, unless it has been given one of its own
   for (const [k, v] of Object.entries({ ...(t.palette || {}), ...(forced?.palette || {}) })) if (k in palette && HEX.test(v)) palette[k] = v;
-  return { palette, scale: forced?.scale ?? t.scale ?? 1, soft: !!spec.soft && !!(forced?.soft ?? t.soft) };
+  return { palette, scale: forced?.scale ?? t.scale ?? 1, soft: !!spec.soft && (forced?.soft ?? look.soft) };
 }
 
 // the tints a component hands to whoever scatters it: its palette's tone1, tone2…

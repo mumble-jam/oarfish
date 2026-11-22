@@ -25,7 +25,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/world.js` | One depth band: seabed, ruins, wells, plants, swarms. Seeded. |
 | `game/npc.js` | **The cast, as components.** How every creature and thing looks. See below. |
 | `game/critters.js` | The models those components are built from. |
-| `game/soft.js` | **On trial:** the soft look, a creature drawn as light instead of triangles. So far the Tail-biter has one. |
+| `game/soft.js` | **This branch:** the soft look, a creature drawn as light instead of triangles. The hunters have one so far. |
 | `game/library.js` | The specimen library: a playground for every component. |
 | `game/foes.js` | How the hunters behave (biters, anglers, hooks, drifters, leeches) and loose tail pieces. |
 | `game/guards.js` | The four keepers of the wells. |
@@ -48,7 +48,9 @@ There are three ways to change one:
 2. **By asking Claude.** Paste that text, or just describe what you want ("give the biter a longer jaw"). Shapes can only be changed this way.
 3. **By hand.** Edit the `palette` of the component in `npc.js`.
 
-The Tail-biter has a second look on trial, **Soft**: the same animal drawn as a glowing, out-of-focus shape instead of flat triangles. Choose it under *Look* in its playground. Like a colour, the choice is kept in your browser, the game uses it from the next band or dive, and *Reset this one* puts it back. It wears the same colours, so the swatches work on both looks.
+**This branch redraws the game in a soft look**, batch by batch: the same animal as a glowing, out-of-focus shape instead of flat triangles. Everything that has a soft look wears it; a playground whose fact line ends "soft look to come" is still waiting. The oarfish stays as it is. *Look* in any playground switches the whole game between **Low-poly** and **Soft**; the choice is kept in your browser and the game uses it from the next band or dive. A soft creature wears its component's colours, so the swatches work on both looks. In the dark bands its colours turn toward blue and violet and its rim goes sea-green.
+
+Done so far: the five hunters (Tail-biter, Angler, Spined drifter, Leech, Hook).
 
 Two components are colour sets rather than things: **District paint** (one colour per band, used on column tops, well curbs, the guards and the Sum) and **Stone** (the ruins of each band). Change one and everything built from it follows.
 

@@ -22,7 +22,7 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 } })).newPage();
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
-await page.addInitScript(() => { window.__noNursery = true; });
+await page.addInitScript((flat) => { window.__lowpoly = flat; window.__noNursery = true; }, process.env.LOOK !== 'soft');
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 const ev = (fn, arg) => page.evaluate(fn, arg);
@@ -58,28 +58,31 @@ s = { ...s, ...copied, ...(await ev(() => { const g = window.__game; const close
   return { closed, msg, fins: b.actor.look.palette.fins, scale: +b.mesh.scale.x.toFixed(2), teal: hit, shared: g.foes.biters[1].actor.body.geometry === b.actor.body.geometry }; })) };
 check('a colour and a size changed in the library are kept, can be copied as a note for Claude, and are what the game makes on the next dive', /"fins":"#20c0b0"/.test(s.saved) && /biter: fins #20c0b0, scale 1\.3/.test(s.text) && s.dot && /Copied/.test(s.note) && s.closed && /next band or dive/.test(s.msg) && s.fins === '#20c0b0' && s.scale === 1.3 && s.teal > 30 && s.shared, JSON.stringify(s).slice(0, 700));
 
-// ---- a second look, where a component has one: the tail-biter drawn as light instead of triangles
+// ---- the look of the whole game: light instead of triangles, wherever a soft look has been made
 await ev(() => { window.__game.setPaused(true); window.__game.openLibrary('biter'); }); await frame();
 const looks = () => ev(() => [...document.querySelectorAll('[data-set="look"] button')].map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? '*' : ''}`).join());
+const soft = () => ev(() => { let boxes = 0; window.__game.lib.scene.traverse((o) => { if (o.material?.isShaderMaterial) boxes++; }); return { boxes, tris: document.getElementById('lib-tris').textContent }; });
 const before = await looks();
 await page.click('[data-set="look"] button[data-v="soft"]'); await ev(() => { window.__game.lib.frame(0.3); }); await frame();
-s = await ev(() => { const g = window.__game; let lit = 0, boxes = 0; g.lib.scene.traverse((o) => { if (o.material?.isShaderMaterial) { boxes++; if (o.material.uniforms.cFin.value.y > 0.7) lit++; } });
-  document.getElementById('lib-copy').click();
-  return { tris: document.getElementById('lib-tris').textContent, lit, boxes, saved: localStorage.getItem('oarfish.npc'), text: document.getElementById('lib-text').value, sw: document.querySelectorAll('#lib-palette input[type=color]').length, others: !!document.querySelector('[data-set="look"]') }; });
-s.before = before; s.after = await looks();
+s = await ev(() => { let teal = 0; window.__game.lib.scene.traverse((o) => { if (o.material?.isShaderMaterial && o.material.uniforms.cFin.value.y > 0.7) teal++; });
+  return { teal, look: localStorage.getItem('oarfish.look'), npc: localStorage.getItem('oarfish.npc'), sw: document.querySelectorAll('#lib-palette input[type=color]').length }; });
+s = { ...s, before, after: await looks(), biter: await soft() };
 await snap('l-biter-soft');
+s.made = [];
+for (const id of ['angler', 'drifter', 'leech', 'hook']) { await page.click(`#lib-list [data-id="${id}"]`); await ev(() => { window.__game.lib.frame(0.3); }); await frame(); const o = await soft(); s.made.push(`${id}:${o.boxes}:${/no triangles/.test(o.tris)}`); await snap(`l-${id}-soft`); }
+await page.click('#lib-list [data-id="kelp"]'); await frame(); s.kelp = (await soft()).tris;
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-s = { ...s, ...(await ev(() => { const g = window.__game; g.setPaused(false); g.startRun(4242); g.enterFloor(1, false); g.sim(0.4); const b = g.foes.biters[0], m = b.actor.body.material;
-  return { game: b.actor.soft === true && !!m.isShaderMaterial, beat: m.userData.swim.value > 0, scale: +b.mesh.scale.x.toFixed(2), shade: b.actor.body.children.some((c) => c.castShadow), every: g.foes.biters.every((x) => x.actor.soft) }; })) };
-await snap('l-biter-soft-dive');
-await ev(() => { window.__game.setPaused(true); window.__game.openLibrary('angler'); }); await frame();
-s.angler = await looks();
-await ev(() => { window.__game.lib.pick('biter'); }); await frame();
+s = { ...s, ...(await ev(() => { const g = window.__game; g.setPaused(false); g.startRun(4242); g.enterFloor(2, false); g.sim(0.4); const f = g.foes, b = f.biters[0], m = b.actor.body.material, lit = (o) => { let n = 0; o.traverse((c) => { if (c.material?.isShaderMaterial) n++; }); return n === 1; };
+  return { game: b.actor.soft === true && !!m.isShaderMaterial, beat: m.userData.swim.value > 0, scale: +b.mesh.scale.x.toFixed(2), shade: b.actor.body.children.some((c) => c.castShadow),
+    all: [f.biters.every((x) => lit(x.mesh)), f.anglers.length > 0 && f.anglers.every((x) => lit(x.group) && !x.actor.parts.bulb.visible), f.mines.length > 0 && f.mines.every((x) => lit(x.mesh)), f.leeches.length > 0 && f.leeches.every((x) => lit(x.mesh))].join() }; })) };
+await snap('l-soft-dive');
+await ev(() => { window.__game.setPaused(true); window.__game.openLibrary('biter'); }); await frame();
 await page.click('[data-set="look"] button[data-v="flat"]'); await frame();
-s = { ...s, ...(await ev(() => { const g = window.__game; let boxes = 0; g.lib.scene.traverse((o) => { if (o.material?.isShaderMaterial) boxes++; }); return { back: boxes, savedBack: localStorage.getItem('oarfish.npc'), trisBack: document.getElementById('lib-tris').textContent }; })) };
-check('a creature with a second look can be shown as light instead of triangles: the choice is kept with its colours and size, copies into the note, and is what the game makes on the next dive; choosing Low-poly puts it back',
-  s.before === 'Low-poly*,Soft' && s.after === 'Low-poly,Soft*' && /no triangles/.test(s.tris) && s.boxes === 1 && s.lit === 1 && s.sw === 8 && /"soft":true/.test(s.saved) && /biter: fins #20c0b0, scale 1\.3, look soft/.test(s.text)
-  && s.game && s.beat && s.scale === 1.3 && s.shade && s.every && s.angler === '' && s.back === 0 && !/soft/.test(s.savedBack) && /212 triangles/.test(s.trisBack), JSON.stringify(s).slice(0, 900));
+s = { ...s, back: await soft(), lookBack: await ev(() => localStorage.getItem('oarfish.look')) };
+check('the Look row turns the whole game from low-poly to soft and back: every hunter is then drawn as light, in the library and on the next dive, in the colours and size its component has; what has no soft look yet says so',
+  s.before === 'Low-poly*,Soft' && s.after === 'Low-poly,Soft*' && s.look === 'soft' && /no triangles/.test(s.biter.tris) && s.biter.boxes === 1 && s.teal === 1 && s.sw === 8 && !/soft/.test(s.npc) && /"scale":1.3/.test(s.npc)
+  && s.made.join() === 'angler:1:true,drifter:1:true,leech:1:true,hook:1:true' && /triangles, soft look to come/.test(s.kelp) && s.game && s.beat && s.scale === 1.3 && s.shade && s.all === 'true,true,true,true'
+  && s.back.boxes === 0 && /^212 triangles$/.test(s.back.tris) && s.lookBack === 'flat', JSON.stringify(s).slice(0, 900));
 await page.keyboard.press('Escape'); await page.waitForTimeout(150);
 
 // ---- swarms, the big ones, and resetting

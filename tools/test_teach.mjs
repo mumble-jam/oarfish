@@ -22,6 +22,7 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 } })).newPage();
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
+await page.addInitScript((flat) => { window.__lowpoly = flat; }, process.env.LOOK !== 'soft');
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.evaluate(() => { window.__hold = true; });

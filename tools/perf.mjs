@@ -15,7 +15,7 @@ await new Promise((r) => server.listen(0, r));
 const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
-await page.addInitScript(() => { window.__noNursery = true; });
+await page.addInitScript((flat) => { window.__lowpoly = flat; window.__noNursery = true; }, process.env.LOOK !== 'soft');
 await page.goto(`http://localhost:${server.address().port}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 for (const f of [0, 1, 2, 3, 4]) {
