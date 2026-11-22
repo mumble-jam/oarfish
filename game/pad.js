@@ -155,6 +155,8 @@ export function createPad() {
     // shows its list and the player picks the controller. resume() takes up one that was picked on an earlier visit, without asking.
     direct: {
       get supported() { try { return !!navigator.hid; } catch { return false; } },
+      // a page shown inside another page (a preview) is usually not let near devices; only the game at its own address is
+      get allowed() { try { return !!navigator.hid && document.featurePolicy?.allowsFeature?.('hid') !== false; } catch { return false; } },
       get connected() { return hidOn(); },
       get how() { return hidOn() ? `${hid.bt ? 'Bluetooth' : 'cable'}, ${hid.flags === 'both' ? 'firmware unknown' : hid.flags === 'new' ? 'current firmware' : 'old firmware'}` : ''; },
       get sent() { return hid.sent; },

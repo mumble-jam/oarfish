@@ -1030,7 +1030,7 @@ export async function start(saved = {}) {
     const P = pad.poll();
     if (P.active) setDev('pad');
     const text = P.blocked ? 'Controllers are blocked in this view of the page.' : !P.connected ? 'No controller seen yet. To use one, click the page once, then press any button on it.'
-      : `${pad.title()} is connected${pad.motors ? ', and can vibrate' : `, but the browser reports no vibration motors for it${!/dualsense|054c/i.test(P.name) ? '' : pad.direct.supported ? ': press “Connect DualSense motors” below' : ': Chrome and Edge can get round that'}`}.${P.standard ? '' : ' The browser does not recognise its layout, so buttons may be mixed up. Chrome and Edge read a DualSense properly.'}`;
+      : `${pad.title()} is connected${pad.motors ? ', and can vibrate' : `, but the browser reports no vibration motors for it${!/dualsense|054c/i.test(P.name) ? '' : !pad.direct.supported ? ': Chrome and Edge can get round that' : pad.direct.allowed ? ': press “Connect DualSense motors” below' : ': “Connect DualSense motors” gets round that, but only on the game’s own page, not in a preview like this one'}`}.${P.standard ? '' : ' The browser does not recognise its layout, so buttons may be mixed up. Chrome and Edge read a DualSense properly.'}`;
     if (text !== padText) { padText = text; $('pad-note').textContent = text; }
     if (P.connected && wait && wait.p) { // the binding menu is listening for a button
       const i = pad.anyPressed();
@@ -1131,7 +1131,7 @@ export async function start(saved = {}) {
       const got = pad.direct.connected ? 'connected' : await pad.direct.connect();
       directName();
       if (got === 'connected') { pad.rumble(0.7, 0.7, 220); return say(`Connected (${pad.direct.how}): you should have felt one short buzz. The game drives the motors itself from now on, and the browser will remember the controller. If you felt nothing, close Steam or anything else that manages the controller and press this again.`); }
-      say({ none: 'No controller was picked. In the browser’s list choose the one called DualSense or Wireless Controller, then press Connect.', blocked: 'This view of the page is not allowed to reach devices. Open the game at its own address and try there.', unsupported: 'This browser cannot do this. Chrome and Edge can.', failed: `The controller would not open: ${pad.direct.trouble || 'no reason given'}. Close Steam, DS4Windows or anything else that manages the controller, and try again.` }[got] || `The browser answered: ${got}.`);
+      say({ none: 'No controller was picked. In the browser’s list choose the one called DualSense or Wireless Controller, then press Connect.', blocked: 'This is a preview inside another page, and the browser does not let those reach devices. It works on the game’s own page.', unsupported: 'This browser cannot do this. Chrome and Edge can.', failed: `The controller would not open: ${pad.direct.trouble || 'no reason given'}. Close Steam, DS4Windows or anything else that manages the controller, and try again.` }[got] || `The browser answered: ${got}.`);
     });
     pad.direct.resume().then(directName);
   }
