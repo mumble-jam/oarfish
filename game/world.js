@@ -98,7 +98,7 @@ function geometries() {
   };
   // a potsherd, a roof tile, a broken plate: something thin with a curve to it
   const shard = mesher().tri([-0.2, 0.02, -0.12], [0.22, 0.05, -0.05], [0, 0.1, 0.2], [grey(1), grey(0.8), grey(0.92)]).tri([-0.2, 0.02, -0.12], [0, 0.1, 0.2], [-0.16, 0, 0.14], grey(0.7)).tri([0.22, 0.05, -0.05], [0.2, 0, 0.16], [0, 0.1, 0.2], grey(0.82)).geometry();
-  // the people's ring, hung over a well: a body closed on itself, segment by segment
+  // the people's ring: a body closed on itself, segment by segment. The nursery's hoops are made of it
   const wreath = (() => { const m = mesher(), n = 18;
     for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI * 2 + 0.02, a1 = ((i + 1) / n) * Math.PI * 2 - 0.02, sec = (a, s) => [[0.14, 0], [0, 0.17], [-0.12, 0], [0, -0.13]].map(([r, y]) => [Math.sin(a) * (1 + r * s), Math.cos(a) * (1 + r * s), y * s]);
       m.skin([sec(a0, 0.86), sec((a0 + a1) / 2, 1.05), sec(a1, 0.86)], grey(i % 3 ? 1 : 0.72)); }
@@ -264,7 +264,7 @@ function geometries() {
   built('block', 'Block', 'block', 1, 'The squared stone everything else is built of: plinths, lintels, walls, kerbs, steps. Darker toward the foot.');
   built('flag', 'Paving flag', 'flag', 1, 'No two corners alike. Roads, the floors of houses, the rings round the wells.', 'stone', { scale: [1.1, 0.1, 1.1], n: 5, spread: 0.9 });
   built('rubble', 'Rubble', 'rubble', 0.6, 'A chunk of broken masonry, half sunk where it fell.', 'stone', { scale: 0.5, n: 4, spread: 0.6 });
-  built('wreath', 'The people’s ring', 'wreath', 3.4, 'A body closed on itself, segment by segment. It hangs on two chains over every well, and the nursery’s hoops are the same ring.', 'paint', { scale: 1.55, n: 1, lift: 1.9 });
+  built('wreath', 'The people’s ring', 'wreath', 3.4, 'A body closed on itself, segment by segment. The nursery’s hoops are this ring.', 'paint', { scale: 1.55, n: 1, lift: 1.9 });
   built('hoop', 'A young one’s hoop', 'hoop', 1.4, 'The stone hoops the young swam through, beside the houses and along the way to the first well.', 'paint');
   built('coil', 'The carved coil', 'coil', 1.4, 'A body that has almost closed on itself, with a crest where the head is. It sits at the middle of every hero’s ring.', 'paint', { scale: 1.2, n: 1, lift: 0.2 });
   built('coin', 'A tail, as coin', 'coin', 0.4, 'A tail segment: what the Long Ones paid with. Stacked on the market tables, heaped at the wells.', 'paint', { scale: 1, n: 6, spread: 0.3, lift: 0.1 });
@@ -467,7 +467,7 @@ float seaLight(vec2 p, float t) {
   // Each district paints its column tops in one fin colour; the last band's is the body's own gold.
   const district = paintOf(floor);
   const drums = [], blocks = [], coins = [], hoops = [], coils = [];
-  const shafts = [], shaftEnds = [], stumps = [], bases = [], echini = [], flags = [], rubbles = [], shards = [], jars = [], jarsBroken = [], wreaths = [];
+  const shafts = [], shaftEnds = [], stumps = [], bases = [], echini = [], flags = [], rubbles = [], shards = [], jars = [], jarsBroken = [];
   const grownFingers = [], grownBulbs = []; // what has taken root on the stonework: coral where there is light, lamps where there is none
   const up = new THREE.Vector3(0, 1, 0);
   // lying on the seabed at (x, z), following its slope
@@ -713,7 +713,7 @@ float seaLight(vec2 p, float t) {
     for (let tries = 0; tries < 12; tries++) { const [x, z] = polar(rr(0, 6.28), rr(30, 60)); if (clearNow(x, z, 16)) { builders[kind](x, z); break; } }
   });
 
-  // the rift's middle, where people came to it: old stones along both edges, a frame over the mouth, a pale beam rising out of it
+  // the rift's middle, where people came to it: old stones along both edges, a pillar at either side of the mouth, a pale beam rising out of it
   const beacons = [];
   const beaconMat = mat(new THREE.MeshBasicMaterial({ map: G.beam, color: last ? '#ffd9a0' : '#bfe9ff', transparent: true, opacity: last ? 0.5 : 0.34, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
   const portal = { mesh: null, level: 1 }; // level dims the gate's light: the Sum puts it out when it wakes
@@ -739,11 +739,10 @@ float seaLight(vec2 p, float t) {
       const u = -10 + i * 1.25, [x, z] = at(u, -(riftW(u) - rift.ledge - 0.35 - i * 0.17));
       blocks.push({ x, y: rift.y - rift.step - 0.25 - i * 0.66, z, q: qY(yawT), s: S(1.5, 0.2, 1.0), color: i % 5 === 4 ? district : stoneLike(dpick(stoneTones)) });
     }
-    { // a pillar on the ledge at either side of the mouth, and the people's ring hung between them on two long chains, over the dark
-      const out = riftW(0) - rift.ledge + 0.9, [ax, az] = at(0, -out), [bx, bz] = at(0, out), a = goalAngle;
-      const top = Math.max(column(ax, az, 8.4, { yaw: a }), column(bx, bz, 8.4, { yaw: a })), ry = top - 4.4;
-      wreaths.push({ x: goal.x, y: ry, z: goal.z, q: qY(a + Math.PI / 2), s: S(1.55), color: district });
-      for (const sgn of [-1, 1]) for (let k = 0; k <= 12; k++) { const t = k / 12, d = sgn * lerp(1.15, out - 0.35, t); coins.push({ x: goal.x + Math.sin(a) * d, y: lerp(ry + 1.2, top + 0.1, t) - 1.5 * t * (1 - t) * 4 * 0.5, z: goal.z + Math.cos(a) * d, q: qY(a + (k % 2 ? 0 : Math.PI / 2), Math.PI / 2 - sgn * 0.35), s: S(0.75, 0.75, 1.1), color: dpick(stoneTones) }); }
+    { // a tall pillar on the ledge at either side of the mouth, to mark the rift's middle from far off. Nothing hangs between them: a ring there
+      // looked like the nursery's hoops, which are for swimming through, and this is no place to be told to swim through anything
+      const out = riftW(0) - rift.ledge + 0.9, [ax, az] = at(0, -out), [bx, bz] = at(0, out);
+      column(ax, az, 8.4, { yaw: goalAngle }); column(bx, bz, 8.4, { yaw: goalAngle });
     }
     // further along, nobody tends it: what has broken off lies on the edge and on the ledges
     for (let u = -34; u <= 34; u += 3.5) for (const side of [-1, 1]) {
@@ -956,7 +955,6 @@ float seaLight(vec2 p, float t) {
   scatter(G.shard, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: THREE.DoubleSide })), shards, { cast: false, reach: 40 });
   scatter(G.jar, stone, jars);
   scatter(G.jarBroken, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, side: THREE.DoubleSide })), jarsBroken);
-  scatter(G.wreath, stone, wreaths);
 
   // ------------------------------------------------------------ per-frame
   const m4 = new THREE.Matrix4(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), none = new THREE.Vector3(0, 0, 0);
