@@ -49,6 +49,7 @@ export class OarfishRig {
     this.yaw = 0; this.pitch = 0; this.roll = 0; this.yawRate = 0;
     this.speed = SPEED.idle; this.phase = 0; this.time = 0;
     this.headYaw = 0; this.gape = 0; this.boost = 0; this.coiling = 0; this.dashT = 0;
+    this.tempo = 1; // how much faster than its own pace it swims: the harmony its oars have built (main.js, OARS)
     this._h = new THREE.Quaternion(); this._w0 = new THREE.Quaternion();
     this._e = new THREE.Euler(0, 0, 0, 'YXZ');
     this._a = { p: new THREE.Vector3(), roll: 0 }; this._b = { p: new THREE.Vector3(), roll: 0 };
@@ -93,7 +94,7 @@ export class OarfishRig {
         lens.push(d.length());
         dirs.push(d.normalize());
       }
-      return { bones, rest, dirs, lens, joints: prev ? prev[si].joints : rest.map((p) => p.clone()), side: si === 0 ? 1 : -1 };
+      return { bones, rest, dirs, lens, joints: prev ? prev[si].joints : rest.map((p) => p.clone()), side: si === 0 ? 1 : -1, kick: prev ? prev[si].kick : 0 };
     });
     if (prev && this.trail.length) this._pose(1e-3, this._world); // never show the new bones un-posed
   }
@@ -147,12 +148,12 @@ export class OarfishRig {
     let target = SPEED.idle;
     const coilR = input.tight ? 0.42 : input.coilR || (this.length + 0.8) / (Math.PI * 2);
     if (coil) target = input.tight ? SPEED.coil : clamp(SPEED.coil + 0.25 * (this.length - 3), SPEED.coil, 2.8);
-    else if (moving) target = lerp(input.gentle ? SPEED.idle * 1.6 : SPEED.swim * 0.45, input.sprint && !input.winded ? SPEED.sprint : SPEED.swim, clamp(input.amount ?? 1, 0, 1));
+    else if (moving) target = lerp(input.gentle ? SPEED.idle * 1.6 : SPEED.swim * 0.45, input.sprint && !input.winded ? SPEED.sprint : SPEED.swim, clamp(input.amount ?? 1, 0, 1)) * (input.gentle ? 1 : this.tempo);
     else if (input.vertical) target = SPEED.swim * 0.55;
     target *= 1 - 0.5 * clamp(Math.abs(dYaw) / 2.2, 0, 1); // ease off in hard turns, which is what lets it coil
-    if (this.boost > 0) target = Math.max(target, SPEED.sprint * 1.1);
-    if (dashing) this.speed = SPEED.dash;
-    else this.speed = damp(this.speed, target, target > this.speed ? 2.4 : this.speed > SPEED.sprint * 1.15 ? 7 : 1.4, dt); // the speed of a dash bleeds off fast
+    if (this.boost > 0) target = Math.max(target, SPEED.sprint * 1.1 * this.tempo);
+    if (dashing) this.speed = Math.max(SPEED.dash, target);
+    else this.speed = damp(this.speed, target, target > this.speed ? 2.4 : this.speed > Math.max(SPEED.sprint * 1.15, target * 1.1) ? 7 : 1.4, dt); // the speed of a dash bleeds off fast
     const sn = clamp(this.speed / SPEED.sprint, 0, 1);
 
     const maxTurn = lerp(3.5, 3.0, clamp(this.speed / SPEED.swim, 0, 1));
@@ -256,11 +257,13 @@ export class OarfishRig {
     const q = new THREE.Quaternion(), qPrev = new THREE.Quaternion();
     for (const f of this.filaments) {
       f.joints[0].copy(f.rest[0]).applyQuaternion(w0).add(this.pos);
+      f.kick = Math.max(0, f.kick - dt / 0.3); const reach = Math.sin(Math.PI * Math.min(1, f.kick * 1.4)); // an oar pulled (see pull): it reaches out and forward, and trails back
       for (let i = 1; i <= 4; i++) {
         const j = f.joints[i];
         tgt.copy(f.rest[i]).applyQuaternion(w0).add(this.pos);
         tgt.y += 0.05 * Math.sin(this.time * 1.3 + i * 0.9 + f.side);
-        j.lerp(tgt, 1 - Math.exp(-(1.1 + 0.25 * i) * dt));
+        if (reach > 0) tgt.add(local.set(f.side * 0.6 * reach * (i / 4), -0.12 * reach * (i / 4), 0.45 * reach * (i / 4)).applyQuaternion(w0));
+        j.lerp(tgt, 1 - Math.exp(-(1.1 + 0.25 * i) * (1 + 7 * reach) * dt));
         if (world) j.y = Math.max(j.y, world.height(j.x, j.z) + 0.08);
         dir.subVectors(j, f.joints[i - 1]);
         if (dir.lengthSq() < 1e-10) dir.copy(f.dirs[i - 1]).applyQuaternion(w0);
@@ -275,6 +278,9 @@ export class OarfishRig {
       }
     }
   }
+
+  // One of the two long fins under the chin, pulled like an oar: side -1 the fish's left, 1 its right, 0 both.
+  pull(side) { for (const f of this.filaments) if (side === 0 || f.side === -side) f.kick = 1; }
 
   // How far round the point (cx, cz) the body goes, measured from the nose back along the body.
   // Fills { angle (radians swept), sign (which way), start (bearing of the nose), k (joints used), minD (closest approach) }.

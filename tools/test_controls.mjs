@@ -247,7 +247,7 @@ check('Options pauses, the D-pad walks the menu, Cross resumes, Create hides and
 // ---- the key-binding menu: change keys and buttons, save the set under a name, get it back
 await page.keyboard.press('KeyP'); await page.waitForTimeout(150); await page.click('#btn-binds');
 s = await ev(() => ({ shown: getComputedStyle(document.querySelector('#pause .binds')).display, main: getComputedStyle(document.querySelector('#pause .in')).display, slots: document.querySelectorAll('#bind-grid button').length, w: document.querySelector('#bind-grid button[data-a="up"][data-k="0"]').textContent, pad: document.querySelector('#bind-grid button[data-a="sprint"][data-p]').textContent }));
-check('the pause menu opens a key-binding menu listing every action with its keys and its controller button', s.shown === 'flex' && s.main === 'none' && s.slots === 18 * 2 + 14 && s.w === 'W' && s.pad === 'R2', JSON.stringify(s));
+check('the pause menu opens a key-binding menu listing every action with its keys and its controller button', s.shown === 'flex' && s.main === 'none' && s.slots === 20 * 2 + 16 && s.w === 'W' && s.pad === 'R2', JSON.stringify(s));
 await snap('c-binds');
 await page.click('#bind-grid button[data-a="dive"][data-k="0"]'); await page.keyboard.press('KeyZ');
 await page.click('#bind-grid button[data-a="rise"][data-k="0"]'); await page.keyboard.press('KeyX'); // X was the shed key

@@ -29,6 +29,13 @@ const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
 //           counts for `blows` and stuns what is within `shock` metres for `stun` seconds. That spends it.
 const LENGTH = { cost: [5, 17], bend: 1.15, toll: { part: 0.4, over: 8, least: 2, keep: 8 }, charge: { full: 30, reach: 1.5, blows: 2, shock: 6, stun: 2.5 } };
 const growCost = (segs, discount = 1) => Math.max(1, Math.round(lerp(LENGTH.cost[0], LENGTH.cost[1], Math.pow(clamp((segs - START_SEGS) / (MAX_SEGS - 1 - START_SEGS), 0, 1), LENGTH.bend)) * discount));
+// The oars. An oarfish is named for the two long fins under its chin, and here they are rowed: pull the left and the right in turn, on
+// the beat of the band. A pull in time adds a voice to a chord the band holds for the fish (`top` of them) and each voice adds `speed` to
+// its pace. That is all there is to learn. What there is to master: a pull between the beats, where the band swings it, adds `drive` on
+// top (up to `driveTop` pulls of it) and is lost at the first one missed; both oars together on the first beat of a bar, with `surgeAt`
+// voices or more, is a surge; and all of it has to be kept up while steering, wrapping and running away.
+// good, perfect: how near the beat a pull must be, in seconds. hold: beats the chord lasts with no pull before a voice goes.
+const OARS = { good: 0.115, perfect: 0.045, top: 5, speed: 0.15, hold: 2, drive: 0.05, driveTop: 8, surgeAt: 3, surge: 0.7, both: 0.09, sprint: 0.5, tempo: 0.5 };
 // Catches in a row: one within `window` seconds of the last adds a layer to the band, up to `top` of them, and the top one is a solo.
 // A bite ends it.
 const CHAIN = { window: 9, top: 3 };
@@ -55,14 +62,15 @@ const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const ACTIONS = [
   ['up', 'Swim forward'], ['down', 'Swim back'], ['left', 'Swim left'], ['right', 'Swim right'],
   ['sprint', 'Dash, hold to sprint'], ['wrap', 'Wrap or coil, side picked for you'], ['wrapL', 'Wrap or coil left'], ['wrapR', 'Wrap or coil right'],
+  ['oarL', 'Left oar, on the beat'], ['oarR', 'Right oar, on the beat'],
   ['rise', 'Rise'], ['dive', 'Dive'], ['shed', 'Shed tail as bait'], ['pause', 'Pause'], ['full', 'Full screen'], ['hide', 'Keys and tools on screen'],
   ['view', 'Switch camera'], ['behind', 'Bring the view behind you'], ['zoomIn', 'Zoom in'], ['zoomOut', 'Zoom out'],
 ];
 const STICK = new Set(['up', 'down', 'left', 'right']);
 const DEFAULT_BINDS = {
-  keys: { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], sprint: ['ShiftLeft', 'ShiftRight'], wrap: [], wrapL: ['KeyQ'], wrapR: ['KeyE'],
+  keys: { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], sprint: ['ShiftLeft', 'ShiftRight'], wrap: [], wrapL: ['KeyQ'], wrapR: ['KeyE'], oarL: ['KeyJ', 'Digit1'], oarR: ['KeyK', 'Digit2'],
     rise: ['Space'], dive: ['KeyC'], shed: ['KeyX'], pause: ['KeyP'], full: ['KeyF'], hide: ['KeyH'], view: ['KeyV'], behind: [], zoomIn: [], zoomOut: [] },
-  pad: { sprint: 7, wrap: 6, wrapL: null, wrapR: null, rise: 5, dive: 4, shed: 2, pause: 9, full: null, hide: 8, view: null, behind: 11, zoomIn: 12, zoomOut: 13 },
+  pad: { sprint: 7, wrap: 6, wrapL: null, wrapR: null, oarL: 0, oarR: 1, rise: 5, dive: 4, shed: 2, pause: 9, full: null, hide: 8, view: null, behind: 11, zoomIn: 12, zoomOut: 13 },
 };
 // a clean copy of a set of bindings, with anything missing or malformed taken from the defaults
 function cleanBinds(b) {
@@ -212,7 +220,7 @@ export async function start(saved = {}) {
   const pad = createPad();
   let dev = 'keys'; // what the player last touched: 'keys' (keyboard, mouse, finger) or 'pad'
   // a moment of the game, told to the band and, on a controller, to its motors
-  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
+  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], surge: [0.5, 0.6, 200], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
   function moment(kind, strength) {
     music.hit(kind, strength);
     const r = RUMBLE[kind];
@@ -247,7 +255,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -295,7 +303,7 @@ export async function start(saved = {}) {
   // The fins and the eye give light: as much as the band asks for, and more the longer the fish is, a step at each standing (see
   // `stature` in oarfish.js), so that a long fish glows a little even in daylight and a good deal in the dark.
   const STATURE_GLOW = [0, 0.1, 0.22, 0.38];
-  function glowFish(segs = run.segs) { const F = world?.floor || FLOORS[0], rank = stature(segs), k = F.finGlow * (1 + 0.3 * rank) + STATURE_GLOW[rank];
+  function glowFish(segs = run.segs) { const F = world?.floor || FLOORS[0], rank = stature(segs), k = F.finGlow * (1 + 0.3 * rank) + STATURE_GLOW[rank] + 0.06 * run.harmony; // and a little for every voice it is rowing
     for (const n of ['FinPale', 'FinPink', 'FinMid', 'FinRed', 'Eye']) { fishMats[n].emissive.set(PALETTE[n]); fishMats[n].emissiveIntensity = k * (n === 'Eye' ? 1.4 : 1); } }
   function enterFloor(index, fromAbove) {
     sum?.dispose(); sum = null;
@@ -336,13 +344,97 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
     buildFish(run.segs);
     enterFloor(0, false);
     moment('start');
+  }
+
+  // ---------------------------------------------------------------- the oars (the rules and the numbers are at OARS, at the top)
+  // What shows them: a small light at each side of the head that beats with the band, the one to pull next the brighter; and a ring
+  // of light let go at every pull, its colour saying how the pull went, which the fish swims on through.
+  const oarLights = [-1, 1].map(() => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: '#ffd98a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, fog: false })); s.renderOrder = 4; scene.add(s); return s; });
+  const ringGeo = new THREE.RingGeometry(0.93, 1, 36);
+  const oarRings = Array.from({ length: 8 }, () => { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#ffd98a', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide })); m.visible = false; m.frustumCulled = false; m.userData = { t: 9, life: 0.5, from: 0.4, to: 1.5, peak: 0.7 }; scene.add(m); return m; });
+  const RING = { good: ['#ffd98a', 0.5, 0.55], perfect: ['#ffffff', 0.85, 0.6], drive: ['#9fe8ff', 0.5, 0.4], surge: ['#ffffff', 0.9, 0.8], miss: ['#b0506a', 0.45, 0.3] }; // colour, how bright, how long
+  const oars = { side: 0, beat: -99, offBeat: -99, idle: 0, seen: null, pairAt: -9, pairSide: 0, pairBeat: -99, pending: null, surged: -99, metronome: false, last: '', ring: 0, level: 0, awake: 0 };
+  function oarRing(kind, size = 1) {
+    const m = oarRings[oars.ring++ % oarRings.length], [colour, peak, life] = RING[kind];
+    m.material.color.set(colour); m.position.copy(rig.joints[0]); m.lookAt(m.position.x + rig.forward.x, m.position.y + rig.forward.y, m.position.z + rig.forward.z);
+    Object.assign(m.userData, { t: 0, life, from: 0.35 * size, to: (kind === 'miss' ? 0.7 : 1.1 + 0.22 * run.harmony) * size, peak }); m.visible = true;
+  }
+  // Where the beat is: the band's own, if it is playing; else a plain count kept from the dive's clock, so that the oars work with no
+  // sound at all. d: seconds from the nearest beat (negative, early). offD: the same from the nearest swung off-beat.
+  function beatNow() {
+    const p = oars.metronome ? null : music.pulse();
+    if (p) return p;
+    const dur = OARS.tempo, t = run.time, k = Math.round(t / dur), off = 0.66 * dur, ko = Math.round((t - off) / dur);
+    return { d: t - k * dur, index: k, dur, offD: t - (ko * dur + off), offIndex: ko, phase: (((t / dur) % 1) + 1) % 1 };
+  }
+  // One oar pulled: side -1 the left, 1 the right. Returns what came of it: 'good', 'perfect', 'drive', 'surge', 'both', 'again', 'miss',
+  // 'wait' (the wrong oar for this beat, unless the other comes with it: see rowing), or '' if it did not count at all.
+  function stroke(side) {
+    if (run.state !== 'play' || paused) return '';
+    const b = beatNow(), onBeat = Math.abs(b.d) <= OARS.good, onOff = Math.abs(b.offD) <= OARS.good * 0.8;
+    const done = (kind) => { oars.last = kind; return kind; };
+    oars.awake = 12; rig.pull(side);
+    const lands = (sd) => { // a pull in time, by the oar whose turn it was
+      const perfect = Math.abs(b.d) <= OARS.perfect;
+      run.harmony = Math.min(OARS.top, run.harmony + 1); oars.side = sd; oars.beat = b.index; oars.idle = 0; oars.pairAt = run.time; oars.pairSide = sd; oars.pairBeat = b.index;
+      music.oar(perfect ? 'perfect' : 'good', run.harmony); buzz(0, perfect ? 0.3 : 0.2, 35); oarRing(perfect ? 'perfect' : 'good');
+      if (run.harmony >= 4) say('oars2', 'Between the beats, where the band swings, a pull adds drive on top. Both oars together on the first beat of a bar is a surge.', 9);
+      return perfect ? 'perfect' : 'good';
+    };
+    const together = () => { // both oars on one beat: a surge, if it is the first of the bar and there is chord enough behind it
+      if (b.index % 4 !== 0 || run.harmony < OARS.surgeAt || oars.surged === b.index) return done('both');
+      oars.surged = b.index; rig.boost = Math.max(rig.boost, OARS.surge); run.kick = Math.max(run.kick, 0.45);
+      music.oar('surge', run.harmony); buzz(RUMBLE.surge[0], RUMBLE.surge[1], RUMBLE.surge[2]); oarRing('surge', 1.3); oarRing('surge', 0.8);
+      return done('surge');
+    };
+    const held = oars.pending; // the wrong oar, pulled a moment ago on this beat and waiting to see if this one comes with it
+    if (held && onBeat && held.beat === b.index && held.side === -side && run.time - held.at <= OARS.both) { oars.pending = null; lands(side); return together(); }
+    if (onBeat && oars.pairBeat === b.index && oars.pairSide === -side && run.time - oars.pairAt <= OARS.both) return together(); // the other oar, hard on the first
+    if (onBeat && b.index === oars.beat) return done('again'); // a second pull on a beat already rowed: nothing gained, nothing lost
+    if (onBeat && side !== oars.side) return done(lands(side));
+    if (onBeat && run.harmony > 0) { oars.pending = { side, at: run.time, beat: b.index }; return done('wait'); } // in time, but the same oar as the last: a miss, unless it is half of a pair
+    if (onOff && side !== oars.side && run.harmony >= 2 && b.offIndex !== oars.offBeat) { // between the beats, where the band swings it
+      run.drive = Math.min(OARS.driveTop, run.drive + 1); oars.side = side; oars.offBeat = b.offIndex;
+      music.oar('drive', run.harmony); buzz(0, 0.14, 25); oarRing('drive', 0.7);
+      return done('drive');
+    }
+    return done(fumble(side));
+  }
+  // a pull that was out of time, or out of turn: it costs a voice and all the drive. With nothing built it is only a splash
+  function fumble(side) {
+    if (run.harmony <= 0 && run.drive <= 0) { oars.side = 0; return ''; }
+    run.harmony = Math.max(0, run.harmony - 1); run.drive = 0; oars.side = side;
+    music.oar('miss'); oarRing('miss', 0.8);
+    return 'miss';
+  }
+  // every frame: voices go when the rowing stops, the pace follows what is held, and the lights and rings are drawn
+  function rowing(dt) {
+    const b = beatNow(), playing = run.state === 'play';
+    if (!playing) { run.harmony = 0; run.drive = 0; oars.side = 0; oars.pending = null; }
+    if (oars.pending && run.time - oars.pending.at > OARS.both) { const p = oars.pending; oars.pending = null; oars.last = fumble(p.side); } // the other oar did not come: it was the wrong one
+    if (oars.seen === null || Math.abs(b.index - oars.seen) > 8) oars.seen = b.index; // a new dive, or the band has only now begun
+    while (playing && oars.seen < b.index) { // a beat has gone by: was it rowed?
+      const i = oars.seen++;
+      if (oars.beat !== i && run.harmony > 0 && ++oars.idle > OARS.hold) run.harmony--;
+      if (oars.offBeat < i - 1 && run.drive > 0) run.drive = Math.max(0, run.drive - 2);
+    }
+    if (run.harmony <= 0) run.drive = 0;
+    rig.tempo = damp(rig.tempo, 1 + OARS.speed * run.harmony + OARS.drive * run.drive, 3.5, dt);
+    if (run.harmony !== oars.level) { oars.level = run.harmony; glowFish(); }
+    // the lights: one at each side of the head, where the oars are rooted, flashing on the beat and resting between
+    const beat = Math.exp(-b.phase * 6), sx = Math.cos(rig.yaw), sz = -Math.sin(rig.yaw), h = rig.joints[0], next = oars.side === 0 ? 0 : -oars.side; // (sx, sz) points to the fish's own left
+    oars.awake = Math.max(0, oars.awake - dt); const lit = !playing ? 0 : oars.awake > 0 || run.harmony > 0 ? 1 : 0.4; // faint until an oar has been tried, so that a player who never rows is not nagged
+    oarLights.forEach((s, k) => { const sd = k ? 1 : -1, due = next === 0 || next === sd, on = due ? 1 : 0.3;
+      s.position.set(h.x - sx * sd * 0.55, h.y - 0.22, h.z - sz * sd * 0.55); s.scale.setScalar(0.35 + 0.6 * beat * on + 0.06 * run.harmony);
+      s.material.opacity = damp(s.material.opacity, lit * on * (0.1 + 0.05 * run.harmony + 0.75 * beat * (0.55 + 0.09 * run.harmony)), 16, dt); });
+    for (const m of oarRings) { const u = m.userData; if (u.t >= u.life) { m.visible = false; continue; } u.t += dt; const k = clamp(u.t / u.life, 0, 1); m.scale.setScalar(lerp(u.from, u.to, 1 - (1 - k) * (1 - k))); m.material.opacity = u.peak * (1 - k) * (1 - k); }
   }
   // The swell that runs down the body when it grows: k is how strong, and a slow one (a new standing) takes its time.
   function growPulse(k, slow = false) { pulse3.at = -0.12; pulse3.k = k; pulse3.pace = slow ? 0.85 : 1.55; }
@@ -371,7 +463,7 @@ export async function start(saved = {}) {
   function lose(n, kind) {
     const N = rig.spine.length;
     for (let i = 0; i < n; i++) foes.spawnPiece(rig.joints[Math.max(N - i, 1)], 'debris');
-    pulse('hurt'); run.chain = 0; run.chainT = 0;
+    pulse('hurt'); run.chain = 0; run.chainT = 0; run.harmony = Math.max(0, run.harmony - 2); run.drive = 0;
     if (run.segs - n < MIN_SEGS) return die();
     run.segs -= n; run.safe = 1.5;
     if (trimShells().length) tell('It rode on the segment you lost.', 4, { kind: 'warn', title: 'A shell is gone' });
@@ -553,7 +645,7 @@ export async function start(saved = {}) {
   const teach = { on: true, done: false, learned: {}, ...store.get('oarfish.teach', {}) };
   const saveTeach = () => store.set('oarfish.teach', { on: teach.on, done: teach.done, learned: teach.learned });
   const know = (id) => { if (!teach.learned[id]) { teach.learned[id] = 1; saveTeach(); } };
-  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll', 'crest']); // what the nursery teaches itself, and what can wait until it is over
+  const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll', 'crest', 'oars']); // what the nursery teaches itself, and what can wait until it is over
   const tut = { on: false, step: 0, stall: 0, told: false, was: 0, prize: null };
   // a line of text is the last resort: once ever, never while the nursery is teaching the same thing by other means
   function say(id, text, hold = 7, kind = 'teach') { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); hintQueue.push({ text, hold, kind }); }
@@ -747,10 +839,10 @@ export async function start(saved = {}) {
   const K = (...ks) => ks.map((k) => `<kbd>${k}</kbd>`).join('');
   const row = (...parts) => { let h = ''; for (let i = 0; i < parts.length; i += 2) h += `<span class="pair">${parts[i]}<span>${parts[i + 1]}</span></span>`; return `<li class="key">${h}</li>`; }; // key caps, then what they do
   function legend() {
-    if (dev === 'pad') return row(K('Left stick'), 'steer', K(pb('sprint')), 'dash, hold to sprint') + row(K(pb('wrap')), 'wrap, or coil', K(pb('sprint')), 'tight') + row(K(pb('rise')), 'rise', K(pb('dive')), 'dive') + row(K(pb('shed')), 'shed tail as bait') + row(K(pb('pause')), 'pause', K(pb('hide')), 'hide this')
+    if (dev === 'pad') return row(K('Left stick'), 'steer', K(pb('sprint')), 'dash, hold to sprint') + row(K(pb('wrap')), 'wrap, or coil', K(pb('sprint')), 'tight') + row(K(pb('rise')), 'rise', K(pb('dive')), 'dive') + row(K(pb('oarL'), pb('oarR')), 'oars: in turn, on the beat') + row(K(pb('shed')), 'shed tail as bait') + row(K(pb('pause')), 'pause', K(pb('hide')), 'hide this')
       + `<li class="note">The right stick looks around; ${pb('behind')} brings the view behind you. ${pb('zoomIn')} and ${pb('zoomOut')} zoom.</li>`;
     if (touch) return '<li class="note">Hold and drag: the fish swims to your finger. Hold on a swarm to wrap it. Pinch to zoom, drag with two fingers to look around.</li>';
-    return row(K(kb('up'), kb('left'), kb('down'), kb('right')), 'steer', K(kb('sprint')), 'dash, hold to sprint') + row(K(kb('wrapL'), kb('wrapR')), 'wrap, or coil', K(kb('sprint')), 'tight') + row(K(kb('rise')), 'rise', K(kb('dive')), 'dive') + row(K(kb('shed')), 'shed tail as bait') + row(K(kb('pause')), 'pause', K(kb('full')), 'full screen', K(kb('hide')), 'hide this')
+    return row(K(kb('up'), kb('left'), kb('down'), kb('right')), 'steer', K(kb('sprint')), 'dash, hold to sprint') + row(K(kb('wrapL'), kb('wrapR')), 'wrap, or coil', K(kb('sprint')), 'tight') + row(K(kb('rise')), 'rise', K(kb('dive')), 'dive') + row(K(kb('oarL'), kb('oarR')), 'oars: in turn, on the beat') + row(K(kb('shed')), 'shed tail as bait') + row(K(kb('pause')), 'pause', K(kb('full')), 'full screen', K(kb('hide')), 'hide this')
       + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Tilt the view up or down and the fish swims that way. Left button wraps, right button dashes and sprints, scroll zooms. On a trackpad a click with two fingers down is the right button; ${kb('wrapL')} and ${kb('wrapR')} wrap from the keys. ${kb('view')} goes back to pointing.</li>`
         : `<li class="note">Or hold the mouse button and the fish swims to the pointer. Right-drag looks around, scroll zooms. ${kb('view')} switches to the adventure camera.</li>`);
   }
@@ -1003,6 +1095,7 @@ export async function start(saved = {}) {
     if (paused || typing(e) || !act) return; // a focused slider keeps its arrow keys
     if ((e.code === 'Space' || e.code === 'Enter') && document.activeElement?.tagName === 'BUTTON') return; // let a focused button be a button
     if (!e.repeat && act === 'shed') shed();
+    if (!e.repeat && (act === 'oarL' || act === 'oarR')) stroke(act === 'oarL' ? -1 : 1);
     if (!e.repeat && act === 'behind') behind(clamp(cam.pitch, 0.2, 0.6));
     keys.add(e.code);
     e.preventDefault();
@@ -1091,6 +1184,8 @@ export async function start(saved = {}) {
       } else {
         if (pp('hide')) setFull(!ui.full);
         if (pp('shed')) shed();
+        if (pp('oarL')) stroke(-1);
+        if (pp('oarR')) stroke(1);
         if (pp('behind')) behind(clamp(cam.pitch, 0.2, 0.6));
         if (pp('full')) fullscreen(false);
         if (pp('view') && !touch) setMode(feel.mode === 'look' ? 'point' : 'look');
@@ -1274,7 +1369,7 @@ export async function start(saved = {}) {
     if (inp.sprint && inp.dir && !inp.coil) {
       if (run.winded) inp.winded = true;
       else if (taxed) {
-        run.stamina -= dt / (STAMINA.sprint * mods.stamina); run.rest = 0;
+        run.stamina -= (dt / (STAMINA.sprint * mods.stamina)) * (run.harmony >= OARS.top ? OARS.sprint : 1); run.rest = 0; // in full harmony a sprint costs half
         if (run.stamina <= 0) { run.stamina = 0; run.winded = true; inp.winded = true; }
         say('stamina', 'Sprinting only tires you while something hunts you. The ring by your head is what you have left.', 7);
       }
@@ -1508,6 +1603,8 @@ export async function start(saved = {}) {
     }
     run.kick = Math.max(0, run.kick - dt * 4);
     if (run.chainT > 0 && (run.chainT -= dt) <= 0) run.chain = 0; // nothing caught in time: the band goes back to what it was playing
+    rowing(dt);
+    if (run.state === 'play' && !tut.on && run.time > 16 && rig.speed > 2) say('oars', dev === 'pad' ? `${pb('oarL')} and ${pb('oarR')} are your oars. Pull them in turn, on the beat of the band. Each pull in time adds a voice to the chord and speed to your swim.` : `${kb('oarL')} and ${kb('oarR')} are your oars. Pull them in turn, on the beat of the band. Each pull in time adds a voice to the chord and speed to your swim.`, 10);
     if (pulse3.at < 1.25) { pulse3.at += dt * pulse3.pace; fishPulse.value.x = pulse3.at; fishPulse.value.y = pulse3.k * clamp((1.25 - pulse3.at) / 0.3, 0, 1); } else fishPulse.value.y = 0;
     fish.mesh.visible = run.state === 'dead' ? run.stateT < 0.2 || Math.floor(run.stateT * 9) % 2 === 0 : !(run.safe > 0 && run.state === 'play' && Math.floor(run.time * 14) % 2);
 
@@ -1617,7 +1714,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), chain: run.state === 'play' ? run.chain : 0,
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), chain: run.state === 'play' ? run.chain : 0, harmony: run.state === 'play' ? run.harmony : 0,
     });
   }
 
@@ -1660,7 +1757,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

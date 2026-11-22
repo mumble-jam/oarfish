@@ -43,7 +43,7 @@ export const CAST = {
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -381,8 +381,19 @@ export function createMusic({ context = null } = {}) {
     }
     // --- the cast: whoever is near sits in
     for (const id of st.sitting) playCast(id, st.cast[id], bar, tick, t);
+    // --- the harmony the fish has rowed up: one held note of the chord for each voice it has, laid again every two beats
+    if (st.harmony > 0 && (tick === 0 || tick === 6)) { const ch = chordAt(bar), notes = oarNotes(ch); for (let i = 0; i < st.harmony && i < notes.length; i++) hum(t, notes[i], st.beatDur * 2.4, 0.5 + 0.1 * i); }
     // --- a run of catches: each one in time adds a player, and the third is a solo
     if (st.chain >= 1) playChain(bar, tick, t);
+  }
+  // The notes the oars build a chord from, in the order they come in: the root, the fifth, then the third, the seventh and the ninth above.
+  const oarNotes = (ch) => { const base = 48 + ch.root, t = ch.q.tones; return [base, base + t[2], base + 12 + t[1], base + 12 + t[3], base + 26]; };
+  // one held, breathy note: the fish's own voice in the chord
+  function hum(t, m, dur, v) {
+    const g = ctx.createGain(), f = lowpass(900 + 500 * v, 0.7), level = 0.07 * v * lerp(0.5, 1, params.react);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(level, t + 0.18); g.gain.setValueAtTime(level, t + dur * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const [type, cents] of [['sine', 0], ['triangle', 6], ['triangle', -6]]) { const o = osc(type, mtof(m), t, t + dur + 0.05); o.detune.value = cents; o.connect(f); }
+    f.connect(g); g.connect(n.pad);
   }
   // What the chain adds on this tick. 1: the vibraphone answers the piano, off its hits. 2: two horns riff, the same two bars over and over.
   // 3: a saxophone solos, a line that walks the chord's scale in swung eighths, lands on a chord note when the chord changes, and breathes.
@@ -418,6 +429,8 @@ export function createMusic({ context = null } = {}) {
       if (st.tick % 3 === 0) {
         const bpm = lerp(108, 172, energyNow()) * (1 + 0.1 * st.intensity) * (st.alive ? 1 : 0.6);
         st.beatDur = 60 / bpm;
+        st.beats.push({ at: st.nextTime, dur: st.beatDur, index: st.bar * 4 + st.tick / 3, off: lerp(0.5, 0.74, params.swing) * st.beatDur }); // for whoever plays along (see pulse)
+        if (st.beats.length > 16) st.beats.shift();
       }
       const late = lerp(0.5, 0.74, params.swing), frac = [0, 1 / 3, late, 1];
       const sub = st.tick % 3;
@@ -467,6 +480,7 @@ export function createMusic({ context = null } = {}) {
       for (const id of Object.keys(CAST)) { const to = clamp(near[id] || 0, 0, 1), was = st.cast[id] || 0; st.cast[id] = was + (to - was) * (1 - Math.exp(-dt * (to > was ? 1.6 : 0.5))); }
       st.sitting = Object.keys(CAST).filter((id) => st.cast[id] > 0.12).sort((a, b) => (st.cast[b] + (CAST[b].lead ? 1 : 0)) - (st.cast[a] + (CAST[a].lead ? 1 : 0))).slice(0, 3);
       st.pulse *= Math.exp(-dt / 1.6);
+      st.harmony = Math.max(0, Math.min(5, s.harmony | 0)); // voices the fish has rowed up (see main.js, OARS)
       st.chain = Math.max(0, Math.min(3, s.chain | 0)); // catches in a row: 1 the vibraphone joins the piano, 2 the horns riff, 3 a solo over all of it
       st.heat += (st.chain / 3 - st.heat) * (1 - Math.exp(-dt * (st.chain / 3 > st.heat ? 4 : 0.6))); // the band stays warm for a little after the chain is lost
       const target = clamp(0.02 + 0.36 * energyNow() + P.react * (0.4 * s.speed + 0.5 * s.danger + 0.14 * s.coil + (s.low ? 0.1 : 0) + st.pulse + 0.3 * st.heat), 0, 1);
@@ -480,6 +494,30 @@ export function createMusic({ context = null } = {}) {
       const t = now() + 0.008, up = voicing(chordAt(st.bar), 72), m = up[i % up.length] + 12 * Math.floor(i / up.length), f = mtof(m), v = 0.35 + 0.65 * clamp(strength, 0, 1);
       for (const [k, level, decay] of [[1, 0.2, 2.0], [2.76, 0.07, 0.75], [5.4, 0.03, 0.28]]) tone(t, { f0: f * k, decay, gain: level * v, out: n.keysIn }); // a struck bar: its own three partials, the high ones gone first
       st.rung = m;
+      return m;
+    },
+    // Where the beat is, for a player rowing along. Returns null if the band is not playing, else how far `at` (the audio clock, now by
+    // default) is from the nearest beat and from the nearest swung off-beat, in seconds (negative: early), which beat that is, and its
+    // length. What is heard runs a little behind what is scheduled, so the output's own delay is taken off.
+    pulse(at = null) {
+      if (!st.started || !ctx || st.beats.length < 2) return null;
+      const t = (at ?? ctx.currentTime) - (ctx.outputLatency || ctx.baseLatency || 0);
+      let best = null, off = null;
+      for (const b of st.beats) { const d = t - b.at; if (!best || Math.abs(d) < Math.abs(best.d)) best = { d, index: b.index, dur: b.dur }; const e = t - (b.at + b.off); if (!off || Math.abs(e) < Math.abs(off.d)) off = { d: e, index: b.index }; }
+      const last = st.beats[st.beats.length - 1], since = t - last.at; // past the end of what has been scheduled: carry the last beat's length on
+      if (since > last.dur * 0.5) { const k = Math.round(since / last.dur), d = since - k * last.dur; if (Math.abs(d) < Math.abs(best.d)) best = { d, index: last.index + k, dur: last.dur }; }
+      return { d: best.d, index: best.index, dur: best.dur, offD: off.d, offIndex: off.index, phase: (((t - last.at) / last.dur) % 1 + 1) % 1 };
+    },
+    // An oar pulled. good: in time, and `level` is the voice it adds (1 to 5), sounded as that note of the chord. perfect: dead on. drive:
+    // on the swung off-beat. miss: out of time. surge: both oars on the first beat of the bar, the whole chord at once.
+    oar(kind, level = 1) {
+      if (!st.started || !n) return null;
+      const t = now() + 0.006, ch = chordAt(st.bar), notes = oarNotes(ch), vol = lerp(0.4, 1, params.react), m = notes[clamp(level, 1, notes.length) - 1] + 12;
+      if (kind === 'miss') { tone(t, { type: 'triangle', f0: 150, f1: 90, glide: 0.08, decay: 0.09, gain: 0.25 * vol }); noise(t, { bp: 500, q: 1, decay: 0.05, gain: 0.12 * vol }); return null; }
+      if (kind === 'drive') { tone(t, { f0: mtof(m + 12), decay: 0.07, gain: 0.1 * vol, out: n.keysIn }); kit.hat(t, 0.35 * vol); return m + 12; }
+      if (kind === 'surge') { notes.forEach((x, i) => voices.pluck(t + i * 0.03, x + 12, 0.5, 0.8 * vol)); kit.splash(t, 0.6 * vol); kit.kick(t, 0.8 * vol); return m; }
+      voices.pluck(t, m, 0.45, (kind === 'perfect' ? 0.95 : 0.75) * vol);
+      if (kind === 'perfect') tone(t, { f0: mtof(m + 24), decay: 0.25, gain: 0.05 * vol, out: n.keysIn }); // dead on: its octave rings over it
       return m;
     },
     // One step of the run of notes that goes with a swarm streaming into the mouth: step k of `of`, up the scale of the chord the band is on,

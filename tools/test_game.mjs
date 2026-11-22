@@ -389,6 +389,27 @@ s = await ev(() => { const g = window.__game; const code = g.presetCode(); const
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);
   return { code, r1, dream1: p1.dream, r2, dreamHere: here.dream, dreamThere: there.dream, menaceThere: there.menace, code3, r3 }; });
 check('preset codes copy, paste for all depths, and paste for one depth', /^oarfish-music:1:dream=\d+/.test(s.code) && s.dream1 === 0.9 && s.dreamHere === 0.9 && s.dreamThere === 0.3 && s.menaceThere === 0.95 && /zone=3$/.test(s.code3) && /not a preset/.test(s.r3), JSON.stringify(s));
+// ---- the oars: pulled in turn on the beat they build a chord and speed; out of time they lose it. Rowed here against a plain count
+// kept from the dive's own clock (oars.metronome), since the band's clock is the sound card's and does not stop for a scripted dive.
+s = await ev(() => { const g = window.__game, T = window.T, O = g.OARS, dur = O.tempo, east = { ...T.none(), dir: { x: 1, y: 0, z: 0 } }; g.startRun(4242); g.run.safe = 1e9; g.oars.metronome = true;
+  const to = (when) => { while (g.run.time < when - 1e-6) g.sim(1 / 60, east); }, beat = () => Math.ceil((g.run.time + 0.06) / dur) * dur;
+  T.put(g.rig.pos.x, g.rig.pos.y + 3, g.rig.pos.z, Math.PI / 2); to(g.run.time + 3); const plain = g.rig.speed; to(Math.ceil((g.run.time + 0.06) / dur) * dur + dur * 0.3); const mash = [g.stroke(-1), g.stroke(1), g.stroke(-1), g.run.harmony];
+  const built = []; let side = -1; const pull = () => { const r = g.stroke(side); side = -side; return r; };
+  for (let i = 0; i < 5; i++) { to(beat()); built.push(pull()); } const top = g.run.harmony;
+  for (let i = 0; i < 6; i++) { to(beat()); pull(); } const fast = g.rig.speed, tempo = g.rig.tempo;
+  to(beat() + dur * 0.3); const out = [pull(), g.run.harmony];
+  to(beat()); pull(); to(beat()); const wait = g.stroke(-side); to(g.run.time + O.both + 0.05); const twice = [wait, g.oars.last, g.run.harmony];
+  for (let i = 0; i < 4; i++) { to(beat()); pull(); } const again = g.run.harmony;
+  const t0 = beat(); to(t0); pull(); to(t0 + dur * 0.66); const swung = [pull(), g.run.drive]; to(t0 + dur); pull(); to(t0 + dur * 1.66); const swung2 = [pull(), g.run.drive, +g.rig.tempo.toFixed(2)];
+  let b = beat(); while (Math.round(b / dur) % 4 !== 0) b += dur; to(b - dur); pull(); to(b); const surge = [g.stroke(-side), g.stroke(side), +g.rig.boost.toFixed(2), g.run.harmony];
+  to(g.run.time + dur * 9); const faded = [g.run.harmony, g.run.drive, +g.rig.tempo.toFixed(2)];
+  g.oars.metronome = false; g.run.safe = 0;
+  return { plain: +plain.toFixed(2), mash, built, top, fast: +fast.toFixed(2), tempo: +tempo.toFixed(2), out, twice, again, swung, swung2, surge, faded }; });
+check('the oars: five pulls in turn on the beat build the whole chord and three quarters more speed; a pull out of time or the same oar twice costs a voice; a pull on the swing adds drive; both on the first beat is a surge; and it all fades when the rowing stops',
+  s.plain > 3.1 && s.plain < 3.4 && s.mash.join() === ',,,0' && s.built.every((r) => r === 'good' || r === 'perfect') && s.top === 5 && s.fast > s.plain * 1.6 && Math.abs(s.tempo - 1.75) < 0.05 && s.out.join() === 'miss,4' && s.twice.join() === 'wait,miss,4' && s.again === 5 && s.swung.join() === 'drive,1' && s.swung2[0] === 'drive' && s.swung2[1] === 2 && s.surge[0] === 'wait' && s.surge[1] === 'surge' && s.surge[2] > 0.5 && s.surge[3] === 5 && s.faded[0] === 0 && s.faded[1] === 0 && s.faded[2] < 1.03, JSON.stringify(s));
+s = await ev(async () => { const g = window.__game; g.music.unlock(); await new Promise((r) => setTimeout(r, 900)); const a = g.music.pulse(); await new Promise((r) => setTimeout(r, 300)); const b = g.music.pulse(), now = g.beatNow();
+  return { a: a && { d: +a.d.toFixed(3), i: a.index, dur: +a.dur.toFixed(3) }, b: b && { i: b.index }, band: !!a && now.index === g.music.pulse().index, oar: g.music.oar('good', 3), miss: g.music.oar('miss') }; });
+check('the band gives the oars its own beat: which beat is nearest, how far off, and how long a beat is', !!s.a && Math.abs(s.a.d) <= s.a.dur / 2 + 0.02 && Number.isInteger(s.a.i) && s.a.dur > 0.3 && s.a.dur < 0.6 && s.b.i >= s.a.i && s.band && s.oar > 40 && s.miss === null, JSON.stringify(s));
 // ---- a catch that lands, catches in a row, and length that shows. (The hold is checked with frames run as the game runs them,
 // g.sim with no input given: a step forced from here goes round it.)
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.music.unlock(); const sw = T.swarm('s');
