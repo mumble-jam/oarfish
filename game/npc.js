@@ -63,8 +63,9 @@ export const NPCS = [
     about: 'Steel, a lead, and the tally tag of whoever set it. The lines come down from the raft, far overhead.',
     palette: { steel: '#d5dee2', shade: '#93a4ad', lead: '#9aa6ad', tag: '#e2566b', bait: '#ffe89a', glow: '#fff1b8', line: '#e8f6f6' },
     build: (pal) => model.hook(pal), swim: null, beat: [0, 0],
+    // the line is tied to the eye at the top of the shank, which is 0.2 to one side of the bend: the lead is threaded on the line and the tag hangs off it
     assemble(a, pal) { const g = new THREE.Group(), lm = new THREE.MeshBasicMaterial({ color: pal.line, transparent: true, opacity: 0.5 }), bm = new THREE.MeshBasicMaterial({ color: pal.bait }), line = new THREE.Mesh(LINE, lm), bait = new THREE.Mesh(BAIT, bm); a.owned.push(lm, bm);
-      line.position.y = 0.7; line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
+      line.position.set(0.2, 0.8, 0); line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
 
   { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 6, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
