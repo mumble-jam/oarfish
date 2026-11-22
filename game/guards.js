@@ -1,15 +1,14 @@
-// The guard of a well. Each band's well is kept by one creature, and the way down stays shut until it has
+// The keeper of a rift. Each band's rift is kept by one creature, and the way down stays shut until it has
 // been dealt with. The four differ, and each is a place to use one of the fish's tools:
 //   band 1  the Keeper       slow, armoured, snaps at a tail that comes near     wrap it, or ram it three times
 //   band 2  the Shearer      charges the tail in a straight line, then tires     ram or wrap it while it is tired
-//   band 3  the Lamplighter  hangs over the well and lunges; takes a bait first  ram or wrap it while its lamp is out
+//   band 3  the Lamplighter  hangs over the rift and lunges; takes a bait first  ram or wrap it while its lamp is out
 //   band 4  the Warden       an eel circling the mouth that tightens on a fish   ram its head, or bait the head out and wrap it
 // Any of them can be beaten by rams alone, so a short body is never stuck.
 
 import * as THREE from 'three';
-import { T, wrapD, canWrap } from './world.js';
+import { T, canWrap } from './world.js';
 import { rng, lerp, clamp, damp, glowTexture } from './geo.js';
-import { sealGeo } from './critters.js';
 import { make, paintOf } from './npc.js';
 
 const KINDS = ['keeper', 'shearer', 'lamplighter', 'warden'];
@@ -18,7 +17,9 @@ const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const kind = KINDS[floor], tint = paintOf(floor);
   const rand = rng(seed * 61 + floor * 311 + 7), rr = (a, b) => a + (b - a) * rand();
-  const well = world.goal, Y0 = well.y; // the rim of the well
+  const rift = world.rift;
+  // where it lives: over the middle of the rift, or, for the Keeper, which walks, on the shelf at the near edge
+  const well = kind === 'keeper' ? { x: rift.x - rift.nx * 24, y: rift.y, z: rift.z - rift.nz * 24 } : world.goal, Y0 = well.y; // the level of the shelf at the rift's edge
   const root = new THREE.Group(); scene.add(root);
   const trash = [];
   const keep = (o) => { trash.push(o); return o; };
@@ -26,9 +27,9 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const glowMap = keep(glowTexture());
   const sprite = (color, size) => { const s = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: glowMap, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }))); s.scale.setScalar(size); root.add(s); return s; };
   const warn = sprite('#ff7f96', 1), lure = actor.parts.glow || null; // the Lamplighter's lamp comes with it
-  // the lid: light across the mouth of the well while its guard lives
-  const lid = new THREE.Mesh(keep(sealGeo(6.1)), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
-  root.add(lid);
+  // the veil: bars of light across the mouth of the rift while its keeper lives
+  const lid = new THREE.Mesh(keep(rift.veil()), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
+  lid.frustumCulled = false; root.add(lid);
   // what it has left, as beads over its back
   const HP = { keeper: 3, shearer: 3, lamplighter: 3, warden: 4 }[kind];
   const beadGeo = keep(new THREE.SphereGeometry(0.16, 6, 5)), beadMat = keep(new THREE.MeshBasicMaterial({ color: '#f2faf7', fog: false }));
@@ -44,7 +45,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   let yaw = 0, bait = null;
   const target = { x: 0, y: 0, z: 0, room: { keeper: 0.75, shearer: 0.55, lamplighter: 0.8, warden: 0.6 }[kind], orbit: 1.2, fit: 0.7, can: false, left: 1, threat: 1, progress: 0, arcStart: 0, arcSign: 1, sweep: 1 };
   const set = (state, t = 0) => { S.state = state; S.t = t; };
-  const HOME = { keeper: [8.6, 0.9], shearer: [11, 2.6], lamplighter: [0, 3.4], warden: [4.2, 1.6] }[kind]; // distance from the well's centre, height over its rim
+  const HOME = { keeper: [8.6, 0.9], shearer: [11, 2.6], lamplighter: [0, 3.4], warden: [4.2, 1.6] }[kind]; // distance from the middle of where it lives, height over the shelf
   pos.set(well.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1], well.z + Math.cos(S.ang) * HOME[0]);
   if (kind === 'warden') slabs.forEach((s, i) => s.p.set(well.x + Math.sin(S.ang - (i + 1) * 0.24) * S.R, pos.y, well.z + Math.cos(S.ang - (i + 1) * 0.24) * S.R));
 
@@ -80,7 +81,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   };
 
   function update(dt, ctx) {
-    W.set(well.x + T * Math.round((ctx.focus.x - well.x) / T), Y0, well.z + T * Math.round((ctx.focus.z - well.z) / T)); // the well on the nearest copy of the world
+    W.set(well.x + T * Math.round((ctx.focus.x - well.x) / T), Y0, well.z + T * Math.round((ctx.focus.z - well.z) / T)); // where it lives, on the nearest copy of the world
     pos.x += T * Math.round((ctx.focus.x - pos.x) / T); pos.z += T * Math.round((ctx.focus.z - pos.z) / T);
     for (const s of slabs) { s.p.x += T * Math.round((ctx.focus.x - s.p.x) / T); s.p.z += T * Math.round((ctx.focus.z - s.p.z) / T); }
     S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
@@ -138,16 +139,17 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     warn.position.copy(pos).y += 0.6; warn.scale.setScalar(Math.max(0.01, warnSize * (1 + 0.15 * Math.sin(ctx.time * 30)))); warn.visible = warnSize > 0 && !S.done;
     if (lure) { const lit = !S.done && S.state !== 'dim' && S.stun <= 0; lure.scale.setScalar(damp(lure.scale.x, lit ? (S.state === 'windup' ? 5 : 3) : 0.4, 8, dt)); }
     beads.forEach((b, i) => { b.visible = !S.done && i < S.hp; b.position.set(pos.x + (i - (HP - 1) / 2) * 0.5, pos.y + (kind === 'keeper' ? 3 : 2.1), pos.z); });
-    lid.position.set(W.x, Y0 + 0.45, W.z);
-    lid.material.opacity = damp(lid.material.opacity, S.done ? 0 : 0.5 + 0.12 * Math.sin(ctx.time * 2), 3, dt); lid.visible = lid.material.opacity > 0.01; lid.rotation.y += dt * 0.12;
+    lid.position.set(T * Math.round((ctx.focus.x - rift.x) / T), 0, T * Math.round((ctx.focus.z - rift.z) / T)); // the veil is laid out where the rift is; this puts it on the nearest copy of the world
+    lid.material.opacity = damp(lid.material.opacity, S.done ? 0 : 0.36 + 0.1 * Math.sin(ctx.time * 2), 3, dt); lid.visible = lid.material.opacity > 0.01;
 
     S.wrap = null;
     if (wrappable() && ctx.playing) { target.x = pos.x; target.y = pos.y; target.z = pos.z; target.can = canWrap(ctx.total, target.room); S.wrap = target; } else target.progress = 0;
   }
-  // while the guard lives the lid holds: nothing goes down the well
+  // while the keeper lives the veil holds: the ledges can be swum over, but nothing goes down between the walls
   function pushOut(p, radius) {
     if (S.done) return;
-    if (Math.hypot(wrapD(p.x - well.x), wrapD(p.z - well.z)) < 5.9 && p.y < Y0 + 0.5 + radius) p.y = Y0 + 0.5 + radius;
+    const top = rift.ledgeY + 0.5 + radius;
+    if (p.y < top && rift.in(p.x, p.z) > rift.ledge - 0.3) p.y = top;
   }
   function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
   return { update, ram, pushOut, dispose, wrapped: fall, state: S, kind, pos, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt } };

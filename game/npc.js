@@ -19,7 +19,7 @@ let GLOW = null;
 const glowMap = () => (GLOW ||= glowTexture());
 const sprite = (a, color, size) => { const m = new THREE.SpriteMaterial({ map: glowMap(), color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }); a.owned.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(size); return s; };
 const BULB = new THREE.IcosahedronGeometry(0.1, 0), LINE = new THREE.CylinderGeometry(0.014, 0.014, 1, 4).translate(0, 0.5, 0), BAIT = new THREE.OctahedronGeometry(0.07, 0);
-const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the wells carry a little light of their own, so they read in the dark
+const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the rifts carry a little light of their own, so they read in the dark
 const SCHOOL = { tone1: '#f3f7fa', tone2: '#ffd96b', tone3: '#9fe0ea', tone4: '#ffb38a' }; // the tints a swarm may take, one to a swarm
 // where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp); sc: its swarm (x, y, z, ball, pack, threat, burst)
 function place(out, f, sc, t) {
@@ -66,23 +66,23 @@ export const NPCS = [
       line.position.y = 0.7; line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
 
-  { id: 'keeper', group: 'Keepers of the wells', name: 'The Keeper', bands: [0], length: 5, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
-    about: 'A great crab under a dome of plates. It keeps the first well.',
+  { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 5, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
+    about: 'A great crab under a dome of plates. It keeps the first rift.',
     paintOf: 0, palette: { tone: DISTRICT[0], pale: '#e9dfc0', dark: '#3b2a4d', deep: '#2a1d38', eye: '#eaff7c' },
     build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD, states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0, wobble: true }] },
-  { id: 'shearer', group: 'Keepers of the wells', name: 'The Shearer', bands: [1], length: 6, role: 'Charges the tail in a straight line, then tires. Ram or wrap it while it is tired.',
-    about: 'A sawfish, the saw toothed in the district’s colour. It keeps the second well.',
+  { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 6, role: 'Charges the tail in a straight line, then tires. Ram or wrap it while it is tired.',
+    about: 'A sawfish, the saw toothed in the district’s colour. It keeps the second rift.',
     paintOf: 1, palette: { tone: DISTRICT[1], back: '#3b2a4d', flank: '#55406b', belly: '#d9cfe0', saw: '#e9dfc0', eye: '#eaff7c' },
     build: (pal) => model.shearer(pal), swim: { amp: 0.2, waves: 2.2, nose: 3.1, length: 6 }, beat: [2.2, 0.7], material: GUARD,
     states: [{ id: 'idle', name: 'Circling', speed: 1.5 }, { id: 'charge', name: 'Charging', speed: 9 }, { id: 'tired', name: 'Tired', speed: 0, wobble: true }] },
-  { id: 'lamplighter', group: 'Keepers of the wells', name: 'The Lamplighter', bands: [2], length: 3.5, role: 'Hangs over the well and lunges. It takes a bait first. Ram or wrap it while its lamp is out.',
-    about: 'The angler grown huge, its fins in the district’s colour. It keeps the third well.',
+  { id: 'lamplighter', group: 'Keepers of the rifts', name: 'The Lamplighter', bands: [2], length: 3.5, role: 'Hangs over the rift and lunges. It takes a bait first. Ram or wrap it while its lamp is out.',
+    about: 'The angler grown huge, its fins in the district’s colour. It keeps the third rift.',
     paintOf: 2, palette: { tone: DISTRICT[2], back: '#221d36', skin: '#322d4b', wart: '#2a2540', belly: '#4d4770', gum: '#2a0f20', eye: '#c8ecff', lure: '#ffd27a' },
     build: (pal) => model.lamplighter(pal), swim: { amp: 0.16, waves: 1.5, nose: 1.3, length: 3.5 }, beat: [2.2, 0.7], material: GUARD,
     assemble(a, pal) { const g = new THREE.Group(), lure = sprite(a, pal.lure, 3); lure.position.set(0, model.ANGLER_ROD[1] * model.LAMP_SCALE, model.ANGLER_ROD[2] * model.LAMP_SCALE); lure.visible = false; g.add(a.body, lure); a.object = g; a.parts = { glow: lure }; },
     states: [{ id: 'hang', name: 'Hanging', speed: 0, lure: 3 }, { id: 'windup', name: 'Winding up', speed: 0.5, lure: 5 }, { id: 'dim', name: 'Lamp out', speed: 0, lure: 0.4 }] },
-  { id: 'warden', group: 'Keepers of the wells', name: 'The Warden', bands: [3], length: 11, role: 'An eel circling the mouth of the well, which tightens on a fish inside its ring. Ram its head, or bait the head out and wrap it.',
-    about: 'A moray’s head on eleven lengths of body, banded in the district’s colour. It keeps the fourth well.',
+  { id: 'warden', group: 'Keepers of the rifts', name: 'The Warden', bands: [3], length: 11, role: 'An eel circling the mouth of the rift, which tightens on a fish inside its ring. Ram its head, or bait the head out and wrap it.',
+    about: 'A moray’s head on eleven lengths of body, banded in the district’s colour. It keeps the fourth rift.',
     paintOf: 3, palette: { tone: DISTRICT[3], pale: '#e9dfc0', gum: '#3a1626', eye: '#eaff7c' },
     build: (pal) => model.wardenHead(pal), swim: null, beat: [0, 0], material: GUARD,
     // the body is the game's to lay out: one mesh to a length, widest behind the head
@@ -108,14 +108,14 @@ NPCS.push({ id: 'tailpiece', group: 'Loose things', kind: 'thing', name: 'A shed
 // the two sets of colours everything built of stone is made from. They are not things: they are what things are tinted with
 NPCS.push(
   { id: 'paint', group: 'Colours of the world', kind: 'tokens', name: 'District paint', bands: [0, 1, 2, 3, 4], length: 6, fixed: true, role: 'One colour to a band. It is on the top slab of every column, the caps of the well curbs, the seal over a guarded well, and the lengths of the Sum paid in that band.',
-    about: 'The fin’s own reds, paler above and deeper below; the last is the body’s gold. The keepers of the wells take their band’s colour too, unless given one of their own.',
+    about: 'The fin’s own reds, paler above and deeper below; the last is the body’s gold. The keepers of the rifts take their band’s colour too, unless given one of their own.',
     palette: Object.fromEntries(DISTRICT.map((c, i) => [`band${i + 1}`, c])), swim: null, beat: [0, 0], states: [{ id: 'row', name: 'The five bands' }] },
   { id: 'stone', group: 'Colours of the world', kind: 'tokens', name: 'Stone', bands: [0, 1, 2, 3, 4], length: 6, fixed: true, role: 'The stone of each band’s ruins. Each block takes this colour or one of a few near it.',
     about: 'Stone weathers from the top down: the shallow ruins are the oldest and greenest, the deepest are clean.',
     palette: { band1: '#c3cfae', band2: '#d2d8c2', band3: '#dde0cf', band4: '#e2e3d8', band5: '#e8e8e0' }, swim: null, beat: [0, 0], states: [{ id: 'row', name: 'The five bands' }] });
 export const NPC = Object.fromEntries(NPCS.map((s) => [s.id, s]));
 // The library lists its groups in this order. Other files add their own things to it with register().
-export const GROUPS = ['The oarfish', 'Swarms', 'Hunters', 'Keepers of the wells', 'The Sum', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
+export const GROUPS = ['The oarfish', 'Swarms', 'Hunters', 'Keepers of the rifts', 'The Sum', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
 export function register(spec) { const full = { bands: [0, 1, 2, 3, 4], swim: null, beat: [0, 0], palette: {}, states: [{ id: 'still', name: 'As it stands' }], kind: 'thing', fixed: true, ...spec }; NPCS.push(full); NPC[full.id] = full; return full; }
 export const inOrder = () => [...NPCS].sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
 export const swarmFor = (band) => ['sprat', 'sprat', 'lanternfish', 'lanternfish', 'ghostfish'][band] || 'sprat';

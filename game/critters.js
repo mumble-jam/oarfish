@@ -128,7 +128,7 @@ export function tailPiece(pal) { // pal: the oarfish's own palette
   return m.geometry();
 }
 
-// ================================================================ the keepers of the wells, and the Sum
+// ================================================================ the keepers of the rifts, and the Sum
 const grey = (k) => dim('#ffffff', k);
 
 // ---------------------------------------------------------------- the Keeper: a great crab under a dome of plates
@@ -208,10 +208,3 @@ export function sumSegment() {
   return m.geometry();
 }
 
-// the seal across the mouth of a guarded well: a wheel of light, not a sheet of it
-export function sealGeo(R = 6.1) {
-  const m = mesher(), flat = (g) => g.rotateX(-Math.PI / 2);
-  m.add(flat(new THREE.RingGeometry(R * 0.86, R, 36)), null, '#ffffff').add(flat(new THREE.RingGeometry(R * 0.54, R * 0.6, 28)), null, '#ffffff').add(flat(new THREE.CircleGeometry(R * 0.16, 12)), null, '#ffffff');
-  for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), w = 0.16, at = (r, side) => [s * r + c * w * side, 0, c * r - s * w * side]; m.quad(at(R * 0.2, -1), at(R * 0.2, 1), at(R * 0.84, 1), at(R * 0.84, -1), '#ffffff'); }
-  return m.geometry();
-}

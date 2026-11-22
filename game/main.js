@@ -26,10 +26,8 @@ const STAMINA = { sprint: 5, regen: 3, pause: 0.7, dash: 0.3, cool: 0.55, linger
 // A preset code from the drawer drops straight in here (zones are numbered from 0, the sunlight zone).
 const MUSIC_KEYS = ['dream', 'energy', 'menace', 'react', 'swing', 'band'];
 const SHIPPED_MUSIC = { all: { dream: 60, energy: 50, menace: 50, react: 70, swing: 60, band: 50 }, zones: {} };
-// Every dive is built from one number, its seed: the lie of the seabed, where the well and the ruins stand,
-// where the swarms and the hunters start, in all five bands. The same seed is the same world for everyone.
-// The version goes up whenever the generator changes what a seed makes, so an old code can say so.
-const WORLD_V = 1;
+// Every dive is built from one number, its seed, drawn afresh each time. Players never see it; the checks start a dive
+// from a known one (`startRun(4242)`) so that they stand in the same world every run.
 const SHIPPED_FEEL = { assist: 60, mode: 'point', look: 50, rumble: 70 }; // help with wrapping a swarm; which controls a new player gets; look speed
 // The two views. 'point' is the plate: high, far and flat, and the mouse says where to swim. 'look' is the
 // adventure camera: nearer and wider, free to drop below the fish, and the mouse (or the right stick) turns it.
@@ -210,26 +208,8 @@ export async function start(saved = {}) {
   const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
-  const worldPref = store.get('oarfish.world', {}); // { keep, seed }: dive the same world every time
-  const freshSeed = () => (worldPref.keep && Number.isFinite(worldPref.seed) ? worldPref.seed : (Math.random() * 1e6) | 0);
-  const seedCode = (seed = run.seed) => `oarfish-world:${WORLD_V}:${seed}`;
-  // a seed out of whatever was pasted: a code, a bare number, or any word (the same word is always the same world)
-  function readSeed(text) {
-    const t = (text || '').trim();
-    if (!t) return null;
-    const m = /oarfish-world:(\d+):(\d{1,9})/i.exec(t);
-    if (m) return { seed: +m[2] % 1e6, old: +m[1] !== WORLD_V };
-    if (/^\d{1,9}$/.test(t)) return { seed: +t % 1e6 };
-    let h = 2166136261;
-    for (const ch of t.toLowerCase()) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
-    return { seed: (h >>> 0) % 1e6, word: t };
-  }
-  function showSeed() {
-    $('seed-now').textContent = `This dive is world ${run.seed}. ${worldPref.keep ? 'Every new dive will be this world until you let it go.' : 'Each new dive draws a new one.'}`;
-    $('seed-keep').setAttribute('aria-pressed', String(!!worldPref.keep)); $('seed-keep').textContent = worldPref.keep ? 'Keeping this world' : 'Keep this world';
-  }
   let world = null, foes = null;
-  let sum = null, arena = null, guard = null; // guard: what keeps this band's well // the last band's boss, and the band's collisions with the boss's body added
+  let sum = null, arena = null, guard = null; // guard: what keeps this band's rift // the last band's boss, and the band's collisions with the boss's body added
   // how the dive ends, once the Sum is dealt with: 'open' (its head ringed) or 'close' (its gap filled)
   const end = { kind: null, swap: 0, quake: 0, vista: 0, turn: 0, burst: -9 };
   const cine = () => run.state === 'opening' || run.state === 'rise' || run.state === 'surface' || run.state === 'closing';
@@ -282,8 +262,8 @@ export async function start(saved = {}) {
     $('btn-skip').hidden = !tut.on;
     guard?.dispose(); guard = null;
     if (world.hall) sum = createSum(scene, world, { seed: run.seed }, sumGame); // the palace: its wall is the Sum
-    else guard = createGuard(scene, world, { seed: run.seed, floor: index }, guardGame); // every well has its keeper
-    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); } }; // the Sum is solid, and so is the lid on a guarded well
+    else guard = createGuard(scene, world, { seed: run.seed, floor: index }, guardGame); // every rift has its keeper
+    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); } }; // the Sum is solid, and so is the veil over a kept rift
     Object.assign(end, { kind: null, swap: 0, quake: 0, vista: 0, burst: -9 }); cam.shake = 0;
     goalEl.style.display = ''; fade(false);
     applyLook(world.floor);
@@ -306,12 +286,10 @@ export async function start(saved = {}) {
     if (F.anglers && !said.has('lures')) say('lures', 'A cloud of small cold lights is food. A single warm light is a lure.', 9);
     if (index === FLOORS.length - 1) say('palace', 'The palace gate is near. Swim through it.', 9);
   }
-  function startRun(seed = freshSeed()) {
+  function startRun(seed = (Math.random() * 1e6) | 0) {
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
     Object.assign(run, { seed, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
-    if (worldPref.keep) { worldPref.seed = seed; store.set('oarfish.world', worldPref); }
-    showSeed();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
     buildFish(run.segs);
@@ -324,7 +302,7 @@ export async function start(saved = {}) {
     while (run.food >= mods.foodPerSeg && run.segs < MAX_SEGS) { run.food -= mods.foodPerSeg; run.segs++; grew = true; }
     if (run.segs >= MAX_SEGS) run.food = Math.min(run.food, mods.foodPerSeg - 1);
     if (grew) { buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); moment('grow'); pulse('grow'); say('grow', 'Eating makes you longer. Your length is your health.', 7); }
-    if (run.segs >= 12 && run.floor === 0) say('well', 'Follow the marker to the well and dive to the bottom of it when you are ready.', 9);
+    if (run.segs >= 12 && run.floor === 0) say('well', 'Follow the marker to the rift and dive down into it when you are ready.', 9);
   }
   function lose(n, kind) {
     const N = rig.spine.length;
@@ -387,7 +365,7 @@ export async function start(saved = {}) {
   }
   // ---- the Sum, and the two ways the dive can end. Nothing here is said in words: the player rings the
   // head or fills the gap, and the world answers.
-  // the keeper of a well: when it falls the lid goes, and it leaves a shell the fish is not wearing
+  // the keeper of a rift: when it falls the veil goes, and it leaves a shell the fish is not wearing
   const guardGame = {
     bite: (n, joint, from) => game.bite(n, joint, from, 'guard'),
     event(kind, pos) {
@@ -420,7 +398,7 @@ export async function start(saved = {}) {
   }
   const fadeEl = $('fade');
   function fade(on, colour = '', seconds = 0) { fadeEl.style.background = colour; fadeEl.style.transitionDuration = seconds ? `${seconds}s` : ''; fadeEl.classList.toggle('on', on); }
-  function riseInto(index) { // up out of the well it once went down
+  function riseInto(index) { // up out of the rift it once went down
     sum?.dispose(); sum = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
     world.dispose(); foes.dispose();
     run.floor = index;
@@ -484,7 +462,7 @@ export async function start(saved = {}) {
     store.set('oarfish.best', best);
     $('end-title').textContent = title;
     $('end-text').textContent = `${line} Longest body ${(run.longest * 0.312 + 0.5).toFixed(1)} m. ${run.caught} caught.`;
-    $('end-best').textContent = `World ${run.seed} · Deepest dive so far: ${best} m`;
+    $('end-best').textContent = `Deepest dive so far: ${best} m`;
     setTimeout(() => { $('end').classList.add('on'); $('btn-again').focus({ preventScroll: true }); }, 900);
   }
 
@@ -504,7 +482,7 @@ export async function start(saved = {}) {
     if (on && !teach.on) { teach.done = false; teach.learned = {}; } // asked for again: from the beginning
     teach.on = on; saveTeach();
     $('f-teach').checked = on;
-    if (!on && tut.on) { tut.on = false; if (!quiet) tell('No more teaching. The well is where the marker points. You can turn it back on in the pause menu.', 7); }
+    if (!on && tut.on) { tut.on = false; if (!quiet) tell('No more teaching. The rift is where the marker points. You can turn it back on in the pause menu.', 7); }
     $('btn-skip').hidden = !tut.on;
   }
   function lessons(dt) {
@@ -512,7 +490,7 @@ export async function start(saved = {}) {
     tut.stall += dt;
     const L = LESSONS[tut.step], head = rig.snout, t = world.time.value;
     const next = () => { tut.step++; tut.stall = 0; tut.told = false; tut.was = 0; music.hit('catch', 0.8); buzz(0, 0.5, 120); pulse('grow');
-      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('Follow the marker to the well. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
+      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('Follow the marker to the rift. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
     if (L === 'hoop') {
       const h = N.hoops[tut.step], dx = wrapD(head.x - h.x), dz = wrapD(head.z - h.z), along = dx * h.ux + dz * h.uz, off = Math.hypot(dx - along * h.ux, dz - along * h.uz, head.y - h.y);
       h.mesh.material.emissiveIntensity = 0.3 + 0.25 * Math.sin(t * 3.2);
@@ -527,7 +505,7 @@ export async function start(saved = {}) {
         pens: 'A pale ring means your body is long enough to go round. Take both small swarms.', big: 'Eating made you longer. The ring of the bigger swarm is pale now: take it.',
         jar: `The jar is sealed. ${how === 'pad' ? `Tap ${pb('sprint')}` : how === 'touch' ? 'Tap Dash' : `Tap ${kb('sprint')}`} to dash, and dash straight into it.` }[L], 9, { kind: 'teach' }); }
   }
-  // where the marker should point while the nursery is teaching, in place of the well
+  // where the marker should point while the nursery is teaching, in place of the rift
   function tutTarget() {
     const N = world.nursery; if (!tut.on || !N) return null;
     const L = LESSONS[tut.step], sc = (i) => { const c = world.schools[i]; return { x: c.x || c.hx, y: (c.y || c.hy) - 1.5, z: c.z || c.hz }; };
@@ -548,6 +526,7 @@ export async function start(saved = {}) {
       else if (L === 'pen' && near(world.schools[0], 12)) { const c = world.schools[0]; p = { keys: padOn ? [pb('wrap')] : feel.mode === 'look' ? ['Left mouse'] : [kb('wrapL'), kb('wrapR')], verb: 'hold, and go round', at: [c.x, c.y + 1.5, c.z] }; }
       else if (L === 'jar' && near(N.jar, 13)) p = { keys: [padOn ? pb('sprint') : kb('sprint')], verb: 'dash into it', at: [N.jar.x, N.jar.y + N.jar.size + 0.8, N.jar.z] };
       else if (!tut.on && !teach.learned.shed && foes.state.stalked > 0 && run.segs - SHED_COST >= MIN_SEGS) { const tail = rig.joints[rig.joints.length - 1]; p = { keys: [padOn ? pb('shed') : kb('shed')], verb: 'shed your tail', at: [tail.x, tail.y + 1.2, tail.z] }; }
+      else if (!tut.on && !teach.learned.down && world.rift && guard?.done && world.rift.in(rig.pos.x, rig.pos.z) > world.rift.ledge - 1) p = { keys: [padOn ? pb('dive') : kb('dive')], verb: 'dive into the rift', at: [rig.pos.x, rig.pos.y - 1.7, rig.pos.z] }; // over the open rift, the first time
     }
     if (!p) { if (promptKey) { promptKey = ''; promptEl.classList.remove('on'); } return; }
     const key = p.keys.join('|') + p.verb;
@@ -599,7 +578,7 @@ export async function start(saved = {}) {
     sc.classList.toggle('low', run.segs <= MIN_SEGS + 2);
     $('len').textContent = `${bodyMetres().toFixed(1)} m`;
     $('btn-shed').disabled = run.segs - SHED_COST < MIN_SEGS;
-    // marker to the well or the palace, or to whatever the nursery is teaching
+    // marker to the rift or the palace, or to whatever the nursery is teaching
     const lesson = tutTarget(), g = lesson || world.goal;
     prompt();
     const dx = wrapD(g.x - rig.pos.x), dz = wrapD(g.z - rig.pos.z), dist = Math.hypot(dx, dz);
@@ -621,7 +600,7 @@ export async function start(saved = {}) {
     goalEl.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
     goalArrow.style.transform = `rotate(${ang.toFixed(1)}deg)`;
     goalEl.classList.toggle('here', inside);
-    goalLabel.textContent = `${lesson ? lesson.label : g.kind === 'palace' ? 'the palace' : 'the well'} · ${Math.round(dist)} m`;
+    goalLabel.textContent = `${lesson ? lesson.label : g.kind === 'palace' ? 'the palace' : 'the rift'} · ${Math.round(dist)} m`;
     // stamina: a ring by the head, there only while it matters
     const showRing = run.state === 'play' && (run.stamina < 0.995 || run.hunted > 0);
     staminaEl.classList.toggle('on', showRing); staminaEl.classList.toggle('low', run.winded);
@@ -993,29 +972,6 @@ export async function start(saved = {}) {
     setPaused(false); startRun();
     if (e.isTrusted) grab(true);
   });
-  // the world: copy this dive's seed, paste someone else's, or keep one world for every dive
-  {
-    const msg = (t) => { $('seed-msg').textContent = t; };
-    $('seed-copy').addEventListener('click', async () => {
-      const code = seedCode();
-      try { await navigator.clipboard.writeText(code); msg(`Copied: ${code}`); }
-      catch { $('seed-in').value = code; $('seed-in').select(); msg('Copying was blocked here. The seed is in the box below, selected: copy it from there.'); }
-    });
-    $('seed-keep').addEventListener('click', () => {
-      worldPref.keep = !worldPref.keep; worldPref.seed = run.seed; store.set('oarfish.world', worldPref);
-      showSeed(); msg('');
-    });
-    const dive = (e) => {
-      const got = readSeed($('seed-in').value);
-      if (!got) return msg(`Paste a seed first. A seed looks like ${seedCode(482913)}; a bare number or any word works too.`);
-      $('seed-in').value = ''; msg('');
-      setPaused(false); startRun(got.seed);
-      tell(got.old ? `World ${got.seed}. That seed is from another version of the game, so it may not be the world your friend saw.` : got.word ? `\u201c${got.word}\u201d is world ${got.seed}.` : `World ${got.seed}.`, got.old ? 7 : 4);
-      if (e.isTrusted) grab(true);
-    };
-    $('seed-go').addEventListener('click', dive);
-    $('seed-in').addEventListener('keydown', (e) => { if (e.code === 'Enter') dive(e); });
-  }
   $('mode-point').addEventListener('click', () => setMode('point'));
   $('mode-look').addEventListener('click', () => setMode('look'));
   $('btn-keys').addEventListener('click', () => setFull(!ui.full, true));
@@ -1405,7 +1361,7 @@ export async function start(saved = {}) {
       });
       for (const g of big) mote(g.pos, g.food);
       if (fishCaught || big.length) { moment(big.length ? 'kill' : 'catch', Math.min(1, (fishCaught + big.length * 12) / 40)); if (mods.shock) foes.stun(rig.pos, 5, 2); } // the Horn
-      const prey = sum?.ring || guard?.ring; // the Sum's head held still over a shed tail, or a well's guard when it can be held: ringed like anything else
+      const prey = sum?.ring || guard?.ring; // the Sum's head held still over a shed tail, or a rift's keeper when it can be held: ringed like anything else
       if (prey) {
         const g = prey, w = rig.wrap(g.x, g.y, g.z, g.room * 2 + 3.5);
         g.progress = clamp(w.angle / rule.sweep, 0, 1); g.arcStart = w.start; g.arcSign = w.sign; g.sweep = rule.sweep / (Math.PI * 2);
@@ -1416,8 +1372,8 @@ export async function start(saved = {}) {
           else if (run.time - end.burst > 2) { end.burst = run.time; moment('burst'); } // a body too short to hold it
         }
       }
-      if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this well. Deal with it and the way down opens.', 7);
-      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { run.state = 'descend'; run.stateT = 0; fade(true); moment('descend'); } // the palace gate only leads into the hall
+      if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7);
+      if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { run.state = 'descend'; run.stateT = 0; fade(true); moment('descend'); know('down'); } // the palace gate only leads into the hall
     }
     ctx.joints = rig.joints; ctx.time = world.time.value; ctx.dash = rig.dashT > 0; ctx.coil = rig.coiling;
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
@@ -1493,7 +1449,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, seedCode, readSeed, worldPref, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

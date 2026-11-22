@@ -256,28 +256,13 @@ s = await ev(() => { const g = window.__game; Object.defineProperty(navigator, '
 await page.keyboard.press('KeyA');
 check('unplugging is noticed and a key brings the keyboard legend back', /No controller/.test(s) && (await ev(() => window.__game.dev)) === 'keys' && /Shift/.test(await ev(() => document.getElementById('keys').textContent)), s);
 
-// ---- the world's seed: the same seed is the same world, and it can be copied, pasted and kept
+// ---- a dive is built from one number that players never see: the checks rely on the same number giving the same world
 s = await ev(() => { const g = window.__game; const look = () => { const w = g.world; return [w.goal.x, w.goal.z, ...w.schools.flatMap((x) => [x.hx, x.hz]), g.foes.biters.length].map((v) => +v.toFixed(3)).join(); };
   const snapOf = (seed) => { g.startRun(seed); const a = look(); g.enterFloor(2, false); const b = look(); g.enterFloor(4, false); const c = [g.world.hall.x, g.world.hall.z].map((v) => +v.toFixed(3)).join(); return a + '|' + b + '|' + c; };
-  const one = snapOf(4242), again = snapOf(4242), other = snapOf(4243);
-  return { same: one === again, differs: one !== other, word: [g.readSeed('Ryugu').seed, g.readSeed(' ryugu ').seed, g.readSeed('Warsaw').seed], bare: g.readSeed('31337').seed, code: g.readSeed('try this: oarfish-world:1:777 !!').seed, old: g.readSeed('oarfish-world:9:5').old, none: g.readSeed('  ') }; });
-check('the same seed builds the same world in every band, another seed a different one', s.same && s.differs, JSON.stringify(s));
-check('a seed can be a code, a bare number or any word', s.code === 777 && s.bare === 31337 && s.word[0] === s.word[1] && s.word[0] !== s.word[2] && s.word[0] >= 0 && s.word[0] < 1e6 && s.old === true && s.none === null, JSON.stringify(s));
-await ev(() => window.__game.startRun(4242));
-await page.keyboard.press('KeyP'); await page.waitForTimeout(150);
-await page.click('#seed-copy'); await page.waitForTimeout(200);
-s = await ev(() => ({ now: document.getElementById('seed-now').textContent, msg: document.getElementById('seed-msg').textContent, box: document.getElementById('seed-in').value }));
-check('the pause menu shows this dive\'s seed and copies it', /world 4242\./.test(s.now) && (/Copied: oarfish-world:1:4242/.test(s.msg) || s.box === 'oarfish-world:1:4242'), JSON.stringify(s));
-await snap('c-seed');
-await page.click('#seed-go'); // nothing pasted yet
-s = await ev(() => ({ msg: document.getElementById('seed-msg').textContent, paused: window.__game.paused, seed: window.__game.run.seed }));
-await page.fill('#seed-in', 'hey, try oarfish-world:1:777 :)'); await page.click('#seed-go'); await page.waitForTimeout(150);
-const dived = await ev(() => { const g = window.__game; g.sim(0.2); return { seed: g.run.seed, paused: g.paused, state: g.run.state, floor: g.run.floor, segs: g.run.segs, hint: document.getElementById('hint').textContent }; });
-check('pasting a seed and pressing Dive starts a new dive in that world', /Paste a seed first/.test(s.msg) && s.paused && s.seed === 4242 && dived.seed === 777 && !dived.paused && dived.state === 'play' && dived.floor === 0 && dived.segs === 10 && /World 777/.test(dived.hint), JSON.stringify({ s, dived }));
-await page.keyboard.press('KeyP'); await page.waitForTimeout(150); await page.click('#seed-keep');
-s = await ev(() => { const g = window.__game; const label = document.getElementById('seed-keep').textContent, saved = localStorage.getItem('oarfish.world'); g.setPaused(false); g.startRun(); const a = g.run.seed; g.startRun(); const b = g.run.seed;
-  document.getElementById('seed-keep').click(); const seeds = new Set(); for (let i = 0; i < 4; i++) { g.startRun(); seeds.add(g.run.seed); } return { label, saved, a, b, after: seeds.size, now: document.getElementById('seed-now').textContent }; });
-check('Keep this world makes every new dive the same world, until it is let go', /Keeping/.test(s.label) && /"keep":true/.test(s.saved) && s.a === 777 && s.b === 777 && s.after > 1 && /draws a new one/.test(s.now), JSON.stringify(s));
+  const one = snapOf(4242), again = snapOf(4242), other = snapOf(4243); g.startRun(4242);
+  const seeds = new Set(); for (let i = 0; i < 4; i++) { g.startRun(); seeds.add(g.run.seed); } g.startRun(4242);
+  return { same: one === again, differs: one !== other, fresh: seeds.size, menu: !!document.getElementById('seed-copy') || /seed/i.test(document.getElementById('pause').textContent), stored: localStorage.getItem('oarfish.world') }; });
+check('the same number builds the same world in every band, each new dive draws a new one, and nothing about seeds is shown or kept', s.same && s.differs && s.fresh > 1 && !s.menu && s.stored === null, JSON.stringify(s));
 await page.keyboard.press('KeyV'); await ev(() => window.__game.sim(0.3));
 
 // ---- how the adventure camera looks in each band, level and from below

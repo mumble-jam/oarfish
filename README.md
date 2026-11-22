@@ -22,12 +22,12 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | --- | --- |
 | `index.html` | The page: all markup and all CSS. The HUD, pause menu, key bindings, specimen library. |
 | `game/main.js` | The game itself: the loop, input, camera, HUD, messages, teaching, settings. Start here. |
-| `game/world.js` | One depth band: seabed, ruins, wells, plants, swarms. Seeded. |
+| `game/world.js` | One depth band: seabed, the rift that leads down, ruins, plants, swarms. |
 | `game/npc.js` | **The cast, as components.** How every creature and thing looks. See below. |
 | `game/critters.js` | The models those components are built from. |
 | `game/library.js` | The specimen library: a playground for every component. |
 | `game/foes.js` | How the hunters behave (biters, anglers, hooks, drifters, leeches) and loose tail pieces. |
-| `game/guards.js` | The four keepers of the wells. |
+| `game/guards.js` | The four keepers of the rifts. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |
@@ -63,12 +63,12 @@ npx playwright install chromium
 npm test
 ```
 
-Five suites drive the real game in a headless browser: the dive itself, the Sum and the endings, controls, the teaching, and the library. `npm run shots` photographs every model into `out/shots/`.
+Five suites drive the real game in a headless browser: the dive itself, the Sum and the endings, controls, the teaching, and the library. `npm run shots` photographs every model into `out/shots/`; `node tools/shot_rift.mjs` photographs each band's rift.
 
 If you already have Chrome, `CHROME=/path/to/chrome npm test` uses it instead of downloading one.
 
 ## Good to know
 
 - three.js comes from a CDN through the import map in `index.html`. The game needs a connection the first time it loads.
-- A world is made from a seed, shown in the pause menu as a code you can copy to a friend. Changing how the world is laid out changes what every existing code produces.
+- Every dive draws a new world. There is nothing to copy or paste: the number a world is built from is not shown to players.
 - Settings, key bindings, library changes and what has been taught are kept in the browser's storage under keys starting `oarfish.`.

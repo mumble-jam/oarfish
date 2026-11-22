@@ -60,7 +60,7 @@ s = await ev(() => { const g = window.__game, j = g.world.nursery.jar, n = g.wor
   g.sim(0.6, fwd); const bumped = j.broken; g.rig.reset(g.rig.pos.clone().set(j.x - Math.sin(n.dir) * 4, j.y + 1.2, j.z - Math.cos(n.dir) * 4), n.dir); g.sim(0.2, fwd); g.sim(1 / 60, { ...fwd, dashNow: true }); g.sim(0.6, fwd); g.sim(0.3, window.N.none);
   const first = window.N.toast(); g.sim(11, window.N.none);
   return { chip, bumped, broken: j.broken, on: g.tut.on, done: g.teach.done, shells: g.run.shells.length, first, toast: window.N.toast(), label: window.N.label(), skip: !document.getElementById('btn-skip').hidden, saved: JSON.parse(localStorage.getItem('oarfish.teach')).done }; });
-check('swimming into the jar does nothing, a dash breaks it, the first shell is inside, and that ends the nursery for good', /Shift.*dash/.test(s.chip) && !s.bumped && s.broken && !s.on && s.done && s.saved && s.shells === 1 && /on shell\|/.test(s.first) && /teach\|That was the nursery/.test(s.toast) && /the well/.test(s.label) && !s.skip, JSON.stringify(s));
+check('swimming into the jar does nothing, a dash breaks it, the first shell is inside, and that ends the nursery for good', /Shift.*dash/.test(s.chip) && !s.bumped && s.broken && !s.on && s.done && s.saved && s.shells === 1 && /on shell\|/.test(s.first) && /teach\|That was the nursery/.test(s.toast) && /the rift/.test(s.label) && !s.skip, JSON.stringify(s));
 await snap('t-done');
 s = await ev(() => { const g = window.__game; g.startRun(4242); g.sim(0.2, window.N.none); const again = !!g.world.nursery; const u = g.world.urns.find((x) => !x.broken), fwd = (a) => ({ ...window.N.none, dir: { x: Math.sin(a), y: 0, z: Math.cos(a) } });
   g.rig.reset(g.rig.pos.clone().set(u.x, u.y + 1, u.z - 4), 0); g.sim(0.2, fwd(0)); const food = g.run.caught; g.sim(1 / 60, { ...fwd(0), dashNow: true }); g.sim(0.5, fwd(0)); g.sim(1.5, window.N.none);
@@ -77,7 +77,7 @@ check('turning the teaching off and on again in the pause menu starts it over', 
 await page.click('#btn-skip');
 s = await ev(() => { const g = window.__game; g.sim(0.3, window.N.none); const now = { on: g.teach.on, tut: g.tut.on, label: window.N.label(), chip: window.N.chip(), box: document.getElementById('f-teach').checked, hidden: document.getElementById('btn-skip').hidden, toast: window.N.toast() };
   g.startRun(4242); g.sim(0.2, window.N.none); g.addFood(5); g.sim(0.5, window.N.none); return { ...now, next: !!g.world.nursery, hint: window.N.toast() }; });
-check('Skip tutorial ends it at once, unticks the setting, and the next dive has no nursery and no lessons', !s.on && !s.tut && /the well/.test(s.label) && s.chip === '' && !s.box && s.hidden && /No more teaching/.test(s.toast) && !s.next && !/Eating makes you longer/.test(s.hint), JSON.stringify(s));
+check('Skip tutorial ends it at once, unticks the setting, and the next dive has no nursery and no lessons', !s.on && !s.tut && /the rift/.test(s.label) && s.chip === '' && !s.box && s.hidden && /No more teaching/.test(s.toast) && !s.next && !/Eating makes you longer/.test(s.hint), JSON.stringify(s));
 
 // ---- what the game says, and how it looks saying it
 s = await ev(() => { const g = window.__game; g.setTeach(true); g.startRun(4242); g.sim(0.2, window.N.none); const it = g.field.drop(g.rig.pos.x, g.rig.pos.z + 2, 'fan', 0.6); g.rig.reset(g.rig.pos.clone().set(it.x, it.y, it.z - 1.5), 0); g.sim(0.8, { ...window.N.none, dir: { x: 0, y: 0, z: 1 } });
