@@ -86,7 +86,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
       S.lift = show.lift || 0;
     } else {
       const actor = make(S.id, { preview });
-      stand.add(actor.object); tris = actor.rig ? actor.rig.triangles : actor.body.geometry.attributes.position.count / 3;
+      stand.add(actor.object); tris = actor.rig?.triangles ?? actor.body.geometry.attributes.position.count / 3;
       const extra = [];
       if (actor.segments) actor.segments(11).forEach((s, i) => { const a = (i + 1) * 0.24; s.position.set(4.2 * Math.cos(a) - 4.2, 0, -4.2 * Math.sin(a) - 0.5); s.rotation.y = a; stand.add(s); extra.push(s); }); // trailing from the head, round the ring it swims
       shown = { actor, body: actor.body, extra, dispose() { actor.dispose(); } };

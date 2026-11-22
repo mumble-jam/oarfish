@@ -27,7 +27,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const glowMap = keep(glowTexture());
   const sprite = (color, size) => { const s = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: glowMap, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }))); s.scale.setScalar(size); root.add(s); return s; };
   const warn = sprite('#ff7f96', 1), lure = actor.parts.glow || null; // the Lamplighter's lamp comes with it
-  const rig = actor.rig || null, was = new THREE.Vector3(); // the Keeper walks on its own legs (crab.js): it is told where it is, and stands there as its feet find the ground
+  const rig = actor.rig || null, was = new THREE.Vector3(), fishWas = new THREE.Vector3(); // the Keeper walks on its own legs (crab.js): it is told where it is, and stands there as its feet find the ground
   // the veil: bars of light across the mouth of the rift while its keeper lives
   const lid = new THREE.Mesh(keep(rift.veil()), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   lid.frustumCulled = false; root.add(lid);
@@ -41,11 +41,11 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     for (const m of actor.segments(11)) { root.add(m); slabs.push({ m, p: new THREE.Vector3() }); }
   }
 
-  const S = { kind, state: 'idle', t: 0, hp: HP, done: false, danger: 0, stun: 0, cool: 1.5, ang: rr(0, 6.28), spin: 1, R: 4.2, hits: 0, bites: 0, flash: 0 };
+  const S = { kind, state: 'idle', t: 0, T: 0, mode: 'slash', side: 1, stuck: false, hp: HP, done: false, danger: 0, stun: 0, cool: 1.5, ang: rr(0, 6.28), spin: 1, R: 4.2, hits: 0, bites: 0, flash: 0 };
   const pos = new THREE.Vector3(), vel = new THREE.Vector3(), aim = new THREE.Vector3(), v = new THREE.Vector3(), W = new THREE.Vector3();
   let yaw = 0, bait = null;
   const target = { x: 0, y: 0, z: 0, room: { keeper: 0.75, shearer: 0.55, lamplighter: 0.8, warden: 0.6 }[kind], orbit: 1.2, fit: 0.7, can: false, left: 1, threat: 1, progress: 0, arcStart: 0, arcSign: 1, sweep: 1 };
-  const set = (state, t = 0) => { S.state = state; S.t = t; };
+  const set = (state, t = 0) => { S.state = state; S.t = S.T = t; if (state !== 'tired') S.stuck = false; }; // T: how long it was given, so a pose can tell how far through it is
   const HOME = { keeper: [8.6, 0.9], shearer: [11, 2.6], lamplighter: [0, 3.4], warden: [4.2, 1.6] }[kind]; // distance from the middle of where it lives, height over the shelf
   pos.set(well.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1], well.z + Math.cos(S.ang) * HOME[0]);
   if (kind === 'warden') slabs.forEach((s, i) => s.p.set(well.x + Math.sin(S.ang - (i + 1) * 0.24) * S.R, pos.y, well.z + Math.cos(S.ang - (i + 1) * 0.24) * S.R));
@@ -74,6 +74,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   }
   const tailNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(pos) < reach) return j; return -1; };
   const tailPoint = (ctx) => { const J = ctx.joints; if (!J) return null; const N = J.length - 1; let best = null, near = 1e9; for (let j = Math.ceil(N * 0.4); j <= N; j++) { const d = J[j].distanceToSquared(pos); if (d < near) { near = d; best = J[j]; } } return best; };
+  const sawNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; v.copy(vel).setLength(2.6).add(pos); for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(v) < reach || J[j].distanceTo(pos) < reach) return j; return -1; }; // the tail, where the saw out ahead of it can reach, or its body
   const baitNear = (ctx, reach) => ctx.pieces.find((p) => p.kind === 'decoy' && !p.dead && p.life > 0.8 && p.pos.distanceTo(pos) < reach) || null;
   const go = (dt, to, speed, turn = 4) => { // swim toward a point
     v.subVectors(to, pos); const d = v.length();
@@ -107,14 +108,42 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         yaw += wrapPi(face - yaw) * (1 - Math.exp(-2.4 * dt));
         if (awake && S.cool <= 0 && tailNear(ctx, 2.8) >= 0) set('snap', 0.6);
       }
-    } else if (kind === 'shearer') { // circle, aim at the tail, charge through where it was, tire
-      if (S.state === 'aim') { warnSize = 2.8; S.danger = 0.7; yaw += wrapPi(Math.atan2(aim.x - pos.x, aim.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt)); vel.multiplyScalar(Math.exp(-5 * dt)); if (S.t <= 0) { vel.subVectors(aim, pos).setLength(10.5); set('charge', Math.min(1.5, pos.distanceTo(aim) / 10.5 + 0.35)); } }
-      else if (S.state === 'charge') { S.danger = 1; pos.addScaledVector(vel, dt); const j = tailNear(ctx, 0.85); if (j >= 0 && game.bite(3, j, pos)) { S.bites++; set('tired', 2.2); } else if (S.t <= 0) set('tired', 2.2); }
-      else if (S.state === 'tired') { vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); if (S.t <= 0) { set('idle'); S.cool = 1.2; } }
-      else {
-        S.ang += dt * 0.3; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1], W.z + Math.cos(S.ang) * HOME[0]); go(dt, aim, 3.2, 2.5);
-        if (awake && S.cool <= 0 && pos.distanceTo(fish) < 17) { const J = ctx.joints; aim.copy(J[J.length - 1]); set('aim', 0.8); }
+    } else if (kind === 'shearer') { // it sweeps its saw over the rift and feels a fish that comes near. Then it strikes where the tail was: a slash through it if it is up in the water, a stoop onto it if it lies along the bed
+      const J = ctx.joints, tail = J[J.length - 1], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the veil it keeps
+      if (S.state === 'sense') { // something is there: it slows, and the saw swings round to it
+        vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); yaw += wrapPi(Math.atan2(fish.x - pos.x, fish.z - pos.z) - yaw) * (1 - Math.exp(-3 * dt));
+        if (S.t <= 0) {
+          if (!awake || pos.distanceTo(fish) > 24) set('idle');
+          else { aim.copy(tail); S.mode = tail.y - floor(tail) < 1.5 ? 'pin' : 'slash'; S.side = rand() < 0.5 ? 1 : -1; set('aim', S.mode === 'pin' ? 1.1 : 0.8); }
+        }
       }
+      else if (S.state === 'aim') {
+        warnSize = 2.8; S.danger = 0.7; yaw += wrapPi(Math.atan2(aim.x - pos.x, aim.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt));
+        if (S.mode === 'pin') { // up over the tail and a little short of it, nose down, the point of the saw hanging over it
+          v.set(aim.x - pos.x, 0, aim.z - pos.z); const d = v.length() || 1; v.multiplyScalar(Math.max(0, d - 2.4) / d).add(pos).setY(aim.y + 6);
+          v.sub(pos); const off = v.length(); vel.lerp(off > 1e-3 ? v.multiplyScalar(Math.min(9, off * 4) / off) : v, 1 - Math.exp(-6 * dt)); pos.addScaledVector(vel, dt);
+        } else { vel.multiplyScalar(Math.exp(-5 * dt)); pos.y += clamp(aim.y - pos.y, -3 * dt, 3 * dt); } // level with the tail: the slash goes through it flat
+        if (S.t <= 0) { vel.subVectors(aim, pos).setLength(10.5); set('charge', S.mode === 'pin' ? pos.distanceTo(aim) / 10.5 + 0.15 : Math.min(1.5, pos.distanceTo(aim) / 10.5 + 0.35)); }
+      }
+      else if (S.state === 'charge') {
+        S.danger = 1; pos.addScaledVector(vel, dt);
+        const j = sawNear(ctx, 0.85), hit = j >= 0 && game.bite(3, j, pos); v.copy(vel).setLength(3.3).add(pos); const down = S.mode === 'pin' && v.y <= floor(v) + 0.1; // v: the point of the saw
+        if (hit) S.bites++;
+        if (S.mode === 'pin' ? down || S.t <= -0.6 : hit || S.t <= 0) { // a slash stops on what it hits, or runs out; a stoop goes on down until the saw is in the bed
+          if (S.mode === 'pin') { vel.set(0, 0, 0); set('tired', 2.6); S.stuck = true; } else set('tired', 2.2);
+        }
+      }
+      else if (S.state === 'tired') { // spent, it coasts and sinks; stuck, it stays where its saw is
+        if (!S.stuck) { vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); pos.y = Math.max(floor(pos) + 0.8, pos.y - 0.5 * dt); }
+        else pos.y = damp(pos.y, floor(pos) + 1.7, 8, dt); // its tail in the air, its saw in the bed
+        if (S.t <= 0) { set('idle'); S.cool = 1.2; }
+      }
+      else {
+        S.ang += dt * 0.3; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1] + 0.35 * Math.sin(ctx.time * 0.5), W.z + Math.cos(S.ang) * HOME[0]); go(dt, aim, 3.2, 2.5); world.steer(pos, 1);
+        const stir = dt > 1e-5 ? Math.min(fish.distanceTo(fishWas) / dt, 12) : 0; // it feels the water a fish moves: a still one has to come nearer
+        if (awake && S.cool <= 0 && pos.distanceTo(fish) < 12 + 8 * clamp(stir / 9, 0, 1)) set('sense', 0.6);
+      }
+      fishWas.copy(fish);
     } else if (kind === 'lamplighter') { // over the mouth; it lunges at a tail, but takes a bait first, and a mouthful puts its lamp out
       if (S.state === 'windup') { warnSize = 3; S.danger = bait ? 0 : 0.8; const at = bait ? bait.pos : aim; yaw += wrapPi(Math.atan2(at.x - pos.x, at.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt)); if (S.t <= 0) { v.subVectors(at, pos); vel.copy(v).setLength((v.length() + 0.8) / 0.28); set('lunge', 0.28); } }
       else if (S.state === 'lunge') {
@@ -144,13 +173,17 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     }
     if (!S.done) pos.y = clamp(pos.y, world.height(pos.x, pos.z) + 0.6, world.ceiling - 0.5);
 
-    if (rig) {
+    if (rig && kind === 'keeper') {
       const moved = Math.hypot(pos.x - was.x, pos.z - was.z), k = dt > 1e-5 && moved < 5 ? 1 / dt : 0, near = pos.distanceTo(fish); // how it really moved, whatever moved it
       S.struck = Math.max(0, (S.struck || 0) - dt);
       rig.update(dt, { x: pos.x, z: pos.z, yaw, vx: (pos.x - was.x) * k, vz: (pos.z - was.z) * k, ground: world.footing, floor: world.footing(v.set(pos.x, 0, pos.z)).y, time: ctx.time,
         wary: awake && !S.done ? clamp(1.3 - near / 11, 0, 1) : 0, look: fish, snap: S.done ? -1 : S.state === 'snap' ? clamp(1 - S.t / 0.6, 0, 1) : S.struck > 0 ? 1 : -1, strike: S.done ? null : tailPoint(ctx),
         tuck: !S.done && target.progress > 0.15, stun: S.stun > 0, limp: S.done });
       const clear = pos.y - (rig.walker.body.ground + HOME[1]) - 0.7; if (clear > 0 && !S.done) mesh.position.y += clear; // lifted off the ground, it is drawn where it is
+      was.copy(pos);
+    } else if (rig) { // the Shearer bends its own body (sawfish.js): it is told where it is, how it is moving and what it is about
+      const k = dt > 1e-5 && pos.distanceTo(was) < 5 ? 1 / dt : 0, mood = S.done ? 'down' : S.stun > 0 ? 'stun' : S.state === 'tired' ? (S.stuck ? 'stuck' : 'tired') : S.state === 'idle' ? 'search' : S.state;
+      rig.update(dt, { x: pos.x, y: pos.y, z: pos.z, yaw, speed: Math.hypot(pos.x - was.x, pos.z - was.z) * k, climb: (pos.y - was.y) * k, mood, mode: S.mode, side: S.side, k: S.T > 0 ? 1 - S.t / S.T : 0, look: fish, time: ctx.time });
       was.copy(pos);
     } else {
       mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());

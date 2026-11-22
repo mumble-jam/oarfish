@@ -32,6 +32,8 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/guards.js` | The four keepers of the rifts. |
 | `game/legs.js` | Legs that walk by themselves: feet that plant and step in two groups, and a body that rides on them and leans with the ground. Not tied to any one animal. |
 | `game/crab.js` | The Keeper put together: its shell, eight legs and two claws, and the poses that say what it is about to do. |
+| `game/spine.js` | A swimming body that bends: a neck that turns and nods, a body that lies along its turn. Not tied to any one animal. |
+| `game/sawfish.js` | The Shearer in motion: how it holds its saw for each thing it does. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |
@@ -58,6 +60,7 @@ Two components are colour sets rather than things: **District paint** (one colou
 - `main` is the game as it is played. If GitHub Pages is turned on for this repository, `main` is what it serves.
 - Do your work on a branch of your own, and merge it into `main` when the checks pass.
 - `CLAUDE.md` tells Claude how this project is put together and what to be careful of. Keep it true.
+- `CREATURES.md` is the playbook for making a creature: start from the real animal, give it one trait, let the world move its body, and give every mood a pose. The Keeper and the Shearer were built by it.
 
 ## Checks
 

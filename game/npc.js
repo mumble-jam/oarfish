@@ -11,6 +11,7 @@ import { alive } from './kit.js';
 import { glowTexture, lerp } from './geo.js';
 import * as model from './critters.js';
 import { crabRig } from './crab.js';
+import { sawfishRig } from './sawfish.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -74,11 +75,13 @@ export const NPCS = [
     build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD,
     assemble(a, pal) { crabRig(a, pal); }, // the shell is the model; its legs and claws are hung on it, and walk (crab.js)
     states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'walk', name: 'Walking', speed: 1.5 }, { id: 'wary', name: 'Claws up', speed: 0 }, { id: 'snap', name: 'Snapping', speed: 0 }, { id: 'tuck', name: 'Shut tight', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0 }, { id: 'down', name: 'Beaten', speed: 0 }] },
-  { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 6, role: 'Charges the tail in a straight line, then tires. Ram or wrap it while it is tired.',
-    about: 'A sawfish, the saw toothed in the district’s colour. It keeps the second rift.',
+  { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 7, role: 'Feels a fish that comes near. Slashes through a tail that is up in the water, or drops on one that lies along the bed. Ram or wrap it once it has struck.',
+    about: 'A sawfish, the saw toothed in the district’s colour. The saw is how it finds you and what it hits you with. It keeps the second rift.',
     paintOf: 1, palette: { tone: DISTRICT[1], back: '#3b2a4d', flank: '#55406b', belly: '#d9cfe0', saw: '#e9dfc0', eye: '#eaff7c' },
-    build: (pal) => model.shearer(pal), swim: { amp: 0.2, waves: 2.2, nose: 3.1, length: 6 }, beat: [2.2, 0.7], material: GUARD,
-    states: [{ id: 'idle', name: 'Circling', speed: 1.5 }, { id: 'charge', name: 'Charging', speed: 9 }, { id: 'tired', name: 'Tired', speed: 0, wobble: true }] },
+    build: (pal) => model.shearer(pal), swim: { amp: 0.2, waves: 2.2, nose: model.SHEARER.nose, length: model.SHEARER.length }, beat: [2.2, 0.7], material: GUARD,
+    assemble(a) { sawfishRig(a); }, // one model, which bends: the head and saw on a neck, the body along its turn (sawfish.js)
+    states: [{ id: 'idle', name: 'Searching', speed: 1.5 }, { id: 'sense', name: 'Feeling for you', speed: 0.5 }, { id: 'aim', name: 'Winding up', speed: 0 }, { id: 'charge', name: 'Slashing', speed: 6 },
+      { id: 'pin', name: 'Pinning', speed: 0 }, { id: 'tired', name: 'Spent', speed: 0.3 }, { id: 'stuck', name: 'Saw stuck', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0 }, { id: 'down', name: 'Beaten', speed: 0 }] },
   { id: 'lamplighter', group: 'Keepers of the rifts', name: 'The Lamplighter', bands: [2], length: 3.5, role: 'Hangs over the rift and lunges. It takes a bait first. Ram or wrap it while its lamp is out.',
     about: 'The angler grown huge, its fins in the district’s colour. It keeps the third rift.',
     paintOf: 2, palette: { tone: DISTRICT[2], back: '#221d36', skin: '#322d4b', wart: '#2a2540', belly: '#4d4770', gum: '#2a0f20', eye: '#c8ecff', lure: '#ffd27a' },

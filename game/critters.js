@@ -188,22 +188,34 @@ export function keeperClaw(pal, c) {
 }
 
 // ---------------------------------------------------------------- the Shearer: a sawfish, the saw toothed in the district's colour
+// A ray in front and a shark behind, as sawfish are: a flat wide head with the wings grown onto it, eyes on top, the mouth and gills
+// underneath, and from the tail-root back a shark's two fins and uneven tail. The saw is a quarter of its length. Its teeth are lit
+// from within and take the district's colour: sawfish.js brightens them when it feels a fish. One model; it bends in its shader.
+export const SHEARER = { neck: 1.5, nose: 3.75, length: 6.9, teeth: 12 }; // neck: where the head turns on the body (z); nose: the saw's tip
 export function shearer(pal) {
-  const m = mesher(), { tone, back, flank, belly, saw: pale } = pal, shade = dim(tone, 0.8);
-  hull(m, [[2.0, 0.3, 0.1, 0.1, -0.2], [1.5, 0.62, 0.28, 0.2, -0.1], [0.9, 0.76, 0.5, 0.3], [0.2, 0.7, 0.62, 0.34], [-0.6, 0.5, 0.5, 0.3], [-1.4, 0.26, 0.3, 0.2], [-2.0, 0.1, 0.14, 0.1]],
-    (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 3 === 0 ? '#4a375e' : flank), 8);
-  const sawEnd = ringZ(3.15, 0.13, 0.035, 0.035, -0.2, 4);
-  m.skin([ringZ(1.95, 0.27, 0.07, 0.07, -0.2, 4), sawEnd], [pale, CREAM]).cap(sawEnd, [0, 0, 1], pale);
+  const m = mesher(), { tone, back, flank, belly, saw: pale } = pal, shade = dim(tone, 0.8), dark = '#241833', mottle = '#4a375e';
+  const secs = [[1.95, 0.3, 0.1, 0.08, -0.18], [1.55, 0.58, 0.26, 0.14, -0.12], [1.05, 0.8, 0.4, 0.17, -0.05], [0.35, 0.74, 0.5, 0.2, 0], [-0.45, 0.5, 0.46, 0.2, 0], [-1.25, 0.3, 0.33, 0.17, 0.02], [-1.95, 0.15, 0.2, 0.11, 0.04], [-2.45, 0.07, 0.11, 0.07, 0.06]];
+  hull(m, secs, (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 3 === 0 ? mottle : flank), 8);
+  // the height of the underside at (x, z), for what is drawn on it
+  const under = (x, z) => { let i = 0; while (i < secs.length - 2 && secs[i + 1][0] > z) i++; const [z0, w0, , d0, y0] = secs[i], [z1, w1, , d1, y1] = secs[i + 1], t = (z0 - z) / (z0 - z1), w = w0 + (w1 - w0) * t, d = d0 + (d1 - d0) * t;
+    return y0 + (y1 - y0) * t - d + d * 0.293 * Math.min(1, Math.abs(x) / (0.707 * w)) - 0.012; };
+  const mark = (x0, z0, x1, z1, wide, colour) => { const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, nx = (-dz / l) * wide, nz = (dx / l) * wide; m.quad([x0 - nx, under(x0 - nx, z0 - nz), z0 - nz], [x0 + nx, under(x0 + nx, z0 + nz), z0 + nz], [x1 + nx, under(x1 + nx, z1 + nz), z1 + nz], [x1 - nx, under(x1 - nx, z1 - nz), z1 - nz], colour); };
+  // the saw: a flat blade, and a row of teeth down each edge
+  const base = ringZ(1.9, 0.29, 0.07, 0.07, -0.18, 4), tip = ringZ(SHEARER.nose, 0.14, 0.03, 0.03, -0.18, 4);
+  m.skin([base, tip], [pale, CREAM]).cap(tip, [0, 0, 1], pale);
   both((s) => {
-    for (let i = 0; i < 8; i++) { const z = 2.1 + i * 0.135, w = 0.255 - i * 0.015; tooth(m, [s * w, -0.2, z], [s * (w + 0.2), -0.2, z + 0.03], 0.04, tone); }
-    m.fin([[s * 0.7, -0.08, 1.1], [s * 0.72, -0.1, 0.5], [s * 0.6, -0.1, -0.05]], [[s * 1.2, -0.16, 0.75], [s * 1.8, -0.24, 0.05], [s * 0.95, -0.16, -0.32]], [flank, back]); // the wings
-    m.fin([[s * 0.4, -0.2, -0.8], [s * 0.3, -0.18, -1.2]], [[s * 0.8, -0.3, -1.15], [s * 0.4, -0.22, -1.4]], flank);
-    m.eye([s * 0.52, 0.28, 1.3], [s * 0.7, 0.7, 0.2], 0.12, { iris: pal.eye, glow: true, slit: true });
-    for (let i = 0; i < 4; i++) m.tri([s * 0.72, 0.02, 0.75 - i * 0.13], [s * 0.74, 0.2, 0.7 - i * 0.13], [s * 0.72, 0.02, 0.69 - i * 0.13], '#241833'); // gill slits
+    for (let i = 0; i < SHEARER.teeth; i++) { const t = (i + 0.5) / SHEARER.teeth, z = 2.02 + t * (SHEARER.nose - 2.1), w = 0.285 - t * 0.14; m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.24 - t * 0.05), -0.18, z + 0.035], 0.045, 0.002, 3, [tone, shade], true); }
+    m.fin([[s * 0.55, -0.1, 1.55], [s * 0.8, -0.1, 0.75], [s * 0.62, -0.1, -0.25]], [[s * 1.15, -0.14, 1.1], [s * 1.95, -0.24, 0.2], [s * 1.0, -0.16, -0.55]], [flank, back]); // the wings, grown onto the head
+    m.fin([[s * 0.42, -0.18, -0.75], [s * 0.32, -0.16, -1.2]], [[s * 0.85, -0.28, -1.15], [s * 0.42, -0.2, -1.45]], flank);
+    m.eye([s * 0.56, 0.3, 1.22], [s * 0.7, 0.7, 0.2], 0.12, { iris: pal.eye, glow: true, slit: true });
+    m.tri([s * 0.5, 0.36, 0.98], [s * 0.63, 0.31, 0.9], [s * 0.47, 0.34, 0.8], dark); // the spiracle behind each eye
+    mark(s * 0.17, 1.66, s * 0.27, 1.56, 0.035, dark); // underneath: a nostril,
+    for (let i = 0; i < 5; i++) mark(s * (0.3 + i * 0.012), 1.0 - i * 0.15, s * (0.5 + i * 0.012), 0.94 - i * 0.15, 0.022, dark); // five gill slits,
+    mark(s * 0.02, 1.3, s * 0.2, 1.33, 0.028, dark); mark(s * 0.2, 1.33, s * 0.3, 1.4, 0.028, dark); // and half of the mouth, turned up at the corner
   });
-  m.fin([[0, 0.6, 0.35], [0, 0.58, -0.1], [0, 0.5, -0.5]], [[0, 1.3, -0.15], [0, 1.12, -0.55], [0, 0.56, -0.75]], [tone, shade]);
-  m.fin([[0, 0.3, -1.15], [0, 0.26, -1.5]], [[0, 0.64, -1.45], [0, 0.3, -1.7]], tone);
-  m.fin([[0, 0.14, -1.98], [0, 0, -2.02], [0, -0.1, -1.98]], [[0, 1.05, -2.95], [0, 0.12, -2.45], [0, -0.52, -2.65]], [tone, shade]);
+  m.fin([[0, 0.48, 0.25], [0, 0.48, -0.2], [0, 0.44, -0.6]], [[0, 1.25, -0.3], [0, 1.08, -0.7], [0, 0.5, -0.85]], [tone, shade]);
+  m.fin([[0, 0.3, -1.2], [0, 0.27, -1.55]], [[0, 0.72, -1.55], [0, 0.3, -1.8]], tone);
+  m.fin([[0, 0.14, -2.42], [0, 0.02, -2.48], [0, -0.08, -2.42]], [[0, 1.15, -3.3], [0, 0.1, -2.85], [0, -0.5, -3.0]], [tone, shade]);
   return m.geometry();
 }
 
