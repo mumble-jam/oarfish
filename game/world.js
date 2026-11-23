@@ -22,6 +22,11 @@ export const SWARMS = { s: { n: 8, r: 0.42 }, m: { n: 18, r: 0.76 }, l: { n: 36,
 // The loop that takes them is the same loop; what differs is how the swarm is brought to hold still for it.
 export { TEMPER };
 const KIND = { b: 'bolt', t: 'twin', g: 'glow' }, LOWER = { m: 's', l: 'm' };
+// The mural at a rift: a stele by the near lip with three carvings, lit for what has been done in this band in this dive: its greatest swarm taken,
+// a cache opened, the rift's keeper beaten. They light, one after another, when the head comes within `near` metres; all three lit, the stele's
+// painted top lights too. Nothing is written on it. The third carving is the keeper's own sign, band by band.
+export const MURAL = { near: 13, each: 0.55, back: [16.5, 19, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
+const TIERS = 'smlh';
 // A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. A head held still over it (within `reach`, slower
 // than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
 // work nothing bites, but up to `most` of the tail-biters within `call` metres come and go round, closing from the first of `ring` to the second; when
@@ -889,6 +894,18 @@ float seaLight(vec2 p, float t) {
     stations.push({ x, y, z, top: y + 1.3, yaw: xr(0, 6.28), k: 0, uses: CLEAN.uses, rest: 0, on: false, near: false, live: false, cx: x, cz: z, away: 0, ring: null, arc: null,
       fish: Array.from({ length: CLEAN.fish }, (_, i) => ({ p: new THREE.Vector3(x, y + 1.9, z), v: new THREE.Vector3(), ph: xr(0, 6.28), slot: 0.08 + 0.84 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, yaw: xr(0, 6.28), pitch: 0, size: 1 })) });
   }
+  // The mural (MURAL): beside the way in, a little back from the rift's near lip, turned to face whoever is coming.
+  let mural = null;
+  if (rift) { const turn = xrand() < 0.5 ? 1 : -1;
+    find: for (const back of MURAL.back) for (const side of MURAL.side) for (const sgn of [turn, -turn]) {
+      const x = rift.x - rift.nx * back + rift.tx * side * sgn, z = rift.z - rift.nz * back + rift.tz * side * sgn;
+      if (floor === 0 && !farFrom(x, z, rift.x - rift.nx * 24, rift.z - rift.nz * 24, 14)) continue; // the Keeper walks the shelf at the near edge (guards.js): not on its ground
+      if (!clearNow(x, z, 2.6) || stations.some((o) => !farFrom(x, z, o.x, o.z, 8)) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 5)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8))) continue;
+      const yaw = Math.atan2(rift.x - rift.nx * (back + 11) - x, rift.z - rift.nz * (back + 11) - z), y = height(x, z) - 0.12;
+      for (const k of [-1.3, 0, 1.3]) colliders.push({ x: x + Math.cos(yaw) * k, z: z - Math.sin(yaw) * k, r: 0.5, top: y + 3.2 });
+      sites.push([x, z, 3, 'puzzle']);
+      mural = { x, y, z, yaw, cx: x, cz: z, near: false, whole: false, glow: 0, wait: 0, signs: MURAL.signs.map((kind) => ({ kind, earned: false, lit: 0, on: false, mesh: null })) };
+      break find; } }
   const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad) && riftClear(x, z, pad + 0.6);
 
   // ------------------------------------------------------------ swarms of small fish: the food, in four sizes
@@ -1082,6 +1099,35 @@ float seaLight(vec2 p, float t) {
   for (const f of fragments) { const g = add(new THREE.Group()), stone = mat(new THREE.MeshLambertMaterial({ color: stoneTones[0], vertexColors: true })), cushion = new THREE.Mesh(G.echinus, stone), neck = new THREE.Mesh(G.stump, stone),
       slab = new THREE.Mesh(G.block, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: district, emissiveIntensity: 0.2 })));
     slab.scale.set(1.5, 0.18, 1.5); slab.position.y = 0.2; neck.rotation.x = Math.PI; cushion.castShadow = slab.castShadow = neck.castShadow = true; g.add(neck, cushion, slab); g.scale.setScalar(0.8); g.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh = g; f.slab = slab; single.push(f); }
+  // The mural's stonework and its three carvings. A carving is a flat sign standing a little proud of its panel: dark until it is lit.
+  // Each is drawn in a square a metre across, x to the right and y up, from triangles and bars.
+  const SIGNS = (() => {
+    const draw = (fn) => { const m = mesher(), tri = (a, b, c) => m.tri([a[0], a[1], 0], [b[0], b[1], 0], [c[0], c[1], 0], '#ffffff'), quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
+      const bar = (p, q, w) => { const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = (-dy / L) * w / 2, ny = (dx / L) * w / 2; quad([p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]); };
+      const gem = (x, y, r, a = 0, long = 1) => { const c = Math.cos(a), sn = Math.sin(a), P = (u, v) => [x + u * c - v * sn, y + u * sn + v * c]; quad(P(r * long, 0), P(0, r), P(-r * long, 0), P(0, -r)); };
+      fn({ tri, quad, bar, gem }); const g = m.geometry(); owned.push({ dispose: () => g.dispose() }); return g; };
+    const arc = (bar, r, from, to, n, w) => { for (let i = 0; i < n; i++) { const a = from + ((to - from) * i) / n, b = from + ((to - from) * (i + 1)) / n; bar([Math.sin(a) * r, Math.cos(a) * r], [Math.sin(b) * r, Math.cos(b) * r], w); } };
+    return {
+      // a swarm with a body going round it: the ring not quite closed, its head a little bigger than its tail
+      swarm: draw(({ bar, gem }) => { arc(bar, 0.36, 0.5, 5.9, 12, 0.075); gem(Math.sin(0.5) * 0.36, Math.cos(0.5) * 0.36, 0.075, -0.5 + 1.57, 1.5);
+        for (let i = 0; i < 6; i++) { const a = i * 1.047 + 0.3; gem(Math.sin(a) * 0.17, Math.cos(a) * 0.17, 0.042, -a, 2.1); } gem(0, 0, 0.042, 0.4, 2.1); }),
+      // a cache: a stone box, its lid lifted, and what was in it going up
+      cache: draw(({ quad, bar, gem }) => { quad([-0.27, -0.36], [0.27, -0.36], [0.23, -0.08], [-0.23, -0.08]); bar([-0.3, 0.05], [0.2, 0.19], 0.085); gem(-0.06, 0.3, 0.05); gem(0.16, 0.36, 0.038); gem(-0.24, 0.34, 0.032); }),
+      // the keepers' signs: the crab's claw, the sawfish's saw, the angler's lamp, the moray's jaws
+      claw: draw(({ tri, quad }) => { quad([-0.36, -0.38], [-0.08, -0.4], [0.14, -0.06], [-0.14, 0.1]); tri([-0.14, 0.1], [0.12, 0.38], [0.32, 0.16]); tri([-0.14, 0.1], [0.32, 0.16], [0.06, 0.02]); tri([0.14, -0.06], [0.4, 0.02], [0.16, -0.24]); }),
+      saw: draw(({ tri, bar }) => { bar([-0.38, -0.2], [0.38, 0.2], 0.09); const ux = 0.885, uy = 0.466; for (let i = 0; i < 6; i++) { const t = -0.3 + i * 0.125, x = t * ux, y = t * uy; for (const sd of [1, -1]) tri([x - ux * 0.035 - uy * 0.04 * sd, y - uy * 0.035 + ux * 0.04 * sd], [x + ux * 0.035 - uy * 0.04 * sd, y + uy * 0.035 + ux * 0.04 * sd], [x - uy * 0.15 * sd, y + ux * 0.15 * sd]); } }),
+      lamp: draw(({ bar, gem }) => { bar([-0.22, -0.38], [-0.26, -0.02], 0.07); bar([-0.26, -0.02], [-0.1, 0.24], 0.065); bar([-0.1, 0.24], [0.1, 0.27], 0.06); gem(0.2, 0.16, 0.1, 0, 0.8); for (const a of [0.2, 1.3, 2.4]) bar([0.2 + Math.sin(a) * 0.15, 0.16 - Math.cos(a) * 0.15], [0.2 + Math.sin(a) * 0.24, 0.16 - Math.cos(a) * 0.24], 0.035); }),
+      jaw: draw(({ tri, bar }) => { bar([-0.38, 0], [0.38, 0.3], 0.075); bar([-0.38, 0], [0.38, -0.3], 0.075); for (let i = 0; i < 4; i++) { const x = -0.12 + i * 0.14, yu = 0.1 + (x + 0.38) * 0.395 - 0.1, w = 0.05; tri([x - w, yu - 0.02], [x + w, yu + 0.02], [x + 0.01, yu - 0.15]); tri([x - w, -yu + 0.02], [x + 0.01, -yu + 0.15], [x + w, -yu - 0.02]); } }),
+    }; })();
+  if (mural) { const g = add(new THREE.Group()), lambert = (color, more) => mat(new THREE.MeshLambertMaterial({ color, vertexColors: true, ...more }));
+    const block = (color, x, y, z, sx, sy, sz, more) => { const m = new THREE.Mesh(G.block, lambert(color, more)); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+    const shade = new THREE.Color(stoneTones[0]).multiplyScalar(0.62);
+    block(stoneTones[1 % stoneTones.length], 0, 0, 0, 4.5, 0.42, 1.05); block(stoneTones[0], 0, 0.42, 0, 3.95, 2.45, 0.44);
+    mural.top = block(district, 0, 2.87, 0, 4.35, 0.26, 0.66, { emissive: district, emissiveIntensity: 0 });
+    mural.signs.forEach((sg, i) => { const x = (i - 1) * 1.26; block(shade, x, 1.06, 0.2, 1.06, 1.06, 0.06).castShadow = false;
+      const geo = SIGNS[sg.kind === 'guard' ? MURAL.keeper[floor] || 'jaw' : sg.kind], m = new THREE.Mesh(geo, mat(new THREE.MeshLambertMaterial({ color: '#3a4a52', vertexColors: true, side: THREE.DoubleSide, emissive: '#ffdf9a', emissiveIntensity: 0 })));
+      m.position.set(x, 1.59, 0.262); m.scale.setScalar(1.08); g.add(m); sg.mesh = m; });
+    g.rotation.y = mural.yaw; mural.mesh = g; single.push(mural); }
   // A cleaning station: a coral head on a mound with a sponge or two at its foot, its cleaners over it, and a pale ring that fills as they work.
   const cleanKit = stations.length ? swarmKit('cleaner', { glow: Math.max(F.fishGlow, 0.2) }) : null, cleanMat = cleanKit && mat(cleanKit.material), cleanSize = new THREE.Vector3();
   const cleanMesh = cleanKit && add(new THREE.InstancedMesh(cleanKit.geometry, cleanMat, stations.length * CLEAN.fish));
@@ -1258,6 +1304,23 @@ float seaLight(vec2 p, float t) {
   const opened = []; // caches opened since this was last read: { kind, x, y, z, food, shell }. main.js feeds the fish from them
   function unseal(p) { p.done = true; p.k = 1; p.cache.open = 1e-3; opened.push({ kind: p.kind, x: p.cache.x, y: p.cache.y + 0.5, z: p.cache.z, food: PUZZLE.food[floor], shell: !!p.cache.shell });
     for (let i = 0; i < 10; i++) { const a = i * 0.63; puffAt(p.cache.x + Math.sin(a) * 0.6, p.cache.y + 0.2, p.cache.z + Math.cos(a) * 0.6, Math.sin(a) * 1.4, 1.2 + 0.5 * Math.random(), Math.cos(a) * 1.4, 0.26, 1.5); } }
+  // ---- the mural (MURAL). `earn(kind)` marks a carving as won; it lights when the head is near enough to see it. News: { what: 'sign' | 'whole', i, kind }.
+  const muralNews = [], dark = new THREE.Color('#3a4a52'), gilt = new THREE.Color('#fff1c4');
+  function earn(kind) { const sg = mural && mural.signs.find((x) => x.kind === kind); if (!sg || sg.earned) return false; sg.earned = true; return true; }
+  function carve(dt, focus, body) {
+    if (!mural) return;
+    const cx = mural.x + T * Math.round((focus.x - mural.x) / T), cz = mural.z + T * Math.round((focus.z - mural.z) / T), head = body ? body.snout : null; mural.cx = cx; mural.cz = cz;
+    mural.near = !!head && Math.hypot(head.x - cx, head.z - cz) < MURAL.near; mural.wait = Math.max(0, mural.wait - dt);
+    mural.signs.forEach((sg, i) => {
+      if (sg.earned && !sg.on && mural.near && mural.wait <= 0) { sg.on = true; mural.wait = MURAL.each; muralNews.push({ what: 'sign', i, kind: sg.kind }); }
+      if (sg.on && sg.lit < 1) sg.lit = Math.min(1, sg.lit + dt * 1.6);
+      const k = sg.lit, flare = Math.sin(Math.min(1, k) * Math.PI); // it flares as it catches, then settles to a steady light that breathes a little
+      sg.mesh.material.emissiveIntensity = k * (0.75 + 0.1 * Math.sin(time.value * 1.7 + i * 2)) + 0.9 * flare; sg.mesh.material.color.copy(dark).lerp(gilt, k); sg.mesh.scale.setScalar(1.08 * (1 + 0.14 * flare));
+    });
+    if (!mural.whole && mural.signs.every((sg) => sg.lit >= 1)) { mural.whole = true; muralNews.push({ what: 'whole' }); }
+    mural.glow += ((mural.whole ? 1 : 0) - mural.glow) * (1 - Math.exp(-2 * dt)); mural.top.material.emissiveIntensity = 0.55 * mural.glow;
+    if (muralNews.length > 8) muralNews.shift();
+  }
   // ---- the cleaning stations (CLEAN). What happens at one is told through `cleanNews`: { what: 'near' | 'start' | 'tick' | 'done' | 'broke', i, x, y, z, left }.
   const cleanNews = [], tq = new THREE.Quaternion(), te = new THREE.Euler(0, 0, 0, 'YXZ'), tm = new THREE.Matrix4(), tv = new THREE.Vector3(), tw = new THREE.Vector3();
   function tend(dt, focus, body) {
@@ -1506,6 +1569,7 @@ float seaLight(vec2 p, float t) {
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
     solve(dt, focus, body);
     tend(dt, focus, body);
+    carve(dt, focus, body);
     stir(dt, focus, body);
     for (const f of fragments) { // a loose one glows a little, slowly; one given to the rift goes down into the cloud; one being carried is placed by whoever carries it
       const ox = T * Math.round((focus.x - f.x) / T), oz = T * Math.round((focus.z - f.z) / T);
@@ -1693,7 +1757,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, mural, earn, carved: muralNews, greatest: [...F.schools].reduce((a, b) => (TIERS.indexOf(b) > TIERS.indexOf(a) ? b : a), 's'), opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

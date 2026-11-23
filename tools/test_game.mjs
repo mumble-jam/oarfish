@@ -532,6 +532,25 @@ check('a cleaning station in every band that has tail-biters, with two of them l
   s.bands.join() === '0,1,1,1,1' && s.broke.k1 > 0.3 && s.broke.came >= 2 && s.broke.k === 0 && s.broke.segs === 0 && s.broke.uses === 2 && s.broke.truce === 0
   && s.held.t > 5.6 && s.held.t < 7.6 && s.held.most >= 2 && s.held.ring1 < s.held.ring0 - 1 && s.held.ring1 < 4.2 && s.held.segs === 1 && s.held.cleaned === 1 && s.held.uses === 1 && s.held.resting
   && s.after.back >= 2 && s.after.waiting && s.after.hunted >= 1 && s.after.kept === 1 && s.spent.rested === 0 && s.spent.uses === 0 && s.spent.segs === 2 && s.spent.away > 0.9 && !s.spent.ring, JSON.stringify(s));
+
+// ---- the mural at each rift: three carvings, lit for what was done in the band
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, still = { ...T.none(), amount: 0 }, lit = (m) => m.signs.map((x) => +(x.earned) + '' + Math.round(x.lit)).join(' ');
+  out.bands = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const m = g.world.react.mural, G = g.world.goal; out.bands.push(m ? Math.round(Math.hypot(m.x - G.x, m.z - G.z)) : 0); out['great' + f] = g.world.react.greatest; }
+  g.startRun(4242); g.enterFloor(1, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false; g.sim(0.2, still);
+  const R = g.world.react, m = R.mural; out.start = lit(m);
+  // a small swarm is not the band's greatest; its greatest is. A cache opened, and the keeper beaten.
+  const take = (q) => { T.put(q.x + 2.6, q.y, q.z + 0.9, 1.1); g.sim(0.4, T.none()); let t = 0; while (q.left > 0 && t < 12) { g.sim(0.1, { ...T.none(), coil: 1 }); t += 0.1; } return q.left === 0; };
+  take(T.swarm('s')); out.small = lit(m);
+  for (let i = 0; i < 9; i++) g.addFood(12); g.sim(3, still); out.segs = g.run.segs; out.took = take(T.swarm(R.greatest)); out.swarm = lit(m);
+  R.opened.push({ kind: 'vent', x: g.rig.pos.x + 2, y: g.rig.pos.y, z: g.rig.pos.z, food: 6, shell: false }); g.sim(0.3, still); out.cache = lit(m);
+  document.getElementById('dev-keeper').click(); g.sim(0.5, still); out.guard = lit(m);
+  // far from it, nothing is lit yet; come up to it and they light one after another, and then its painted top
+  const news = []; T.put(m.x + Math.sin(m.yaw) * 6, m.y + 2, m.z + Math.cos(m.yaw) * 6, m.yaw + Math.PI); const grab = () => { for (const c of R.carved) news.push(c.what + (c.i ?? '')); };
+  g.sim(0.3, still); const first = lit(m); g.sim(4, still); out.near = { first, then: lit(m), whole: m.whole, top: +m.top.material.emissiveIntensity.toFixed(2), sign: +m.signs[0].mesh.material.emissiveIntensity.toFixed(2) };
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('every rift has a mural with three carvings, dark at first: the band\u2019s greatest swarm taken (not a lesser one), a cache opened and the keeper beaten each win one, and they light one after another only when the fish comes up to it, and then its painted top lights too; the palace has none',
+  s.bands.slice(0, 4).every((d) => d >= 16 && d <= 36) && s.bands[4] === 0 && s.great0 === 'h' && s.great1 === 'l' && s.start === '00 00 00' && s.small === '00 00 00' && s.took && s.swarm === '10 00 00' && s.cache === '10 10 00' && s.guard === '10 10 10'
+  && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake

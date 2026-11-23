@@ -466,7 +466,7 @@ export async function start(saved = {}) {
   function openCache(c) {
     const at = new THREE.Vector3(rig.pos.x + wrapD(c.x - rig.pos.x), c.y, rig.pos.z + wrapD(c.z - rig.pos.z));
     gulp(Array.from({ length: 12 }, (_, i) => at.clone().add(new THREE.Vector3(Math.sin(i * 2.4) * 0.5, 0.12 * i, Math.cos(i * 2.4) * 0.5))), c.food, 0.6);
-    moment('cache'); run.kick = Math.max(run.kick, 0.5); run.caches[run.floor] = (run.caches[run.floor] || 0) + 1;
+    moment('cache'); run.kick = Math.max(run.kick, 0.5); run.caches[run.floor] = (run.caches[run.floor] || 0) + 1; world.react?.earn('cache');
     if (c.shell) { const have = new Set([...run.shells.map((s) => s.type), ...field.items.filter((it) => !it.taken).map((it) => it.type)]); field.drop(c.x + 1.6, c.z + 1.2, SHELL_TYPES.find((t) => !have.has(t)) || SHELL_TYPES[(run.floor * 3 + 1) % SHELL_TYPES.length], 1.1); }
   }
   // The swell that runs down the body when it grows: k is how strong, and a slow one (a new standing) takes its time.
@@ -575,7 +575,7 @@ export async function start(saved = {}) {
     event(kind, pos) {
       if (kind === 'clang') moment('burst');
       else if (kind === 'down') {
-        moment('kill'); pulse('grow'); run.kick = 1;
+        moment('kill'); pulse('grow'); run.kick = 1; world.react?.earn('guard');
         const spare = Object.keys(SHELLS).filter((t) => !run.shells.some((s) => s.type === t));
         if (field && spare.length) field.drop(pos.x, pos.z, spare[(run.seed + run.floor * 7) % spare.length], 1.1);
       }
@@ -1675,6 +1675,7 @@ export async function start(saved = {}) {
           const at = world.take(sc); // the whole swarm streams to the mouth, a few fish to a spark
           gulp(at, at.length, clamp(Math.sqrt(sc.n / SWARMS.h.n), 0, 1));
           fishCaught += sc.n;
+          if (sc.tier === world.react?.greatest && sc.n === SWARMS[sc.tier].n) world.react.earn('swarm'); // the band's greatest swarm, whole: a carving on its mural
           if (sc.tier !== 's') say(`swarm-${sc.tier}`, sc.tier === 'h' ? 'The great swarm, whole.' : 'A bigger swarm, whole. Bigger ones still need a longer body.', 6);
         } else if (!sc.can && sc.burst <= 0) { // a body too short to go round it: the swarm bursts out and regroups
           sc.burst = 1; moment('burst');
@@ -1753,6 +1754,11 @@ export async function start(saved = {}) {
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
     if (world.react) for (const c of world.react.opened.splice(0)) openCache(c);
+    // the mural at the rift (world.js, MURAL) lights a carving as the fish comes up to it: a note each, rising, and when all three are lit the band answers
+    if (world.react) for (const c of world.react.carved.splice(0)) {
+      if (c.what === 'sign') { music.chime(1 + c.i * 2, 0.9); buzz(0.15, 0.3, 90); }
+      else if (c.what === 'whole') { moment('cache'); buzz(0.4, 0.5, 260); }
+    }
     // a cleaning station (world.js, CLEAN): a note for each step of the work, and at the end of it a segment grown back
     if (world.react) for (const c of world.react.cleaned.splice(0)) {
       if (run.state !== 'play') continue;
