@@ -43,7 +43,7 @@ export const CAST = {
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -379,8 +379,9 @@ export function createMusic({ context = null } = {}) {
       voicing(ch).forEach((m, i) => pianoNote(t + i * (long ? 0.018 : 0.004) + human(), m, long ? st.beatDur * 2.5 : 0.16 + 0.2 * rnd(), v));
       if (P.menace > 0.6 && I > 0.75 && rnd() < 0.35) brass(t, [bassPitch(ch.root, 40) + 12, bassPitch(ch.root + 6, 46) + 12], 0.22, 0.7);
     }
-    // --- the cast: whoever is near sits in
-    for (const id of st.sitting) playCast(id, st.cast[id], bar, tick, t);
+    // --- the cast: whoever is near sits in; and a keeper that has the floor plays its fill or its solo in place of its part
+    for (const id of st.sitting) if (!(st.show && st.show.id === id)) playCast(id, st.cast[id], bar, tick, t);
+    if (st.show) playShow(bar, tick, t);
     // --- the harmony the fish has rowed up: one held note of the chord for each voice it has, laid again every two beats
     if (st.harmony > 0 && (tick === 0 || tick === 6)) { const ch = chordAt(bar), notes = oarNotes(ch); for (let i = 0; i < st.harmony && i < notes.length; i++) hum(t, notes[i], st.beatDur * 2.4, 0.5 + 0.1 * i); }
     // --- a run of catches: each one in time adds a player, and the third is a solo
@@ -398,6 +399,35 @@ export function createMusic({ context = null } = {}) {
   // What the chain adds on this tick. 1: the vibraphone answers the piano, off its hits. 2: two horns riff, the same two bars over and over.
   // 3: a saxophone solos, a line that walks the chord's scale in swung eighths, lands on a chord note when the chord changes, and breathes.
   const RIFF = [[2, 0, 0.5], [5, 1, 0.3], [8, 0, 0.3], [11, 2, 0.9], [17, 1, 0.3], [20, 2, 0.5], [23, 0, 0.3]]; // tick in two bars, which note of the voicing, how long in beats
+  // A keeper's showing off (George: the bosses' instruments came in 'in a very monotone way'; each should be able to do 'some sort of a salto', and rarely,
+  // the melody staying as steady as it is most of the time). Two kinds, both set off by the fight and not by chance (api.flourish):
+  //   fill   a bar or less: a run on its own instrument, swelling, that lands on a long note. For the wind-up of its biggest blow.
+  //   solo   two bars and a half that are its own: the line wanders in swung eighths over the chords and comes home. For the moment the fight changes.
+  // While it has the floor its ordinary part is left out, and it plays in the band's time, on the band's chords.
+  const SHOW = {
+    keeper: { voice: 'tuba', base: 36, fill: [7, 5, 4, 2, 0], low: 0, high: 9, len: 0.9 },
+    shearer: { voice: 'sax', base: 55, fill: [0, 2, 4, 6, 7, 9], low: 0, high: 14, len: 0.5 },
+    lamplighter: { voice: 'celesta', base: 79, fill: [9, 7, 6, 4, 2, 0, 2, 4], low: -2, high: 11, len: 1.2 },
+    warden: { voice: 'cello', base: 45, fill: [0, 4, 7], low: 0, high: 9, len: 1.6 },
+    sum: { voice: 'tuba', base: 40, fill: [0, 4, 0], low: 0, high: 7, len: 1 },
+  };
+  function playShow(bar, tick, t) {
+    const sh = st.show, S = SHOW[sh.id], ch = chordAt(bar), beat = st.beatDur, rnd = Math.random;
+    const deg = (d) => S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), say = (d, dur, v) => { voices[S.voice](t, deg(d), dur, Math.min(1.25, v)); st.licks++; };
+    if (sh.wait > 0) { if (tick % 3 === 0) sh.wait--; return; } // it comes in on a beat
+    if (sh.kind === 'fill') {
+      const i = sh.i++, n = S.fill.length, v = 0.75 + 0.5 * (i / n); // swelling as it goes
+      if (i < n - 1) say(S.fill[i], st.tickLen * 1.1 * S.len, v); else { say(S.fill[n - 1], beat * 1.8 * S.len, 1.2); st.show = null; }
+      return;
+    }
+    // the solo: swung eighths (the middle of each triplet left alone), a step or a leap at a time between its low and its high, a breath now and then, and home at the end
+    sh.left--; const sub = tick % 3;
+    if (sh.left <= 0) { say(sh.id === 'keeper' || sh.id === 'warden' ? 0 : 7, beat * 2.4 * S.len, 1.2); st.show = null; return; }
+    if (sub === 1 || sh.rest-- > 0) return;
+    if (rnd() < 0.12) { sh.rest = 1; return; }
+    sh.deg = clamp(sh.deg + (rnd() < 0.2 ? (rnd() < 0.5 ? 3 : -3) : rnd() < 0.55 ? 1 : -1) * (sh.left < 8 ? -Math.sign(sh.deg - 3) || 1 : 1), S.low, S.high);
+    say(sh.deg, (rnd() < 0.2 ? beat * 0.9 : st.tickLen * 1.5) * S.len, 0.85 + 0.3 * rnd() + (sub === 0 && tick % 6 === 0 ? 0.15 : 0));
+  }
   function playChain(bar, tick, t) {
     const ch = tick === 11 ? chordAt(bar + 1) : chordAt(bar), rnd = Math.random, beat = st.beatDur, v = lerp(0.6, 1, params.react);
     const deg = (d, base) => base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
@@ -450,6 +480,12 @@ export function createMusic({ context = null } = {}) {
   // ---------------------------------------------------------------- what the game tells the band
   const api = {
     params, state: st,
+    // a keeper takes the floor (playShow). A fill is turned away if anything was shown in the last `gap` seconds, so they stay rare; a solo always goes, and waits for nothing
+    flourish(id, kind = 'fill', gap = 10) {
+      if (!SHOW[id] || !st.started || !n) return false;
+      const at = now(); if (kind === 'fill' && (st.show || at - (st.shownAt ?? -99) < gap)) return false;
+      st.shownAt = at; st.show = { id, kind, i: 0, wait: kind === 'solo' ? 1 : 0, left: 30, rest: 0, deg: 4 }; return true;
+    },
     // what the band is doing right now, for the drawer
     describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow(), sitting: st.sitting.map((id) => CAST[id].name) } : null; },
     // one creature's instrument on its own, two bars of it, for the library

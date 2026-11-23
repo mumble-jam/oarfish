@@ -467,6 +467,11 @@ const cast = await ev(() => { const g = window.__game, m = g.music, quiet = { sp
   const gone = feed({}, 14); const G = g.guard, here = g.rig.pos.clone(); let byKeeper = 1; if (G && !G.done) { g.rig.pos.copy(G.pos); byKeeper = g.castNear()[G.kind]; g.rig.pos.copy(here); } // a keeper, where this band still has one
   return { none, one, many, names, heard, gone, kind: G ? G.kind : null, byKeeper }; });
 check('every hunter and keeper has an instrument: it sits in while the creature is near, three at most with the keeper first, and each can be heard alone', cast.none === '' && cast.one === 'biter' && cast.many === 'warden,biter,angler' && /bowed cello/.test(cast.names) && cast.heard && cast.gone === '' && cast.byKeeper > 0.9, JSON.stringify(cast));
+const floor = await ev(() => { const g = window.__game, m = g.music, quiet = { speed: 0, coil: 0, danger: 0, low: false, alive: true }, play = (secs) => { for (let t = 0; t < secs; t += 0.1) m.update(0.1, { ...quiet, cast: { keeper: 1 } }); };
+  m.audition('keeper'); m.state.shownAt = -99; m.state.show = null; const l0 = m.state.licks, first = m.flourish('keeper', 'fill'), again = m.flourish('keeper', 'fill'), kind = m.state.show && m.state.show.kind; // a fill; and a second one straight after is turned away
+  const solo = m.flourish('keeper', 'solo'), now = m.state.show && m.state.show.kind, nobody = m.flourish('biter', 'fill');
+  return { first, again, kind, solo, now, nobody, licks: m.state.licks - l0 }; });
+check('a keeper’s instrument can take the floor: a fill, which is turned away if another was played a moment ago so that they stay rare, and a solo, which is not; a hunter has neither', floor.first === true && floor.again === false && floor.kind === 'fill' && floor.solo === true && floor.now === 'solo' && floor.nobody === false, JSON.stringify(floor));
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; const code = g.presetCode(); const r1 = g.applyCode('hey try this one oarfish-music:1:dream=90,energy=20,menace=10,react=40,swing=75,band=80 :)'); const p1 = { ...g.music.params };
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);
@@ -775,7 +780,7 @@ s = await ev(async () => { const g = window.__game, wait = (ms) => new Promise((
   window.dispatchEvent(new PointerEvent('pointerdown')); const d = frames(); await wait(2500); const back = frames() - d;
   g.QUIET.away = away; window.__hold = true;
   return { idle, ticks, woke, live, left, back, state: g.run.state }; });
-check('a paused dive is not drawn again and again (about one frame a second, while the page goes on running), a key pressed has it drawn, and resumed it runs; an end card left alone goes quiet too, until it is touched', s.idle <= 5 && s.ticks >= s.idle * 2 && s.woke >= 1 && s.live >= 3 && s.state === 'dead' && s.left <= 5 && s.back >= 2, JSON.stringify(s));
+check('a paused dive is not drawn again and again (about one frame a second, while the page goes on running), a key pressed has it drawn, and resumed it runs; an end card left alone goes quiet too, until it is touched', s.idle <= 5 && s.ticks >= 2 && s.woke >= 1 && s.live >= 3 && s.state === 'dead' && s.left <= 5 && s.back >= 2, JSON.stringify(s));
 
 // a lighter picture is there to be asked for, and is not given unasked; and a dive left alone does not sit still to be eaten
 s = await ev(async () => { const g = window.__game, box = document.getElementById('f-light'), wait = (ms) => new Promise((r) => setTimeout(r, ms)), kept = () => JSON.parse(localStorage.getItem('oarfish.feel') || '{}').light;

@@ -593,11 +593,13 @@ export async function start(saved = {}) {
     bite: (n, joint, from) => game.bite(n, joint, from, 'guard'),
     event(kind, pos) {
       if (kind === 'clang') moment('burst');
+      else if (kind === 'windup') music.flourish(guard?.kind, 'fill'); // the wind-up of its biggest blow: its instrument plays a fill (seldom: music.js sees to that)
+      else if (kind === 'laststand') music.flourish(guard?.kind, 'solo');
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
       else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
       else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7);
       else if (kind === 'tear') { moment('kill'); pulse('grow'); run.freeze = Math.max(run.freeze, 0.1); cam.shake = Math.max(cam.shake, 0.5); }
-      else if (kind === 'rage') { cam.shake = Math.max(cam.shake, 0.7); if (guard?.kind === 'keeper') say('keeper-rage', 'It is quicker now, and it digs. Watch the sand.', 6, 'warn'); else say('shearer-rage', 'It is quicker now, and comes back down its line. Watch the silt.', 6, 'warn'); }
+      else if (kind === 'rage') { cam.shake = Math.max(cam.shake, 0.7); music.flourish(guard?.kind, 'solo'); if (guard?.kind === 'keeper') say('keeper-rage', 'It is quicker now, and it digs. Watch the sand.', 6, 'warn'); else say('shearer-rage', 'It is quicker now, and comes back down its line. Watch the silt.', 6, 'warn'); }
       else if (kind === 'aimed') say('shearer-still', 'It feels the water you move. Hold still and its line slides off you.', 7);
       else if (kind === 'sawturned') say('shearer-saw', 'Its saw turns a ram. Come at its side when it is spent, or when the saw is stuck.', 7);
       else if (kind === 'tooth') { moment('kill'); pulse('grow'); run.freeze = Math.max(run.freeze, 0.08); cam.shake = Math.max(cam.shake, 0.4); }

@@ -90,7 +90,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   }
   function hurt(stun) {
     S.hp--; S.hits++; S.flash = 1; S.stun = stun;
-    game.event('hit', pos);
+    game.event('hit', pos); if (S.hp === 1) game.event('laststand', pos); // one blow from done: its instrument takes a solo (main.js)
     if (S.hp <= 0) fall();
   }
   if (kind === 'keeper') Object.assign(S, { leg: new Array(8).fill(0), legT: new Array(8).fill(0), lost: 0, open: false, sink: 0, jabT: 0, chargeT: 4, digT: 0, once: false, dir: 0, last: '', jabbed: 0, wrapLeg: -1, puffT: 0 }); // leg: 0 sound, 1 numb, 2 gone
@@ -207,7 +207,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         if (!engaged) set('idle');
         else if (S.cool <= 0) {
           let lying = 0; for (let j = 0; j <= N; j++) { const dx = J[j].x - pos.x, dz = J[j].z - pos.z; if (Math.hypot(dx, dz) < F.sweep.reach && J[j].y < pos.y + F.sweep.low && Math.abs(wrapPi(Math.atan2(dx, dz) - yaw)) < 1.6) lying++; }
-          const begin = (what, t) => { S.last = what; S.once = false; aim.copy(P); set(what, t); };
+          const begin = (what, t) => { S.last = what; S.once = false; aim.copy(P); set(what, t); if (what === 'slam' || what === 'dig') game.event('windup', pos); }; // its biggest blows have a fill to them
           if (nd < F.jab.reach && S.jabT <= 0 && off > -0.4 && off < 2.1) { begin('jab', F.jab.wind * q); S.jabT = F.jab.every; } // near, and on the small claw's side
           else if (nd < F.slam.reach && Math.abs(off) < 0.85) { if (lying >= F.sweep.bodies && S.last !== 'sweep') { begin('sweep', F.sweep.wind * q); S.dir = yaw; } else begin('slam', F.slam.wind * q); }
           else if (nd > F.charge.from && nd < F.charge.to && S.chargeT <= 0) {
@@ -299,7 +299,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       }
       else if (S.state === 'aim') { // winding up. Its line follows a tail it can feel moving and slides off one it cannot, until it locks
         warnSize = 2.8; S.danger = 0.7;
-        if (!S.locked && k >= Z.aim.lock) S.locked = true;
+        if (!S.locked && k >= Z.aim.lock) { S.locked = true; game.event('windup', pos); }
         if (!S.locked && !S.baited) {
           if (moving) { const lead = Math.min(1.3, Math.max(S.t, 0) + pos.distanceTo(tail) / Z.cut.speed[raging ? 1 : 0]); v.copy(tail).addScaledVector(tailV, lead); aim.lerp(v, 1 - Math.exp(-9 * dt)); S.slid = 0; } // where the tail will be when the saw gets there, if it goes on as it is going
           else if (S.slid < Z.aim.most) { v.set(aim.x - pos.x, 0, aim.z - pos.z).normalize(); const d = Z.aim.slide * dt; aim.x += -v.z * S.side * d; aim.z += v.x * S.side * d; S.slid += d; }
@@ -372,8 +372,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         aim.set(W.x, Y0 + HOME[1] + 0.3 * Math.sin(ctx.time), W.z); go(dt, aim, 2.4, 2);
         if (pos.distanceTo(fish) < 12) yaw += wrapPi(Math.atan2(fish.x - pos.x, fish.z - pos.z) - yaw) * (1 - Math.exp(-2 * dt));
         bait = S.cool <= 0 ? baitNear(ctx, 9) : null;
-        if (bait) set('windup', 0.7);
-        else if (awake && S.cool <= 0) { const j = tailNear(ctx, 5); if (j >= 0) { aim.copy(ctx.joints[j]); set('windup', 0.9); } }
+        if (bait) { set('windup', 0.7); game.event('windup', pos); }
+        else if (awake && S.cool <= 0) { const j = tailNear(ctx, 5); if (j >= 0) { aim.copy(ctx.joints[j]); set('windup', 0.9); game.event('windup', pos); } }
       }
     } else { // the warden: round the mouth, tightening on a fish that swims into its ring; a bait draws the head out
       const inside = Math.hypot(fish.x - W.x, fish.z - W.z) < S.R - 0.3 && Math.abs(fish.y - pos.y) < 2.2;
@@ -381,7 +381,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       else if (S.state === 'feed') { if (bait && !bait.dead) bait.life = Math.max(bait.life, 0.5); if (S.t <= 0) { if (bait) bait.life = 0.2; bait = null; set('idle'); S.cool = 1.5; } }
       else {
         if (S.state === 'tighten') { warnSize = 3; S.danger = 1; S.R = Math.max(1.3, S.R - 2.1 * dt); if (S.t <= 0) { if (inside && game.bite(3, 1, pos)) S.bites++; set('loose', 1.6); } }
-        else { S.R = Math.min(4.2, S.R + 2.4 * dt); if (S.state === 'loose' && S.t <= 0) set('idle'); bait = S.cool <= 0 && S.state === 'idle' ? baitNear(ctx, 10) : null; if (bait) set('fetch'); else if (awake && S.state === 'idle' && inside && S.R > 4) set('tighten', 1.4); }
+        else { S.R = Math.min(4.2, S.R + 2.4 * dt); if (S.state === 'loose' && S.t <= 0) set('idle'); bait = S.cool <= 0 && S.state === 'idle' ? baitNear(ctx, 10) : null; if (bait) set('fetch'); else if (awake && S.state === 'idle' && inside && S.R > 4) { set('tighten', 1.4); game.event('windup', pos); } }
         if (S.state !== 'fetch') { S.ang += S.spin * dt * (3.2 / Math.max(S.R, 1.3)); aim.set(W.x + Math.sin(S.ang) * S.R, Y0 + HOME[1], W.z + Math.cos(S.ang) * S.R); const d = go(dt, aim, 3.6 + 2.5 * clamp(pos.distanceTo(aim) - 1, 0, 3), 6); if (d > 6) S.ang = Math.atan2(pos.x - W.x, pos.z - W.z); }
       }
       let lead = pos; // the body follows the head, each slab a fixed distance behind the one before
