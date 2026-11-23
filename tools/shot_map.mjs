@@ -43,6 +43,8 @@ async function survey(from) {
     swarms: w.schools.filter((s) => !s.of).map((s) => [s.hx, s.hz, s.n, s.kind || '']), puzzles: w.react.puzzles.map((p) => ({ kind: p.kind, x: p.x, z: p.z, cx: p.cache.x, cz: p.cache.z, hoops: (p.hoops || []).map((h) => [h.x, h.z]) })),
     fragments: w.react.fragments.map((f) => [f.x, f.z]), shells: shells.map((it) => [it.x, it.z]), jars: w.urns.map((u) => [u.x, u.z]), mural: w.react.mural && [w.react.mural.x, w.react.mural.z, w.react.mural.yaw], stations: w.react.stations.map((s) => [s.x, s.z]),
     hunters: [...seat(foes.hooks, (h) => h), ...seat(foes.biters, (b) => b.home), ...seat(foes.anglers, (a) => a.home), ...seat(foes.mines, (m) => m.home), ...seat(foes.leeches, (l) => l.home)],
+    bloom: w.bloom && await (async () => { const { BLOOM } = await game.mod('bloom.js'), b = w.bloom, N = BLOOM.nettle, k = N.train * Math.cos(N.sag); // the bloom water (bloom.js): its bells, its nettles and their trains, the squid's home
+      return { x: b.x, z: b.z, R: b.R, bells: b.bells.map((q) => [q.x, q.z]), nettles: b.nettles.map((n) => [n.x, n.z, n.x + b.cur.x * k, n.z + b.cur.z * k]), home: [b.home.x, b.home.z], squid: BLOOM.squid.n }; })(),
     count: { pieces: P.length, wild: wild.length, solid: solids.length, fish: w.schools.reduce((a, s) => a + s.n, 0), perKm2: Math.round(wild.length / ((size * size) / 1000)) } };
   w.dispose(); return out;
 }
@@ -73,6 +75,9 @@ function draw({ panels, scale }) {
     hunter: (x, y) => { g.strokeStyle = SURFACE; g.lineWidth = 5; for (const pass of [0, 1]) { g.beginPath(); g.moveTo(x - 4.5, y - 4.5); g.lineTo(x + 4.5, y + 4.5); g.moveTo(x + 4.5, y - 4.5); g.lineTo(x - 4.5, y + 4.5); g.stroke(); g.strokeStyle = HARM; g.lineWidth = 2.2; } },
     station: (x, y) => { dot(x, y, 5.5, SURFACE, FIND, 2); g.strokeStyle = FIND; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 3, y); g.lineTo(x + 3, y); g.moveTo(x, y - 3); g.lineTo(x, y + 3); g.stroke(); },
     mural: (x, y, yaw = 0) => { g.save(); g.translate(x, y); g.rotate(yaw); g.fillStyle = INK; g.fillRect(-7.5, -2.6, 15, 5.2); g.strokeStyle = SURFACE; g.lineWidth = 1.2; g.strokeRect(-7.5, -2.6, 15, 5.2); g.fillStyle = '#eda100'; for (const k of [-4.6, 0, 4.6]) g.fillRect(k - 1.3, -1.3, 2.6, 2.6); g.restore(); },
+    bell: (x, y) => dot(x, y, 2.2, 'rgba(185,150,235,0.55)', '#9a6fd6', 0.8),
+    nettle: (x, y, bx = x + 14, by = y) => { g.strokeStyle = SURFACE; g.lineWidth = 6; for (const pass of [0, 1]) { g.beginPath(); g.moveTo(x, y); g.lineTo(bx, by); g.stroke(); g.strokeStyle = HARM; g.lineWidth = 3; } dot(x, y, 4.2, '#e89a3c', SURFACE, 1.5); },
+    squid: (x, y) => { for (let k = -2; k <= 2; k++) { const cx = x + k * 5, cy = y + Math.abs(k) * 2; g.beginPath(); g.moveTo(cx, cy - 4.5); g.lineTo(cx + 2.6, cy + 3); g.lineTo(cx - 2.6, cy + 3); g.closePath(); g.fillStyle = '#e8619a'; g.fill(); } },
     start: (x, y) => { dot(x, y, 6.5, SURFACE, INK, 2); g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 10, y); g.lineTo(x + 10, y); g.moveTo(x, y - 10); g.lineTo(x, y + 10); g.stroke(); },
   };
   let ox = PAD;
@@ -105,6 +110,7 @@ function draw({ panels, scale }) {
     tiles(() => { for (const q of p.puzzles) { g.strokeStyle = TASK; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X(q.x), Y(q.z)); for (const [hx, hz] of q.hoops) g.lineTo(X(hx), Y(hz)); g.lineTo(X(q.cx), Y(q.cz)); g.stroke(); mark.cache(X(q.cx), Y(q.cz)); mark.puzzle(X(q.x), Y(q.z)); }
       for (const [x, z] of p.fragments) mark.fragment(X(x), Y(z)); for (const [x, z] of p.jars) mark.jar(X(x), Y(z)); for (const [x, z] of p.shells) mark.shell(X(x), Y(z)); for (const [x, z] of p.stations) mark.station(X(x), Y(z));
       for (const [x, z] of p.hunters) mark.hunter(X(x), Y(z)); if (p.mural) mark.mural(X(p.mural[0]), Y(p.mural[1]), p.mural[2]);
+      if (p.bloom) { const b = p.bloom; for (const [x, z] of b.bells) mark.bell(X(x), Y(z)); for (const [x, z, bx, bz] of b.nettles) mark.nettle(X(x), Y(z), X(bx), Y(bz)); mark.squid(X(b.home[0]), Y(b.home[1])); }
       for (const [x, z, n] of p.swarms) mark.swarm(X(x), Y(z), n); });
     if (p.nest) { g.save(); g.translate(X(sx), Y(sz)); g.rotate(p.nest.yaw); g.strokeStyle = INK; g.lineWidth = 1.2; g.strokeRect(-1.65 * scale, -0.6 * scale, 5.7 * scale, 8.7 * scale); g.restore(); } // the most ground the nest takes: the line of stones to the left of the body, the shells' places to its right
     mark.start(X(sx), Y(sz));
@@ -125,6 +131,7 @@ function draw({ panels, scale }) {
     if (p.goal[2] === 'rift') label('Rift', p.goal[0], p.goal[1], 16 * scale * 0.5, { weight: 600, size: 12.5, onPlace: true }); else label('Palace gate', p.goal[0], p.goal[1], 8, { weight: 600, size: 12.5, onPlace: true });
     if (p.keeper && p.keeper.walks) label('Keeper’s ground', p.keeper.x, p.keeper.z, p.keeper.r * scale, {});
     if (p.mural) label('Mural', p.mural[0], p.mural[1], 9, {});
+    if (p.bloom) label('Bloom water', p.bloom.x, p.bloom.z, p.bloom.R * scale, { weight: 600, size: 12.5 });
     for (const q of p.puzzles) label(q.kind[0].toUpperCase() + q.kind.slice(1), q.x, q.z, 7, {});
     for (const [x, z, n, kind] of p.swarms) label(`${n}${kind ? ` (${kind}s)` : ''}`, x, z, Math.sqrt(n) * 0.9 + 1.2, { size: 10.5, color: INK2, onPlace: true });
     label(`sight through the fog: ${p.fog} m`, sx, sz - p.fog, 3, { size: 10.5, color: INK2 });
@@ -161,6 +168,7 @@ function draw({ panels, scale }) {
     if (any('jars')) item((cx, cy) => mark.jar(cx, cy), 'Sealed jar');
     if (any('stations')) item((cx, cy) => mark.station(cx, cy), 'Cleaning station');
     if (any('hunters')) item((cx, cy) => mark.hunter(cx, cy), 'Hunter’s seat', 'hook, biter, angler, drifter, leech');
+    if (any('bloom')) { item((cx, cy) => { for (const [dx, dy] of [[-7, -3], [-2, 4], [3, -4], [7, 2], [0, 0], [-5, 5]]) mark.bell(cx + dx, cy + dy); }, 'Bloom water: a dot a moon jelly', 'no harm; fry under the bells'); item((cx, cy) => mark.nettle(cx - 8, cy, cx + 10, cy), 'Sea nettle, and its train', 'the train stings; the current runs along it'); item((cx, cy) => mark.squid(cx, cy), 'Where the squid shoal rests'); }
     head('TO EAT');
     { const sizes = [8, 18, 36, 70]; let cx = x + 10; for (const n of sizes) { const r = Math.sqrt(n) * 0.9 + 1.2; mark.swarm(cx + r, y + 2, n); text(String(n), cx + r, y + 2 + r + 9, { size: 10.5, color: INK2, align: 'center' }); cx += r * 2 + 16; }
       text('Swarm: its area is its count', cx + 2, y - 4, { size: 12 }); text('the number beside each is its fish', cx + 2, y + 11, { size: 10.5, color: MUTED }); }

@@ -1,5 +1,5 @@
-// The jellyfish in motion: one rig for four animals. Not in the dive yet: nothing makes one but the specimen library and the testing tool in
-// the pause menu. A jellyfish here is three things drawn together: what is solid in it (its component's model), the skin of its bell laid over
+// The jellyfish in motion: one rig for four animals. The moon jelly and the sea nettle live at the bloom water in the first band (bloom.js
+// says what they do there); the helmet jelly and the box jelly are made only by the specimen library and the testing tool in the pause menu. A jellyfish here is three things drawn together: what is solid in it (its component's model), the skin of its bell laid over
 // that, part clear, and its strands, each oral arm and each tentacle a piece of its own that trails through the water by itself (strands.js).
 // The bell squeezes and fills in its shader (`flex`, a mark the model puts on each corner: critters.js), top first and the rim last, and this
 // file works out where the rim has got to, so that what hangs from the rim hangs from it wherever it is. It decides nothing: whoever moves the

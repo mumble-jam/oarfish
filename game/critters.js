@@ -465,7 +465,7 @@ export function sumSegment() {
 }
 
 
-// ================================================================ not yet in the dive
+// ================================================================ the detailed creatures (the squid lives at the bloom water, bloom.js)
 // ---------------------------------------------------------------- the squid
 // Its shape is the bigfin reef squid's (Sepioteuthis lessoniana), whose fins run down nearly the whole mantle, so that from above the
 // back end of it is a kite coming to a point. Arms and head toward +z, the point of the mantle toward -z: jetting, it goes point first.
@@ -534,7 +534,7 @@ export function squidArm(pal, def) {
   return m.geometry();
 }
 
-// ================================================================ jellyfish (not yet in the dive)
+// ================================================================ jellyfish (the moon jelly and the sea nettle live at the bloom water, bloom.js; the other two are not in the dive yet)
 // Four of them, each after a real animal (the sources are at the top of jelly.js). A jellyfish is modelled upright: the top of its bell toward +y, its
 // mouth and everything that hangs toward -y. It comes in three kinds of piece:
 //   the body      what is solid in it and seen through the bell: gonads, stomach, canals, eyes, the stalks the tentacles hang from (moon, nettle, helmet, box)
@@ -602,6 +602,17 @@ export function moonPiece(pal, def) {
   if (def.kind === 'a') return frilled(m, def, (s) => 0.026 * (1 - 0.5 * s) * Math.min(1, (1 - s) / 0.25) + 0.002, (s) => 0.0045 * (1 - 0.5 * s), arm, frill).geometry();
   // a length of fringe: three fine threads side by side, each of its own length
   for (const [x, l] of [[-0.75, 0.82], [0, 1], [0.7, 0.7]]) { const X = x * def.span, mid = def.cuts[1] * l, end = def.long * l, w = 0.0034; m.quad([X - w, 0, 0], [X + w, 0, 0], [X + w * 0.7, 0, mid], [X - w * 0.7, 0, mid], fringe).tri([X - w * 0.7, 0, mid], [X + w * 0.7, 0, mid], [X, 0, end], fringe); }
+  return m.geometry();
+}
+
+// The moon jelly from a little way off, for a bloom of them (bloom.js draws dozens at once): the saucer in eight sides and the four horseshoes
+// laid on top of it, about sixty faces where the whole animal has 550. No strands, nothing that squeezes: what moves it is how it is drawn.
+export function moonFar(pal) {
+  const m = mesher(), { bell, rim, gonad, gonadPale } = pal, rings = [[0.068, 0.07], [0.04, 0.14], [0.006, 0.19], [-0.014, 0.2]].map(([y, r]) => ringY(y, r, 8, { turn: TAU / 16 }));
+  m.cap(rings[0], [0, 1, 0], bell, 0.008);
+  sheet(m, rings, (i) => (i < 2 ? bell : [bell, rim]), [0, -0.05, 0]);
+  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.085, 0), at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad, r = Math.hypot(x, z); return [x, 0.071 - 0.29 * r * r + 0.009, z]; };
+    for (let i = 0; i < 3; i++) m.quad(at(i / 3, 0.022), at(i / 3, 0.06), at((i + 1) / 3, 0.06), at((i + 1) / 3, 0.022), [gonad, gonad, gonadPale]); } // a little bigger and bolder than the whole animal's, so that they still read from across the bloom
   return m.geometry();
 }
 

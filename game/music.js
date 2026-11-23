@@ -38,6 +38,7 @@ const RIDE = [0, 3, 5, 6, 9, 11];
 // The four keepers and the Sum come before the hunters when more than three are near.
 export const CAST = {
   biter: { name: 'muted trumpet' }, angler: { name: 'vibraphone' }, hook: { name: 'plucked string' }, drifter: { name: 'woodblock' }, leech: { name: 'bass clarinet' },
+  squid: { name: 'pizzicato' }, moonjelly: { name: 'music box' }, nettle: { name: 'bowed bass' }, // the bloom water's three (bloom.js): quiet, and only near
   keeper: { name: 'tuba', lead: true }, shearer: { name: 'tenor saxophone', lead: true }, lamplighter: { name: 'celesta', lead: true }, warden: { name: 'bowed cello', lead: true }, sum: { name: 'organ', lead: true },
 };
 
@@ -298,6 +299,12 @@ export function createMusic({ context = null } = {}) {
       if (tick % 3 === 1 && may(0.18 + 0.42 * p)) voices.block(t, (tick === 1 || tick === 7) ? 86 : 81, 0.05, v);
     } else if (id === 'leech') { // a low note that slides to the one beside it
       if ((tick === 0 || tick === 6) && may(0.5 + 0.3 * p)) { const m = deg(tick === 0 ? 2 : 4, 43); voices.clarinet(t, m, beat * 1.7, v, m + (rnd() < 0.5 ? 1 : -1)); }
+    } else if (id === 'squid') { // a skitter of short high notes, three to a beat, now and then
+      if (tick % 3 !== 0 && may(0.12 + 0.3 * p)) voices.pluck(t, deg(7 + ((bar + tick) % 5), 60), 0.12, v * 0.6);
+    } else if (id === 'moonjelly') { // one small bell at the top of the chord, a bar apart, slow as their beating
+      if (tick === 0 && may(0.45 + 0.4 * p)) { const vo = voicing(ch, 84); voices.celesta(t, vo[bar % vo.length], 1.6, v * 0.45); }
+    } else if (id === 'nettle') { // a long low bowed note every other bar, leaning down a step
+      if (tick === 0 && bar % 2 === 0 && may(0.6 + 0.4 * p)) { const m = bassPitch(ch.root + ch.q.tones[1], 40); voices.cello(t, m, beat * 5, v * 0.55, m - 1); }
     } else if (id === 'keeper') { // oom, pah: the root and its fifth, slow and heavy
       if (tick === 0 || tick === 6) voices.tuba(t, bassPitch(ch.root + (tick === 0 ? 0 : 7), 36), beat * 1.25, v);
     } else if (id === 'shearer') { // a run up the scale, then two jabs

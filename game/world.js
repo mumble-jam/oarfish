@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from './geo.js';
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing, WAKE } from './kit.js';
 import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from './npc.js';
+import { layBloom } from './bloom.js';
 
 export const BASE = 144; // a band is this far across unless it says otherwise. What a band counts (rocks, kelp, the wave counts of its bed) is counted for a square of this size
 const CELL = 3, GRID = 46;
@@ -404,7 +405,10 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const mat = (m) => { materials.push(m); return m; };
   const blanks = new Map(), blank = (m) => { if (m.map || m.alphaMap || m.alphaTest || m.wireframe) return m; const key = `${m.side}:${m.shadowSide}`;
     if (!blanks.has(key)) blanks.set(key, mat(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, side: m.side, shadowSide: m.shadowSide }))); return blanks.get(key); };
-  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, { ...opts, shade: blank(material), size: T }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
+  // what grows and lies about by chance is kept off a place that wants open water (the bloom, below): taken out where it stands, so that nothing else moves
+  let keepOff = null, wild = null;
+  const scatter = (geo, material, items, opts) => { if (keepOff && (wild ||= new Set(['rock', 'kelp', 'finger', 'table', 'lantern', 'pen', 'tuft', 'pebble', 'star', 'brittle', 'urchin', 'clam', 'brain', 'seaFan', 'sponge', 'anemone', 'lily', 'glass', 'worms'].map((k) => G[k]))).has(geo)) for (let i = items.length; i--;) if (!keepOff(items[i].x, items[i].z)) items.splice(i, 1);
+    const s = new Scatter(geo, material, items, { ...opts, shade: blank(material), size: T }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
@@ -1033,7 +1037,11 @@ float seaLight(vec2 p, float t) {
     sc.twin = { ...sc, kind: 'half', tier: LOWER[sc.tier], n: 0, left: 0, ball: low.r, fit: low.r, slack: 1, gap: 0, whole: null, twin: null, of: sc, split: true, ring: null, arc: null };
     schools.push(sc.twin);
   }
-  const total = schools.reduce((a, sc) => a + sc.n, 0);
+  // The bloom water (bloom.js), in the first band: laid after the swarms and before anything is scattered, from a run of numbers of its own, so that what is
+  // scattered keeps off it and nothing placed before it moves. Its fry are a swarm like the others, added last (their fish have numbers of the bloom's own).
+  const bloom = floor === 0 ? layBloom({ seed, spawn: SPAWN, goalAngle, clear: clearNow, drawn: height, wrap: wrapD, size: T, swarm: SWARMS.s, tone: schoolTones[0] }) : null;
+  if (bloom) keepOff = (x, z) => farFrom(x, z, bloom.x, bloom.z, bloom.R * 0.85);
+  const total = schools.reduce((a, sc) => a + sc.n, 0) + (bloom ? bloom.fry.n : 0);
   const minnowMat = mat(fishKit.material), fishSize = new THREE.Vector3().setScalar(fishKit.scale);
   const fishMesh = add(new THREE.InstancedMesh(fishKit.geometry, minnowMat, Math.max(total, 1)));
   fishMesh.frustumCulled = false; fishMesh.castShadow = true;
@@ -1045,6 +1053,7 @@ float seaLight(vec2 p, float t) {
       minnows.push({ sc, half: i % 2, ph: rand() * 6.28, rho: 0.25 + 0.75 * Math.cbrt(rand()), h: rr(-1, 1), sp: rr(0.7, 1.3), flee: new THREE.Vector3(), p: new THREE.Vector3(), first: true, alive: true });
       fishMesh.setColorAt(minnows.length - 1, c.set(sc.tone));
     }
+    if (bloom) { schools.push(bloom.fry); for (let i = 0; i < bloom.fry.n; i++) { minnows.push({ sc: bloom.fry, half: i % 2, ...bloom.minnow(), flee: new THREE.Vector3(), p: new THREE.Vector3(), first: true, alive: true }); fishMesh.setColorAt(minnows.length - 1, c.set(bloom.fry.tone)); } }
   }
   // Round a cornered swarm: a faint ring, pale if the body is long enough to go round it and coral if not,
   // and a bright arc that fills as the body wraps it.
@@ -1075,7 +1084,7 @@ float seaLight(vec2 p, float t) {
     if (!clearOfSites(x, z, big ? 3 : 0)) continue;
     const y = drawnY(x, z) + s.y * 0.2;
     rocks.push({ x, y, z, q, s, color: tone });
-    if (base > 0.9) colliders.push({ x, y, z, r: (s.x + s.z) * 0.47 });
+    if (base > 0.9 && (!keepOff || keepOff(x, z))) colliders.push({ x, y, z, r: (s.x + s.z) * 0.47 }); // (one in the bloom is taken out as it is scattered, and stops nothing)
   }
   scatter(G.rock, mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true })), rocks);
 
@@ -1141,7 +1150,7 @@ float seaLight(vec2 p, float t) {
     scatter(G.urchin, stillBoth, strew(at([44, 40, 30, 20]), () => byReef(1, 6), rooted(tonesOf('urchin'), 0.24, 0.46, 0.02)), { cast: false, reach: 44 });
     scatter(G.clam, plant({ shy: 1 }), (grownAt.clam = strew(at([60, 50, 34, 24, 24]), () => open(), flat(tonesOf('clam'), 0.16, 0.32))), { cast: false, reach: 44 });
     { const domes = strew(at([30, 16]), () => byReef(2, 8), rooted(tonesOf('braincoral'), 0.5, 1.25, 0.1));
-      for (const d of domes) if (d.s.x > 0.8) colliders.push({ x: d.x, y: d.y, z: d.z, r: d.s.x * 0.8 });
+      for (const d of domes) if (d.s.x > 0.8 && (!keepOff || keepOff(d.x, d.z))) colliders.push({ x: d.x, y: d.y, z: d.z, r: d.s.x * 0.8 });
       scatter(G.brain, still, domes); }
     scatter(G.seaFan, plant({ sway: 0.5, give: 0.15 }), strew(at([34, 30, 16]), () => byReef(1.5, 8), rooted(tonesOf('seafan'), 1.0, 2.0)), { receive: false });
     scatter(G.sponge, still, strew(at([30, 30, 20]), () => byReef(1.5, 7), rooted(tonesOf('sponge'), 0.7, 1.4)));
@@ -1150,6 +1159,7 @@ float seaLight(vec2 p, float t) {
     scatter(G.glass, still, strew(at([0, 0, 14, 40, 40]), () => (drand() < 0.5 ? byReef(1, 8) : open()), rooted(tonesOf('glasssponge'), 0.6, 1.4)));
     scatter(G.worms, plant({ double: false, shy: 1 }), (grownAt.tubeworms = strew(at([0, 0, 0, 30, 50]), () => byReef(0.8, 4), (x, z) => ({ ...rooted(tonesOf('tubeworms'), 0.8, 1.5)(x, z) }))));
   }
+  if (bloom) sites.push([bloom.x, bloom.z, bloom.R, 'bloom']); // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
 
   // ------------------------------------------------------------ drifting specks and slow light shafts
   const SPECKS = 320, BOX = new THREE.Vector3(46, 16, 46);
@@ -1626,6 +1636,7 @@ float seaLight(vec2 p, float t) {
       const d = Math.hypot(cx - fishHead.x, cz - fishHead.z), rest = Math.max(sc.hy, height(cx, cz) + 1.6);
       let cornered = d < 6 + sc.ball * 3 && sc.left > 0;
       if (sc.kind === 'glow') cornered = seeking(sc, cx, cz, d, dt, fishHead) && cornered;
+      if (sc.bloom) cornered = sc.bloom.open(sc, fishHead, dt) && cornered; // the fry: only for a head in among the bells
       sc.threat += ((cornered ? 1 : 0) - sc.threat) * (1 - Math.exp(-2.2 * dt));
       if (sc.kind === 'bolt') sc.y = bolting(sc, cx, cz, rest, dt, fishHead);
       else sc.y = lerp(rest, fishHead.y, sc.threat); // a cornered swarm does not flee up or down
@@ -1803,6 +1814,15 @@ float seaLight(vec2 p, float t) {
     fishMesh.instanceMatrix.needsUpdate = true;
     return at;
   }
+  // One fish of a swarm taken by something else (the squid, a nettle's train: bloom.js): the one nearest (x, z), in the copy of the world nearest the fish. Returns where it was
+  function nibble(sc, x, z) {
+    let best = -1, bd = Infinity; minnows.forEach((f, i) => { if (f.sc !== sc || !f.alive) return; const d = (f.p.x - x) ** 2 + (f.p.z - z) ** 2; if (d < bd) { bd = d; best = i; } });
+    if (best < 0) return null; const f = minnows[best]; f.alive = false; sc.left--; fishMesh.setMatrixAt(best, m4.compose(none, q1, none)); fishMesh.instanceMatrix.needsUpdate = true;
+    if (sc.left <= 0) { sc.progress = 0; sc.ring.visible = sc.arc.visible = false; }
+    return f.p.clone();
+  }
+  // and one come back to it (the fry under the bells, bloom.js): it is put where its swarm is
+  function revive(sc) { const f = minnows.find((m) => m.sc === sc && !m.alive); if (!f) return false; f.alive = true; f.first = true; sc.left++; return true; }
   // Cloud in the rift: a bank of soft round puffs packed between the walls just under the ledges, lit like the stone, with a
   // pale floor under them so that no bed shows through the gaps. The fish drops into it and is gone (main.js closes the
   // water in round it, in the cloud's colour). The puffs are in three flocks that rise, fall and slide a little apart.
@@ -1927,6 +1947,6 @@ float seaLight(vec2 p, float t) {
   const sorting = (on) => { sight.on = on; sight.fx = NaN; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
   // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed
-  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, nibble, revive,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

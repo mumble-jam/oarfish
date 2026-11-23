@@ -1,12 +1,15 @@
 // The squid in motion. Its mantle, fins, head and eyes are one model; this hangs eight arms and two tentacles on the head, each a
-// piece of its own (critters.js: SQUID, squidArm), and each trails through the water by itself (strands.js). Not in the dive yet:
-// nothing makes one but the specimen library. What follows is how it looks in each mood; there is no behaviour anywhere.
+// piece of its own (critters.js: SQUID, squidArm), and each trails through the water by itself (strands.js). A small shoal of them
+// lives by the bloom water in the first band; what they do is in bloom.js. What follows is only how it looks in each mood.
 //   hover    holding still: the fins ripple from front to back, the arms hang loose in slow curves and curl at the tips
 //   swim     going somewhere on its fins: the arms trail, and swing wide and late when it turns
 //   jet      the mantle fills, then squeezes, and it goes point first: fins wrapped down, arms drawn together and streaming
 //   alarm    arms thrown wide and curled back, mantle swollen, fins stiff, and the skin flashing pale
 //   aim      it has seen something: the arms come together to a point at it, the two tentacles drawn up inside them
 //   strike   the tentacles shot out half as long again, clubs open, the arms flaring behind them
+//   bluff    the first step of its defence: it makes itself big at what presses it, arms spread wide and curled out, mantle swollen, the
+//            skin flushed darker (and not flashing): a show, held, while it gives ground
+//   flee     the second step: it goes pale all over and jets away. (The third, ink, is not a pose: bloom.js leaves a copy of it in ink.)
 // What was taken from the real animal, and where it was read:
 //   The shape is the bigfin reef squid's, Sepioteuthis lessoniana: oval fins down almost the whole mantle, eight arms of which the
 //   third pair is the longest and the first the shortest, two rows of suckers, clubs on the tentacles (Wikipedia, "Bigfin reef squid").
@@ -16,6 +19,10 @@
 //   club tips just showing, then lunges, flares the arms, and the tentacle stalks lengthen by 43 to 80% in 20 to 40 ms; the fourth pair of
 //   arms stays straight beside them (Kier and van Leeuwen, "A kinematic analysis of tentacle extension in the squid Loligo pealei",
 //   Journal of Experimental Biology 200, 1997).
+// Its defence comes in steps: a bluff, then paling and jetting away, with ink kept for real danger (The Cephalopod Page, "Sepioidea",
+// thecephalopodpage.org; Jaitly 2024, ore.exeter.ac.uk; read through the research report "Oarfish first level expansion", section 5,
+// mostly about the Caribbean reef squid, Sepioteuthis sepioidea, a cousin of the shape's species). The bluff's darker skin is our
+// reading of "spreads its arms and darkens its mantle" below; the false eye spots of the real display are not drawn.
 // Not read anywhere: that it goes pale when alarmed. George's brief asked for a pale flash; the page above only says that the real one
 // darkens its mantle when it spreads its arms at another squid. Its colour is the reference picture's, not the animal's.
 import * as THREE from 'three';
@@ -38,8 +45,10 @@ const MOODS = {
   alarm: { open: 1.15, relax: 0.35, wave: 0.14, rate: 3.2, curl: 1.5, out: 1, tOpen: 0.6, tWave: 0.2, tCurl: 1.8, stretch: 0.9, club: 0.5, ripple: 0.05, beat: 16, fold: -0.16, pulse: 0.13 },
   aim: { open: 0.03, relax: 0, wave: 0.03, rate: 3, curl: 0, tOpen: 0.01, tWave: 0.01, tCurl: 0, stretch: 0.8, ripple: 0.3, beat: 10, fold: 0.05, pulse: 0.1 },
   strike: { open: 0.8, relax: 0.3, wave: 0.05, rate: 3, curl: -0.5, out: 1, four: 0.12, tOpen: 0.03, tWave: 0, tCurl: 0, stretch: 1.5, club: 1, quick: 5, ripple: 0.1, beat: 10, fold: 0.5, pulse: -0.2 },
+  bluff: { open: 1.05, relax: 0.2, wave: 0.1, rate: 2, curl: 1.3, out: 1, four: 1.15, tOpen: 0.5, tWave: 0.12, tCurl: 1.6, stretch: 0.85, ripple: 0.25, beat: 9, fold: -0.12, pulse: 0.12, blanch: -0.8 },
 };
-const KEYS = Object.keys(BASE), SETTLE = { strike: 22, alarm: 12, jet: 7 };
+MOODS.flee = { ...MOODS.jet, blanch: 0.9 }; // jetting away, pale all over
+const KEYS = Object.keys(BASE), SETTLE = { strike: 22, alarm: 12, jet: 7, flee: 7, bluff: 10 };
 const FEEL = { arm: { stiff: [2.6, 0.6], drag: [1.2, 3.6], ease: 0.85 }, tentacle: { stiff: [2.4, 0.5], drag: [1.2, 4.2], ease: 0.8 } };
 
 // The squid's own material is taught three things more: the mantle swells and squeezes, the fins ripple and fold, the skin goes pale.
@@ -104,8 +113,8 @@ export function squidRig(a, pal) {
     const sc = group.scale.x, mood = MOODS[s.mood] ? s.mood : 'hover', L = MOODS[mood];
     for (const k of KEYS) G[k] = L[k] ?? BASE[k];
     let pulse = L.pulse ?? 0.045 * Math.sin(p.t * 2.3), thrust = 0; // holding still, it breathes
-    if (mood === 'jet') { // one jet: a quick squeeze, a hold, and a slow filling while it glides. The fins wrap down on the squeeze and the arms come together; gliding, both ease
-      if (p.mood !== 'jet') p.jet = 0;
+    if (mood === 'jet' || mood === 'flee') { // one jet: a quick squeeze, a hold, and a slow filling while it glides. The fins wrap down on the squeeze and the arms come together; gliding, both ease
+      if (p.mood !== 'jet' && p.mood !== 'flee') p.jet = 0;
       p.jet = (p.jet + dt * (s.rate || 1.05)) % 1; const q = p.jet, glide = q < 0.2 ? 0 : (q - 0.2) / 0.8;
       if (q < 0.2) { pulse = lerp(0.18, -0.26, ease(q / 0.2)); thrust = Math.sin((Math.PI * q) / 0.2); } else if (q < 0.38) pulse = -0.26; else pulse = lerp(-0.26, 0.18, ease((q - 0.38) / 0.62));
       G.open += 0.16 * glide; G.wave += 0.4 * glide; G.tWave += 0.3 * glide; G.fold = lerp(1.0, 0.35, glide); G.ripple = 0.22 * glide;
@@ -131,9 +140,10 @@ export function squidRig(a, pal) {
   function show(dt, state, speed) {
     stand.time += dt;
     const sc = group.scale.x, id = state.id, t = stand.time; let mood = 'hover', x = 0, y = 0, z = 0, yaw = 0, pitch = 0, v = 0;
-    if (id === 'jet') { const q = p.jet; mood = 'jet'; z = -0.3 * (q < 0.2 ? ease(q / 0.2) : 1 - ease((q - 0.2) / 0.8)); v = speed * (0.3 + 1.25 * (q < 0.2 ? ease(q / 0.2) : Math.exp(-(q - 0.2) * 4.5))); pitch = -0.05; } // it darts back on each squeeze, and is let come forward again as it fills
+    if (id === 'jet' || id === 'flee') { const q = p.jet; mood = id; z = -0.3 * (q < 0.2 ? ease(q / 0.2) : 1 - ease((q - 0.2) / 0.8)); v = speed * (0.3 + 1.25 * (q < 0.2 ? ease(q / 0.2) : Math.exp(-(q - 0.2) * 4.5))); pitch = -0.05; } // it darts back on each squeeze, and is let come forward again as it fills
     else if (id === 'turn') { mood = 'swim'; yaw = 0.95 * Math.sin(t * 1.15); v = speed; pitch = 0.1 + 0.06 * Math.sin(t * 0.8); }
     else if (id === 'alarm') { mood = 'alarm'; pitch = -0.14; z = -0.06 + 0.012 * Math.sin(t * 23); }
+    else if (id === 'bluff') { mood = 'bluff'; pitch = -0.2 + 0.04 * Math.sin(t * 1.3); z = -0.05 * (1 + Math.sin(t * 0.7)); } // held, edging back
     else if (id === 'reach') { const q = (t % 3.2) / 3.2; pitch = 0.08; // it draws up and takes aim, shoots, holds, and gathers itself in
       if (q < 0.42) { mood = 'aim'; z = 0.1 * ease(q / 0.42); } else if (q < 0.64) { mood = 'strike'; z = 0.1 + 0.2 * ease(Math.min(1, (q - 0.42) / 0.05)); } else z = 0.3 * (1 - ease((q - 0.64) / 0.36)); }
     else { pitch = 0.4 + 0.05 * Math.sin(t * 0.5); x = 0.07 * Math.sin(t * 0.43); y = 0.08 * Math.sin(t * 0.71); z = 0.06 * Math.sin(t * 0.31); yaw = 0.14 * Math.sin(t * 0.27); } // hovering: head down a little, never quite still
