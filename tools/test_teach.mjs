@@ -22,6 +22,7 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 820 } })).newPage();
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
+await page.addInitScript(() => { window.__hold = true; }); // held from before the page starts: on a busy machine the dive ran by itself for seconds between being ready and being held, and the fish drifted through the first hoops before any check had looked
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.evaluate(() => { window.__hold = true; });
