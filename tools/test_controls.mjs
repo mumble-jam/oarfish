@@ -50,6 +50,33 @@ let s = await ev(() => ({ mode: window.__game.feel.mode, legend: document.getEle
 check('starts on point-and-swim with the keyboard legend', s.mode === 'point' && /steer/.test(s.legend) && /adventure camera/.test(s.legend) && s.fov === 30, JSON.stringify(s).slice(0, 200));
 await ev(() => window.__game.sim(0.5)); await snap('c-point');
 
+// ---- the mouse on the plate: the left button turns the view, the right one swims to the pointer, both swim where the view points
+{ const G = (fn, a) => ev(fn, a), here = () => G(() => { const g = window.__game; g.cam.ease = null; return { yaw: g.cam.yaw, pitch: g.cam.pitch, x: g.rig.pos.x, y: g.rig.pos.y, z: g.rig.pos.z }; });
+  const reset = () => G(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 4, 72, 0.62 + Math.PI); g.cam.ease = null; g.cam.yaw = 0.62; g.cam.pitch = 0.56; g.run.safe = 1e9; g.sim(0.3); }); // the fish facing away from the viewer, as the view has it
+  const sim = (t) => G((t) => window.__game.sim(t), t), turn = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+  // left: drag, and the view turns; the fish stays where it is
+  await reset(); await page.mouse.move(700, 420); let a = await here(); await page.mouse.down({ button: 'left' }); await page.mouse.move(800, 470, { steps: 10 }); await sim(0.8); let b = await here();
+  const left = { dyaw: +turn(b.yaw, a.yaw).toFixed(2), dpitch: +(b.pitch - a.pitch).toFixed(2), swum: +Math.hypot(b.x - a.x, b.z - a.z).toFixed(2) }; await page.mouse.up({ button: 'left' });
+  // right: hold, and the fish swims to the pointer; the view does not turn
+  await reset(); await page.mouse.move(1150, 300); a = await here(); await page.mouse.down({ button: 'right' }); await sim(0.2);
+  const aim = await G(() => { const g = window.__game, i = g.readInput(); return i.aim ? { x: i.aim.x, z: i.aim.z } : null; }); await sim(1.0); await page.mouse.move(1180, 320, { steps: 4 }); b = await here();
+  const right = { aim: !!aim, toward: aim ? +(((b.x - a.x) * (aim.x - a.x) + (b.z - a.z) * (aim.z - a.z)) / (Math.hypot(b.x - a.x, b.z - a.z) * Math.hypot(aim.x - a.x, aim.z - a.z) || 1)).toFixed(2) : 0, swum: +Math.hypot(b.x - a.x, b.z - a.z).toFixed(2), dyaw: +turn(b.yaw, a.yaw).toFixed(2) }; await page.mouse.up({ button: 'right' });
+  // both: forward, where the view points; the mouse steers it, and tilting the view sends it down or up
+  await reset(); await page.mouse.move(700, 420); a = await here(); await page.mouse.down({ button: 'left' }); await page.mouse.down({ button: 'right' }); await sim(1.0); b = await here();
+  const fwd = (p, q, yaw) => +(((q.x - p.x) * -Math.sin(yaw) + (q.z - p.z) * -Math.cos(yaw)) / (Math.hypot(q.x - p.x, q.z - p.z) || 1)).toFixed(2);
+  const both = { swum: +Math.hypot(b.x - a.x, b.z - a.z).toFixed(2), along: fwd(a, b, a.yaw), level: +(b.y - a.y).toFixed(2) };
+  await page.mouse.move(820, 420, { steps: 10 }); await sim(1.2); let c = await here(); await sim(0.8); let d = await here(); both.dyaw = +turn(c.yaw, a.yaw).toFixed(2); both.steered = fwd(c, d, c.yaw);
+  await page.mouse.move(820, 560, { steps: 10 }); c = await here(); await sim(1.2); d = await here(); both.down = { pitch: +c.pitch.toFixed(2), dy: +(d.y - c.y).toFixed(2) };
+  await page.mouse.move(820, 300, { steps: 10 }); await sim(0.4); c = await here(); await sim(1.2); d = await here(); both.up = { pitch: +c.pitch.toFixed(2), dy: +(d.y - c.y).toFixed(2) };
+  // one of the two let go: it stops going forward, and the view still turns
+  await G(() => { window.__game.cam.pitch = 0.56; }); await page.mouse.up({ button: 'right' }); await sim(1.5); c = await here(); await page.mouse.move(760, 300, { steps: 6 }); await sim(0.6); d = await here();
+  both.after = { swum: +Math.hypot(d.x - c.x, d.z - c.z).toFixed(2), dyaw: +turn(d.yaw, c.yaw).toFixed(2) }; await page.mouse.up({ button: 'left' });
+  const note = await G(() => document.getElementById('keys').textContent);
+  await G(() => { const g = window.__game; g.cam.yaw = 0.62; g.cam.pitch = 0.56; g.run.safe = 0; });
+  check('on the plate the left mouse button turns the view and moves nothing; the right one swims the fish to the pointer and leaves the view alone', Math.abs(left.dyaw + 0.6) < 0.08 && left.dpitch > 0.2 && left.swum < 0.6 && right.aim && right.toward > 0.7 && right.swum > 1.2 && right.dyaw === 0, JSON.stringify({ left, right }));
+  check('both buttons swim it where the view points, level while the view is at rest; the mouse steers it, a view tilted down dives and one tilted up rises; letting one go stops it, and the legend says so',
+    both.swum > 1.8 && both.along > 0.95 && Math.abs(both.level) < 0.15 && Math.abs(both.dyaw + 0.72) < 0.1 && both.steered > 0.9 && both.down.pitch > 1.1 && both.down.dy < -0.4 && both.up.pitch < 0.3 && both.up.dy > 0.3 && both.after.swum < 0.7 && Math.abs(both.after.dyaw) > 0.2 && /both buttons/.test(note) && /left button/.test(note), JSON.stringify(both)); }
+
 // ---- V switches to the adventure camera: it swings in behind the fish, lower, nearer and wider
 await page.keyboard.press('KeyV');
 s = await ev(() => { const g = window.__game; g.sim(2.5); return { mode: g.feel.mode, off: Math.atan2(Math.sin(g.cam.yaw - g.rig.yaw - Math.PI), Math.cos(g.cam.yaw - g.rig.yaw - Math.PI)), pitch: g.cam.pitch, fov: g.camera.fov, legend: document.getElementById('keys').textContent, data: document.getElementById('stage').dataset.mode }; });
