@@ -32,10 +32,10 @@ Nothing slides and nothing hovers. Whatever carries the body has to be seen carr
 
 List what the behaviour can be doing, and give each one a pose that differs in silhouette, not only in a number.
 
-- **A tell before every blow**, at least 0.6 s, that says which blow is coming and where. (Saw cocked to one side: a slash. Nose down overhead: a stoop.)
+- **A tell before every blow**, at least 0.6 s, that says which blow is coming and where. (Saw cocked to one side: a slash. Nose down overhead: a stoop.) Eyes can say where: the Keeper's turn to the point its claw is aimed at for the whole of the wind-up. A tell shows what the behaviour already does and is handed (`act.at`); it never adds to it.
 - **A spent state after every blow**, which is when it can be hurt, and which looks like it. (Teeth dark and saw drooping. Or saw stuck in the bed, tail in the air.) It has to read from the dive's high camera, fifteen metres off, and in the band's own light, not only close up: the Shearer pants, and its breathing holes are on top of its head and lit.
 - **Noticing** is its own pose, before the tell. (The sweep stops; the saw swings to you; the teeth tingle.)
-- Being hit, and being beaten, are poses too. Beaten should show something not seen before. (The crab's legs curl. The sawfish goes belly up, and its face is underneath.)
+- Being hit, and being beaten, are poses too. Beaten should show something not seen before. (The crab's legs curl and its folded tail shows. The sawfish goes belly up, and its face is underneath.) Damage that stays should stay in sight: the Keeper's shell cracks from the socket of each leg it loses, and the Shearer's teeth lie on the bed where they fell.
 - Idle is never still: a sweep, a fidget, a small claw picking at the ground.
 
 ## 5. What can be hit stays simple
@@ -63,7 +63,7 @@ Flat-shaded triangles with a colour at each corner, no textures, no imported mod
 
 ## 8. Budget
 
-One material a creature where it can be done (the Shearer has three: one that bends, one that does not, one for what has come off it). The Keeper was about 700 triangles in 21 pieces and the Shearer 370 in one; redone at the squid's level the Shearer is about 1550 in 37. A keeper, of which there is one, may cost up to about 2500; something there are twenty of may not: a swarm fish stays a single instanced model, and gets its character from how the swarm moves.
+One material a creature where it can be done (the Shearer has three: one that bends, one that does not, one for what has come off it). The Keeper was about 700 triangles in 21 pieces and the Shearer 370 in one; at the squid's level the Keeper is about 2050 in 30 and the Shearer about 1550 in 36. A keeper, of which there is one, may cost up to about 2500; something there are twenty of may not: a swarm fish stays a single instanced model, and gets its character from how the swarm moves.
 
 ## 9. What grows, and what only answers
 
@@ -80,7 +80,7 @@ The library shows the answer as a second pose without being asked. None of this 
 
 | Creature | Real animal | Trait | State |
 |---|---|---|---|
-| The Keeper | a crab | one great claw | Done: walks, leans, fights (four blows and a dig, legs that come off), fifteen poses |
+| The Keeper | a crab (its eyes, mouth and legs read from the blue crab, *Callinectes sapidus*; its dark-tipped unequal claws from the stone crab, *Menippe mercenaria*) | one great claw | Done, and brought up to the squid's level: walks, leans, fights (four blows and a dig, legs that come off). Eyes on stalks that turn to where the blow will land; mouth doors and feelers that are never still; a numb leg that lies low and jerks; a crack in the shell for each leg lost, and a rage from two. Fourteen poses in the library. Only seen in stills |
 | The Shearer | a sawfish, of the family Pristidae (its count of teeth and its tail are the largetooth's, *Pristis pristis*) | the saw, with lit teeth | Done, and redone at the squid's level: bends, fights (line, cut, swipes, teeth that go, a saw that snaps). A rigid saw of thirty-two separate teeth that fly off and lie on the bed; a tail that is a strand; wings that ripple and fold; gills that heave and breathing holes that light when it is spent, which is the tell. Fourteen poses in the library. Only seen in stills |
 | The Lamplighter | an anglerfish | to be found | To do |
 | The Warden | a moray | to be found | To do |

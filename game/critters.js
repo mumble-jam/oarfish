@@ -163,9 +163,13 @@ export function tailPiece(pal) { // pal: the oarfish's own palette
 const grey = (k) => dim('#ffffff', k);
 
 // ---------------------------------------------------------------- the Keeper: a great crab under a dome of plates
-// The shell, with its face, is one model. Its eight legs and two claws are separate pieces, each a rigid length modelled along
-// +z from the joint it hangs on, and KEEPER says where they join and how long they are: crab.js hangs them on and legs.js walks them.
+// The shell, with its face, is one model. Everything that works is a piece of its own, and KEEPER says where each joins: eight legs and two claws,
+// each a rigid length modelled along +z from the joint it hangs on (crab.js hangs them on and legs.js walks them); two eyes on stalks, which turn
+// to what it is looking at; the two doors of its mouth; four feelers, which trail (strands.js); and a crack in the shell for each leg, shown when
+// that leg has been torn off.
 const side4 = (fn) => [1, -1].flatMap((s) => [0, 1, 2, 3].map((i) => fn(s, i)));
+const KEEPER_DOME = [[0.12, 1.5], [0.26, 1.66], [0.62, 1.52], [0.95, 1.24], [1.22, 0.86], [1.42, 0.44]], KEEPER_N = 12, KEEPER_SQUASH = 0.92; // the dome in rings, from its lip up: height, radius
+const feeler = (side, long, root, way, n) => ({ side, long, root, way, cuts: Array.from({ length: n + 1 }, (_, i) => (long * i) / n) });
 export const KEEPER = {
   ride: 0.44, // how far the shell's origin is carried over the ground its feet are on
   // front to back down each side. hip: where the leg leaves the shell; rest: where its foot stands, on the ground, as the body sees it
@@ -179,43 +183,112 @@ export const KEEPER = {
     { side: -1, big: true, shoulder: [-1.02, 0.32, 1.02], l1: 1.05, l2: 0.95, hinge: [0, 0.16, 0.9], span: 0.95, stout: 1.5 },
     { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 0.78, l2: 0.62, hinge: [0, 0.07, 0.6], span: 0.6, stout: 0.72 },
   ],
+  eyes: [1, -1].map((side) => ({ side, socket: [side * 0.37, 0.4, 1.47] })), stalk: 0.56, // where each stalk stands in its socket, and how far up it the eye is
+  jaws: [1, -1].map((side) => ({ side, hinge: [side * 0.33, 0.21, 1.645] })), // the two doors of its mouth, each hinged at its outer edge
+  // its feelers: a long one outside each eye, and a short one between them that flicks. way: which way each points when nothing moves it
+  feelers: [1, -1].flatMap((side) => [feeler(side, 1.0, [side * 0.6, 0.36, 1.5], [side * 0.5, 0.42, 0.76], 5), feeler(side, 0.4, [side * 0.13, 0.4, 1.6], [side * 0.14, 0.72, 0.68], 3)]),
 };
+const domeAt = (phi, y) => { let i = 0; while (i < KEEPER_DOME.length - 2 && KEEPER_DOME[i + 1][0] < y) i++; const a = KEEPER_DOME[i], b = KEEPER_DOME[i + 1], r = a[1] + (b[1] - a[1]) * Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0]))); return [Math.sin(phi) * r, y, Math.cos(phi) * r * KEEPER_SQUASH]; };
 export function keeper(pal) {
-  const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8);
-  const rings = [[0.2, 1.62], [0.62, 1.5], [1.1, 1.05], [1.42, 0.45]].map(([y, r]) => ringY(y, r, 10, { squash: 0.92 }));
-  m.skin(rings, (i, k) => (i === 0 ? pale : (k + i) % 2 ? tone : shade)).cap(rings[3], [0, 1, 0], [pale, shade, shade], 0.14).cap(rings[0], [0, -1, 0], deep);
-  for (let i = 0; i < 10; i += 2) { const p = rings[2][i]; m.limb([p[0] * 0.95, p[1] - 0.05, p[2] * 0.95], [p[0] * 1.28, p[1] + 0.3, p[2] * 1.28], 0.13, 0.01, 4, [shade, pale]); } // knobs where the plates meet
-  m.limb([0, 1.5, 0], [0, 2.25, -0.2], 0.24, 0.02, 5, [tone, pale]);
-  m.add(new THREE.BoxGeometry(1.3, 0.34, 0.5), new THREE.Matrix4().makeTranslation(0, 0.2, 1.38), deep); // the face under the shell's lip
+  const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8), N = KEEPER_N, rings = KEEPER_DOME.map(([y, r]) => ringY(y, r, N, { squash: KEEPER_SQUASH }));
+  // the dome: a lip turned under, a pale band, and then plates, each raised a little in its middle, light and dark by turns
+  m.skin([rings[0], rings[1], rings[2]], (i, k) => (i === 0 ? tint(pale, deep, 0.35) : k % 2 ? pale : tint(pale, tone, 0.2)));
+  for (let i = 2; i < 4; i++) for (let k = 0; k < N; k++) { const a = rings[i][k], b = rings[i][(k + 1) % N], c = rings[i + 1][(k + 1) % N], d = rings[i + 1][k], mid = [0, 1, 2].map((j) => (a[j] + b[j] + c[j] + d[j]) / 4), l = Math.hypot(mid[0], mid[1] - 0.3, mid[2]);
+    const boss = [mid[0] + (mid[0] / l) * 0.07, mid[1] + ((mid[1] - 0.3) / l) * 0.07, mid[2] + (mid[2] / l) * 0.07], col = (k + i) % 2 ? tone : shade, lit = tint(col, '#ffffff', 0.22), from = [0, 0.3, 0];
+    m.out(a, b, boss, from, [col, col, lit]).out(b, c, boss, from, [col, col, lit]).out(c, d, boss, from, [col, col, lit]).out(d, a, boss, from, [col, col, lit]); }
+  m.skin([rings[4], rings[5]], (i, k) => (k % 2 ? tone : shade)).cap(rings[5], [0, 1, 0], [pale, shade, shade], 0.14);
+  for (let k = 0; k < N; k += 2) { const p = rings[3][k]; m.limb([p[0] * 0.95, p[1] - 0.05, p[2] * 0.95], [p[0] * 1.3, p[1] + 0.32, p[2] * 1.3], 0.14, 0.01, 4, [shade, pale]); } // a spine where four plates meet,
+  for (let k = 1; k < N; k += 2) { const p = rings[2][k]; m.limb([p[0] * 0.97, p[1], p[2] * 0.97], [p[0] * 1.1, p[1] + 0.13, p[2] * 1.1], 0.09, 0.012, 4, [shade, pale]); } // a stud between them lower down,
+  m.limb([0, 1.5, 0], [0, 1.66, -0.03], 0.3, 0.24, 6, [shade, tone]).limb([0, 1.6, -0.02], [0, 2.25, -0.2], 0.24, 0.02, 5, [tone, pale]); // and the horn on top, in its collar
+  for (const s of [1, -1]) { for (const deg of [22, 38, 54, 70]) { const a = (s * deg * Math.PI) / 180, p = domeAt(a, 0.26); m.limb([p[0] * 0.97, p[1], p[2] * 0.97], [p[0] * 1.09, p[1] + 0.04, p[2] * 1.1], 0.075, 0.008, 3, [pale, CREAM]); } // teeth along the front of the lip, each side
+    for (const x of [0.07, 0.2]) m.limb([s * x, 0.3, 1.5], [s * x * 1.1, 0.33, 1.62], 0.05, 0.006, 3, [pale, CREAM]); } // and two small ones each side between the eyes
+  // underneath: the breastplate, and the tail folded forward under it (which is all the tail a crab has)
+  const under = ringY(-0.02, 1.2, N, { squash: KEEPER_SQUASH }); m.skin([rings[0], under], deep).cap(under, [0, -1, 0], [tint(pale, deep, 0.3), deep, deep], 0.06);
+  for (let j = 0; j < 4; j++) { const z0 = -1.02 + j * 0.38, z1 = z0 + 0.38, w0 = 0.44 - j * 0.09, w1 = 0.44 - (j + 1) * 0.09, y = -0.1; m.quad([-w0, y, z0], [w0, y, z0], [w1, y, z1], [-w1, y, z1], j % 2 ? [pale, pale, tint(pale, deep, 0.3)] : [tint(pale, tone, 0.35), tint(pale, tone, 0.35), tint(pale, deep, 0.4)]); }
+  // the face under the shell's lip: the dark of it, the socket each eye stands in, and the red of the mouth behind its doors
+  m.add(new THREE.BoxGeometry(1.3, 0.34, 0.5), new THREE.Matrix4().makeTranslation(0, 0.2, 1.38), deep);
+  m.quad([-0.3, 0.05, 1.635], [0.3, 0.05, 1.635], [0.26, 0.34, 1.635], [-0.26, 0.34, 1.635], ['#7a2f45', '#7a2f45', '#3d1830']);
   both((s) => {
-    m.limb([s * 0.32, 0.33, 1.45], [s * 0.44, 0.74, 1.74], 0.08, 0.06, 4, dark).eye([s * 0.44, 0.8, 1.78], [s * 0.35, 0.3, 1], 0.14, { iris: pal.eye, glow: true });
-    for (let i = 0; i < 2; i++) m.limb([s * 0.14, 0.12, 1.6], [s * (0.2 + i * 0.16), -0.05, 1.95 - i * 0.1], 0.05, 0.02, 3, pale); // mouth parts
-    for (const leg of KEEPER.legs) if (leg.side === s) m.limb([leg.hip[0] * 0.8, 0.3, leg.hip[2] * 0.9], leg.hip, 0.2, 0.16, 4, deep); // and one for each leg
+    const e = KEEPER.eyes[s > 0 ? 0 : 1].socket; m.limb([e[0] * 0.9, e[1] - 0.12, e[2] - 0.14], [e[0], e[1] + 0.02, e[2]], 0.13, 0.15, 6, [deep, dark]);
+    for (const leg of KEEPER.legs) if (leg.side === s) m.limb([leg.hip[0] * 0.8, 0.3, leg.hip[2] * 0.9], leg.hip, 0.2, 0.17, 5, deep); // and a socket for each leg
   });
   for (const c of KEEPER.claws) m.limb([c.shoulder[0] * 0.76, c.shoulder[1], c.shoulder[2] - 0.1], c.shoulder, 0.24 * c.stout, 0.2 * c.stout, 5, deep); // the socket each claw turns in
   return m.geometry();
 }
-// the two lengths of a walking leg: from the shell up to the knee, and from the knee down to a point
+// The two lengths of a walking leg. The upper is the thigh, from the joint at the shell to the knee, with a crest of small spines; the lower is the three
+// short lengths a crab's leg ends in, made as one: a wrist, a shin, and after a pale joint the last, which comes to a point.
 export function keeperLeg(pal) {
   const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.legs[0];
-  const upper = mesher().limb([0, 0, 0], [0, 0, l1], 0.2, 0.15, 4, [dark, deep]), knee = upper.last;
+  const upper = mesher().limb([0, 0, -0.1], [0, 0, 0.2], 0.21, 0.2, 5, deep).limb([0, 0.01, 0.16], [0, 0.015, l1 - 0.1], 0.185, 0.15, 5, [dark, deep]).limb([0, 0.015, l1 - 0.14], [0, 0, l1], 0.165, 0.17, 5, [deep, dark]), knee = upper.last;
   upper.cap(knee, [0, 0, 1], pale, 0.16); // the knuckle of the knee
-  const lower = mesher().limb([0, 0, -0.05], [0, 0, l2 * 0.6], 0.165, 0.11, 4, [deep, dark]).limb([0, 0, l2 * 0.6], [0, 0, l2], 0.11, 0.015, 4, [dark, pale]);
+  for (const z of [0.42, 0.72, 1.0]) upper.limb([0, 0.14, z], [0, 0.29, z + 0.1], 0.05, 0.005, 3, [dark, pale]);
+  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3], [0, 0.05, 1.0], 0.14, 0.1, 5, [dark, deep])
+    .limb([0, 0.05, 0.95], [0, 0.05, 1.07], 0.118, 0.11, 5, pale).limb([0, 0.05, 1.04], [0, 0, l2], 0.095, 0.014, 5, [dark, pale]);
   return { upper: upper.geometry(), lower: lower.geometry() };
 }
-// the three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge
+// The three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge, whose pin
+// shows on both sides of the hand. The crusher's fingers carry blunt knobs, big toward the hinge; the cutter's a row of fine sharp teeth. Both are tipped dark.
 export function keeperClaw(pal, c) {
-  const { pale, dark, deep } = pal, { l1, l2, span: f, stout: w } = c;
-  const arm = mesher().limb([0, 0, 0], [0, 0, l1], 0.2 * w, 0.18 * w, 5, [dark, deep]);
-  const hand = mesher().limb([0, 0, -0.05], [0, 0, l2], 0.2 * w, 0.31 * w, 5, [deep, dark]);
+  const { pale, dark, deep } = pal, { l1, l2, span: f, stout: w, hinge } = c;
+  const arm = mesher().limb([0, 0, -0.08], [0, 0, 0.18], 0.23 * w, 0.215 * w, 5, deep).limb([0, 0, 0.14], [0, 0, l1 - 0.08], 0.2 * w, 0.175 * w, 5, [dark, deep]).limb([0, 0, l1 - 0.12], [0, 0, l1], 0.19 * w, 0.2 * w, 5, [deep, dark]);
+  arm.cap(arm.last, [0, 0, 1], pale, 0.1 * w); for (const z of [0.4, 0.7]) arm.limb([0, 0.16 * w, z * l1], [0, 0.3 * w, z * l1 + 0.08], 0.05 * w, 0.005, 3, [dark, pale]);
+  const hand = mesher().limb([0, 0, -0.05], [0, 0.01, l2 * 0.3], 0.2 * w, 0.215 * w, 5, [deep, dark]).limb([0, 0.01, l2 * 0.26], [0, 0, l2], 0.215 * w, 0.31 * w, 6, [dark, deep]);
   const low = [[0, -0.1 * w, l2 - 0.06], [0, -0.3 * w, l2 + f * 0.92]], up = [[0, 0, -0.05], [0, 0.07 * w, f]]; // the lower finger, in the hand's space; the upper, in its own
-  hand.cap(hand.last, [0, 0, 1], dark, 0.1 * w).limb(low[0], low[1], 0.21 * w, 0.03, 5, [dark, pale]);
-  const top = mesher().limb(up[0], up[1], 0.27 * w, 0.035, 5, [dark, pale]);
-  if (c.big) for (const t of [0.3, 0.5, 0.7]) { // the crusher's teeth: blunt knobs down the inside of both fingers
-    const on = (m, [p, q], r0, r1, sign) => { const y = p[1] + (q[1] - p[1]) * t, z = p[2] + (q[2] - p[2]) * t, r = r0 + (r1 - r0) * t; m.limb([0, y + sign * r * 0.55, z], [0, y + sign * (r + 0.1), z + 0.02], 0.1, 0.045, 4, pale); };
-    on(hand, low, 0.21 * w, 0.03, 1); on(top, up, 0.27 * w, 0.035, -1);
-  }
+  const at = ([p, q], t) => [0, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t], finger = (m, line, r0, r1) => { const r = r0 + (r1 - r0) * 0.78; m.limb(line[0], at(line, 0.78), r0, r, 5, [dark, pale]).limb(at(line, 0.78), line[1], r, r1, 5, [pale, deep]); };
+  hand.cap(hand.last, [0, 0, 1], dark, 0.1 * w); finger(hand, low, 0.21 * w, 0.03);
+  hand.limb([-0.33 * w, hinge[1], hinge[2]], [0.33 * w, hinge[1], hinge[2]], 0.085 * w, 0.085 * w, 5, pale); // the hinge pin
+  for (const z of [0.5, 0.72]) hand.limb([0, 0.27 * w, z * l2], [0, 0.4 * w, z * l2 + 0.05], 0.07 * w, 0.01, 4, [dark, pale]); // knuckles along the top of the hand
+  const top = mesher(); finger(top, up, 0.27 * w, 0.035);
+  const teeth = c.big ? [[0.22, 0.13, 0.12], [0.4, 0.11, 0.1], [0.57, 0.09, 0.09], [0.72, 0.07, 0.07]] : [[0.2, 0.03, 0.05], [0.34, 0.03, 0.05], [0.48, 0.028, 0.045], [0.62, 0.025, 0.04], [0.76, 0.02, 0.035]]; // how far along, how thick, how long
+  for (const [t, r, l] of teeth) { const on = (m, line, r0, r1, sign) => { const p = at(line, t), rad = r0 + (r1 - r0) * t; m.limb([0, p[1] + sign * rad * 0.55, p[2]], [0, p[1] + sign * (rad + l), p[2] + 0.02], r, c.big ? r * 0.45 : 0.004, c.big ? 4 : 3, pale); };
+    on(hand, low, 0.21 * w, 0.03, 1); on(top, up, 0.27 * w, 0.035, -1); }
   return { arm: arm.geometry(), hand: hand.geometry(), finger: top.geometry() };
+}
+// An eye, in two pieces. The stalk stands up (+y) from its socket. The eye itself sits on the stalk's top and turns there: it is modelled about its own middle,
+// looking along +z, with the lit ring of it set high on its front, so that from above it is seen which way it looks.
+export function keeperEye(pal) {
+  const { pale, dark, deep } = pal, L = KEEPER.stalk, top = tint(dark, pale, 0.3);
+  const stalk = mesher().limb([0, -0.08, 0], [0, L - 0.16, 0], 0.085, 0.06, 5, [deep, dark]).limb([0, L - 0.2, 0], [0, L - 0.1, 0], 0.085, 0.115, 5, pale);
+  const m = mesher(), ball = [[-0.19, 0.06], [-0.1, 0.17], [0.03, 0.205], [0.13, 0.16]].map(([z, r]) => ringZ(z, r, r, r, 0, 8));
+  m.skin(ball, shaded(top, dark, deep)).cap(ball[0], [0, 0, -1], dark, 0.03).cap(ball[3], [0, 0, 1], deep, 0.04);
+  const n = new THREE.Vector3(0, 0.56, 0.83).normalize(); m.eye([n.x * 0.165, n.y * 0.165, n.z * 0.165], [n.x, n.y, n.z], 0.14, { iris: pal.eye, glow: true });
+  return { stalk: stalk.geometry(), ball: m.geometry() };
+}
+// One door of the mouth (the third maxilliped of a real crab, which shuts over the rest like a door): hinged about y at its outer edge, the plate toward -x, with the
+// small feeler such a door carries. The door on the other side is this one turned over (scale.x = -1).
+export function keeperJaw(pal) {
+  const m = mesher(), { pale, tone, dark } = pal, edge = tint(pale, tone, 0.35), a = [0, 0.16, 0], b = [0, -0.16, 0], c = [-0.31, -0.19, 0.015], d = [-0.31, 0.11, 0.015], mid = [-0.16, -0.02, 0.075];
+  for (const [p, q] of [[a, b], [b, c], [c, d], [d, a]]) m.out(p, q, mid, [-0.15, 0, -0.5], [edge, edge, pale]);
+  m.quad(a, b, [c[0], c[1], -0.02], [d[0], d[1], -0.02], dark).limb([-0.27, 0.1, 0.03], [-0.2, 0.3, 0.1], 0.04, 0.012, 3, [pale, dark]);
+  return m.geometry();
+}
+// a feeler (def: its entry in KEEPER.feelers): straight along +z, three-sided, thinning to nothing, ringed light and dark
+export function keeperFeeler(pal, def) {
+  const m = mesher(), { pale, dark } = pal, n = def.cuts.length - 1, r0 = def.long > 0.6 ? 0.04 : 0.034;
+  const ring = (z, i) => { const r = i === n ? 0.003 : r0 * (1 - 0.72 * (i / n)); return [[-r, -0.5 * r, z], [0, r, z], [r, -0.5 * r, z]]; };
+  m.skin(def.cuts.map((z, i) => ring(i === 0 ? -0.04 : z, i)), (i) => (i % 2 ? pale : tint(dark, pale, 0.25)));
+  return m.geometry();
+}
+// What shows when leg i has been torn off: the stump in its socket, and a crack that runs from there up the seams between the plates, lit in its depth.
+// It lies along the edges the plates meet at, which are the only lines on the dome that are not raised.
+export function keeperCrack(pal, i) {
+  const m = mesher(), { tone, pale, deep } = pal, leg = KEEPER.legs[i], hot = pal.crack || '#ff4f7b', N = KEEPER_N, step = (Math.PI * 2) / N, s = leg.side, turn = s * (i % 2 ? -1 : 1);
+  const k0 = Math.round(Math.atan2(leg.hip[0], leg.hip[2]) / step), node = (ring, k) => domeAt(k * step, KEEPER_DOME[ring][0]);
+  const corners = [domeAt(k0 * step, 0.16), node(1, k0), node(2, k0), node(2, k0 + turn), node(3, k0 + turn), node(3, k0 + (i % 2 ? 2 * turn : 0)), node(4, k0 + (i % 2 ? 2 * turn : 0))];
+  // from corner to corner along the seams, but not straight: each run is broken twice, to one side and the other
+  const out = (p, lift) => { const l = Math.hypot(p[0], p[1] - 0.3, p[2]) || 1; return [p[0] + (p[0] / l) * lift, p[1] + ((p[1] - 0.3) / l) * lift, p[2] + (p[2] / l) * lift]; };
+  const across = (a, b) => new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).cross(new THREE.Vector3(a[0], a[1] - 0.3, a[2]).normalize()).normalize();
+  const path = [corners[0]]; for (let j = 0; j + 1 < corners.length; j++) { const a = corners[j], b = corners[j + 1], sd = across(a, b); for (const [t, o] of [[0.36, 0.07], [0.68, -0.06], [1, 0]]) { const q = [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * t); path.push([q[0] + sd.x * o, q[1] + sd.y * o, q[2] + sd.z * o]); } }
+  const n = path.length - 1, wide = (j) => 0.19 * (1 - 0.78 * (j / n)) * (j === 0 ? 0.7 : 1); // (wide enough to be seen from the dive's camera, fifteen metres off)
+  const strip = (k, lift, colour, glow) => { for (let j = 0; j < n; j++) { const a = out(path[j], lift), b = out(path[j + 1], lift), sd = across(a, b), q = (p, w, t) => [p[0] + sd.x * w * t, p[1] + sd.y * w * t, p[2] + sd.z * w * t], w0 = wide(j) * k, w1 = wide(j + 1) * k;
+    m.tri(q(a, w0, 1), q(a, w0, -1), q(b, w1, -1), colour, glow).tri(q(a, w0, 1), q(b, w1, -1), q(b, w1, 1), colour, glow); } };
+  strip(1, 0.022, deep, false); strip(0.5, 0.034, [hot, hot, tint(hot, '#ffffff', 0.35)], true);
+  { const a = path[5], b = node(2, k0 - turn), sd = across(a, b), q = [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * 0.55), o = out(a, 0.024), e = out(q, 0.024); m.tri([o[0] + sd.x * 0.05, o[1] + sd.y * 0.05, o[2] + sd.z * 0.05], [o[0] - sd.x * 0.05, o[1] - sd.y * 0.05, o[2] - sd.z * 0.05], e, [deep, deep, hot]); } // a short one branching off it
+  // the stump: pale where it tore, dark in the middle, with a splinter or two
+  const h = leg.hip, d = new THREE.Vector3(h[0] * 0.2, 0, h[2] * 0.1).normalize(), tipOf = (l) => [h[0] + d.x * l, h[1] + d.y * l, h[2] + d.z * l];
+  m.limb(tipOf(-0.02), tipOf(0.12), 0.17, 0.13, 5, [pale, tint(pale, tone, 0.5)]).cap(m.last, [d.x, d.y, d.z], [deep, hot, hot], -0.05, true);
+  m.limb(tipOf(0.08), [h[0] + d.x * 0.3, h[1] + 0.1, h[2] + d.z * 0.3 + 0.05], 0.04, 0.004, 3, [pale, deep]).limb(tipOf(0.08), [h[0] + d.x * 0.26, h[1] - 0.08, h[2] + d.z * 0.26 - 0.06], 0.035, 0.004, 3, [pale, deep]);
+  return m.geometry();
 }
 
 // ---------------------------------------------------------------- the Shearer: a sawfish, the saw toothed in the district's colour

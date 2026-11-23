@@ -35,9 +35,9 @@ const PLAY = { d: 12.7, h: 8, fov: 30 }; // the dive's own camera: cam.dist 15 a
 // ---------------------------------------------------------------- on the stand
 // when to look at each pose, in seconds from the moment it is put on the stand (a pose is a movement, and some are a blow played over and over)
 const WHEN = {
-  shearer: { idle: [2, 3.4, 4.8], sense: [1, 1.5], aim: [0.7, 1.3, 2], charge: [3, 3.55, 4.4], pin: [3.7, 4.1, 5], tired: [2, 2.3, 2.6], stuck: [1.5, 1.7, 1.9], jammed: [1.5, 1.7, 1.9], swipe: [2, 2.3, 2.9], stun: [1, 1.15], gapped: [0.2, 0.5, 3.2], snapped: [0.2, 0.5, 3.2], down: [3, 3.5] },
-  keeper: { idle: [2, 3], walk: [2, 2.3, 2.6], wary: [2, 2.8], snap: [3.5, 4.1], sweep: [3.2, 3.45, 4], jab: [1.9, 2.1, 2.5], tuck: [1.5], charge: [1.5, 1.7], dig: [0.6, 1.2, 2.5], feed: [1.5, 1.65, 1.8], stun: [1, 1.2], lame: [2, 3], down: [3] } }[id];
-const SIDE = { shearer: [1.05, 0.2, 15, [0, 0, 0.2]], keeper: [0.75, 0.3, 15, [0, 0.3, 0]] }[id], HIGH = { shearer: [0.9, 0.56, 16, [0, 0, 0.2]], keeper: [0.75, 0.56, 16, [0, 0.3, 0]] }[id];
+  shearer: { idle: [2, 3.4, 4.8], sense: [1, 1.5], aim: [0.7, 1.3, 2], charge: [3, 3.55, 4.4], pin: [3.7, 4.1, 5], tired: [2, 2.3, 2.6], stuck: [1.5, 1.7, 1.9], jammed: [1.5, 1.7, 1.9], swipe: [2, 2.3, 2.9], stun: [1, 1.15], tooth: [0.8, 1.05, 2.6], gapped: [0.2, 0.5, 3.2], snapped: [0.2, 0.5, 3.2], down: [3, 3.5] },
+  keeper: { idle: [2, 3], walk: [2, 2.3, 2.6], wary: [2, 2.8], snap: [3.5, 4.1], sweep: [3.2, 3.45, 4], jab: [1.9, 2.1, 2.5], tuck: [1.5], charge: [1.5, 1.7], dig: [0.6, 1.2, 2.5], feed: [1.5, 1.65, 1.8], stun: [1, 1.2], numb: [2, 2.35], lame: [2, 3], down: [3] } }[id];
+const SIDE = { shearer: [1.05, 0.2, 15, [0, 0, 0.2]], keeper: [0.75, 0.3, 12.5, [0, 0.4, 0]] }[id], HIGH = { shearer: [0.9, 0.56, 16, [0, 0, 0.2]], keeper: [0.75, 0.56, 13.5, [0, 0.4, 0]] }[id];
 if (want('lib') || want('close')) {
   await page.addStyleTag({ content: '#library > * { display: none !important; }' });
   await page.evaluate((id) => { const g = window.__game; g.setPaused(true); g.openLibrary(id); window.__hold = true; g.lib.state.turn = false; }, id);
@@ -72,14 +72,14 @@ if (want('dive')) {
   // let it run until the keeper is in `state` and at least `k` of the way through it (or `secs` have gone by)
   const until = (state, k = 0, secs = 9) => page.evaluate(`(() => { const g = window.__game, S = g.guard.state; let t = 0; while (t < ${secs} && !(S.state === ${JSON.stringify(state)} && (S.T > 0 ? 1 - S.t / S.T : 1) >= ${k})) { g.sim(1 / 60, ${none}); t += 1 / 60; } return S.state; })()`);
   // The two views: from the dive's camera and from nearer, looking at a point between the keeper and the fish's head (mix 0: the keeper itself). `a` is the way
-  // round it is first looked at from (0: from out on the shelf, the rift behind it); if a column or a lintel stands in the way it is looked at from the next way
+  // round it is first looked at from (0: from out on the shelf, the rift behind it; with `front`, 0 is from straight ahead of the keeper, where its face is); if a column or a lintel stands in the way it is looked at from the next way
   // round that is clear, and a strip of moments keeps the way its first picture found (a new stage begins again).
-  const look = (name, { mix = 0.35, a = 0.5, near = [8.2, 3.6], lift = 0 } = {}) => page.evaluate(([mix, a, near, lift, P]) => { const g = window.__game, G = g.guard, w = g.world, r = w.rift, base = Math.atan2(-r.nx, -r.nz), p = G.pos, f = g.rig.pos, q = p.clone(), from = p.clone(), to = p.clone();
+  const look = (name, { mix = 0.35, a = 0.5, near = [8.2, 3.6], lift = 0, front = false } = {}) => page.evaluate(([mix, a, near, lift, P, front]) => { const g = window.__game, G = g.guard, w = g.world, r = w.rift, base = front ? G.mesh.rotation.y : Math.atan2(-r.nx, -r.nz), p = G.pos, f = g.rig.pos, q = p.clone(), from = p.clone(), to = p.clone();
     if (Math.hypot(f.x - p.x, f.z - p.z) > 9.5) mix = 0; // the fish is not beside it: look at the keeper
     const x = p.x + (f.x - p.x) * mix, z = p.z + (f.z - p.z) * mix, y = Math.max(p.y + (f.y - p.y) * mix - 0.4, Math.max(w.height(x, z), r.ledgeY ?? -1e9)) + lift;
     const open = (ang) => { from.set(x + Math.sin(ang) * P.d, y + P.h, z + Math.cos(ang) * P.d); for (const end of [to.set(x, y, z), p, f]) for (let k = 0.06; k < 0.95; k += 0.04) { q.lerpVectors(from, end, k); if (w.inStone(q, 0.5, 1.0)) return false; } return true; };
     const first = window.__lookA ?? base + a; let ang = first; for (const t of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, 3.14]) if (open(first + t)) { ang = first + t; break; } window.__lookA = ang;
-    window.__views = { play: [[x + Math.sin(ang) * P.d, y + P.h, z + Math.cos(ang) * P.d], [x, y, z], P.fov], near: [[p.x + Math.sin(ang) * near[0], p.y + near[1], p.z + Math.cos(ang) * near[0]], [p.x, p.y - 0.1, p.z], 34] }; }, [mix, a, near, lift, PLAY])
+    window.__views = { play: [[x + Math.sin(ang) * P.d, y + P.h, z + Math.cos(ang) * P.d], [x, y, z], P.fov], near: [[p.x + Math.sin(ang) * near[0], p.y + near[1], p.z + Math.cos(ang) * near[0]], [p.x, p.y - 0.1, p.z], 34] }; }, [mix, a, near, lift, PLAY, front])
     .then(async () => { for (const v of ['play', 'near']) { await page.evaluate((v) => { const g = window.__game, [from, to, fov] = window.__views[v]; g.camera.fov = fov; g.camera.updateProjectionMatrix(); g.camera.position.set(...from); g.camera.lookAt(...to); }, v); await shot(`dive-${name}-${v}`); } console.log('dive', name, await page.evaluate(() => { const S = window.__game.guard.state; return `${S.state}${S.stuck ? '!' : ''} hp ${S.hp}`; })); });
   const again = () => page.evaluate(() => { window.__lookA = undefined; });
 
@@ -101,8 +101,8 @@ if (want('dive')) {
     await until('aim', 0.62); await look('aim'); await until('aim', 0.95); await look('aimed');
     await until('charge', 0.2); await look('slash'); await until('charge', 0.6); await look('slash2');
     await until('tired', 0.3); await safe(); await again();
-    // (for the pictures of it spent and hurt the fish is brought round beside it, on the side they are taken from: nothing can bite it meanwhile)
-    await page.evaluate((a) => { const g = window.__game, G = g.guard, r = g.world.rift, yaw = G.yaw, ang = Math.atan2(-r.nx, -r.nz) + a, lx = Math.cos(yaw), lz = -Math.sin(yaw), s = lx * Math.sin(ang) + lz * Math.cos(ang) >= 0 ? 1 : -1;
+    // (for the pictures of it spent and hurt the fish is brought round beside it, on the side away from where they are taken from, so that what falls from the saw is not hidden: nothing can bite it meanwhile)
+    await page.evaluate((a) => { const g = window.__game, G = g.guard, r = g.world.rift, yaw = G.yaw, ang = Math.atan2(-r.nx, -r.nz) + a, lx = Math.cos(yaw), lz = -Math.sin(yaw), s = lx * Math.sin(ang) + lz * Math.cos(ang) >= 0 ? -1 : 1;
       g.rig.reset(g.rig.pos.clone().set(G.pos.x + lx * s * 3.6 + Math.sin(yaw) * 2.2, G.pos.y - 0.5, G.pos.z + lz * s * 3.6 + Math.cos(yaw) * 2.2), yaw); g.run.hush = 1e9; }, SIDE_ON.a); await sim(0.3);
     await look('spent-a', SIDE_ON); await sim(0.3); await look('spent-b', SIDE_ON); await sim(0.3); await look('spent-c', SIDE_ON);
     // hurt: rammed in the flank while it is spent, a row of teeth goes; and again; then the saw snapped, and it is beaten
@@ -133,10 +133,10 @@ if (want('dive')) {
     const ready = (o = {}) => page.evaluate((o) => { const g = window.__game, G = g.guard, S = G.state; window.__lookA = undefined; G.debug.set('stalk'); Object.assign(S, { cool: 0, stun: 0, jabT: 9, chargeT: 9, digT: 9, last: '' }, o); g.run.hush = 1e9; g.run.segs = 16; g.buildFish(16); }, o);
     const lie = (far, side = 0) => page.evaluate(([far, side]) => { const g = window.__game, G = g.guard, yaw = G.mesh.rotation.y + side * 1.1, fx = Math.sin(yaw), fz = Math.cos(yaw), half = g.rig.length / 2, x = G.pos.x + fx * far + fz * half, z = G.pos.z + fz * far - fx * half;
       g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), yaw + Math.PI / 2); }, [far, side]);
-    const V = { mix: 0.18, a: 3.4, near: [9.5, 4.2] }; // from the rift's side of it
+    const V = { mix: 0.18, a: 0.55, front: true, near: [9.5, 4.2] }; // from ahead of it and a little to its left, where its face can be seen
     const home = () => page.evaluate(() => { const g = window.__game, G = g.guard, r = g.world.rift, wx = r.x - r.nx * 24, wz = r.z - r.nz * 24; G.pos.set(wx + Math.sin(2.7) * 6, 0, wz + Math.cos(2.7) * 6); G.pos.y = g.world.height(G.pos.x, G.pos.z) + 0.9; G.state.ang = 2.7; }); // back to the same place on its ground
     await page.evaluate(() => { const g = window.__game, G = g.guard, r = g.world.rift, S = G.state; S.ang = 2.7; const wx = r.x - r.nx * 24, wz = r.z - r.nz * 24; G.pos.set(wx + Math.sin(S.ang) * 8.6, 0, wz + Math.cos(S.ang) * 8.6); G.pos.y = g.world.height(G.pos.x, G.pos.z) + 0.9; });
-    await fish(34); await sim(3); await look('walk', { ...V, mix: 0 });
+    await fish(34); await sim(3); await look('walk', { ...V, mix: 0, a: 0.9 });
     await home(); await page.evaluate(() => { Object.assign(window.__game.guard.state, { cool: 99, chargeT: 99 }); }); await fish(7); await sim(2); await again(); await look('wary', V);
     await fish(9); await sim(0.6);
     await ready(); await lie(3.6); await until('slam', 0.45); await look('slam-follow', V); await until('slam', 0.9); await look('slam-aimed', V); await until('stuck', 0.15, 3); await look('stuck', V);
@@ -144,9 +144,9 @@ if (want('dive')) {
     await home(); await ready({ jabT: 0 }); await lie(1.9, 1); await until('jab', 0.7); await look('jab', V); await until('rest', 0.1, 3); await look('jabbed', V);
     await home(); await ready({ chargeT: 0 }); await lie(8.5); await until('charge', 0.7); await look('tuck', V); await until('run', 0.3, 3); await look('run', V);
     // open, and what a ram does to a leg: numb, then off; two off and it rages
-    await home(); await ready(); await lie(9); await sim(0.3); await page.evaluate(() => { const G = window.__game.guard; G.debug.set('rest', 9); G.debug.numb(2); }); await sim(0.5); await look('numb-a', { ...V, a: 2.2 }); await sim(0.3); await look('numb-b', { ...V, a: 2.2 });
-    await page.evaluate(() => { const G = window.__game.guard; G.debug.tear(2, false); }); await sim(1.4); await look('torn', { ...V, a: 2.2 });
-    await page.evaluate(() => { const G = window.__game.guard; G.state.stun = 0; G.debug.set('rest', 9); G.debug.numb(5); G.debug.tear(5, true); }); await sim(1.6); await look('two', { ...V, a: 0.9 });
+    await home(); await ready(); await lie(9); await sim(0.3); await page.evaluate(() => { const G = window.__game.guard; G.debug.set('rest', 9); G.debug.numb(2); }); await sim(0.5); await look('numb-a', { ...V, a: 1.0 }); await sim(0.3); await look('numb-b', { ...V, a: 1.0 });
+    await page.evaluate(() => { const G = window.__game.guard; G.debug.tear(2, false); }); await sim(1.4); await look('torn', { ...V, a: 1.0 });
+    await page.evaluate(() => { const G = window.__game.guard; G.state.stun = 0; G.debug.set('rest', 9); G.debug.numb(5); G.debug.tear(5, true); }); await sim(1.6); await look('two', { ...V, a: -0.9 });
     await ready(); await page.evaluate(() => { Object.assign(window.__game.guard.state, { cool: 99, chargeT: 99 }); }); await fish(7); await sim(2.2); await look('raging', V);
     await home(); await ready({ digT: 0, chargeT: 0 }); await lie(8.5); await until('dig', 0.6); await look('dig', V); await until('rise', 0.6, 5); await look('rise', V); await until('rest', 0.3, 3); await look('risen', V);
     await home(); await ready(); await lie(3.6); await sim(0.3); await page.evaluate(() => { const g = window.__game; g.run.hush = 0; g.run.safe = 0; g.shed(); g.run.hush = 1e9; }); await until('feed', 0.25, 7); await look('feed-a', V); await sim(0.2); await look('feed-b', V);

@@ -396,7 +396,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       rig.walker.legs.forEach((l, i) => { l.lame = S.leg[i] === 1; });
       rig.update(dt, { x: pos.x, z: pos.z, yaw, vx: (pos.x - was.x) * kk, vz: (pos.z - was.z) * kk, ground: world.footing, floor: S.sink > 0.05 ? undefined : world.footing(v.set(pos.x, 0, pos.z)).y, time: ctx.time,
         wary: awake && !S.done ? clamp(1.3 - close / 11, 0, 1) : 0, look: fish, act: id ? { id, k, at: st === 'feed' && bait ? bait.pos : aim } : null,
-        tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink });
+        tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink, rage: S.lost >= F.rage }); // (rage: only so that it can be seen to rage)
       const clear = pos.y - (rig.walker.body.ground + HOME[1]) - 0.7; if (clear > 0 && !S.done) mesh.position.y += clear; // lifted off the ground, it is drawn where it is
       for (const m of fallen) { m.position.x += T * Math.round((ctx.focus.x - m.position.x) / T); m.position.z += T * Math.round((ctx.focus.z - m.position.z) / T); const low = world.height(m.position.x, m.position.z) + 0.14; if (m.position.y > low) { m.position.y = Math.max(low, m.position.y - 2.4 * dt); m.rotation.x += 0.9 * dt; } } // a leg that has come off sinks to the bed and lies there
       was.copy(pos);
