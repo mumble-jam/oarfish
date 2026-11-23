@@ -14,6 +14,8 @@ import { crabRig } from './crab.js';
 import { sawfishRig } from './sawfish.js';
 import { squidRig } from './squid.js';
 import { jellyRig } from './jelly.js';
+import { hermitRig } from './hermit.js';
+import { trumpetRig } from './trumpet.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -247,3 +249,23 @@ export function swarmKit(id, { glow = 0, preview = null } = {}) {
   const geo = own ? spec.build(look.palette) : geometry(id);
   return { id, spec, look, geometry: geo, material, tones: [look.palette.tone1, look.palette.tone2, look.palette.tone3, look.palette.tone4], beat: spec.beat[0], place, scale: look.scale, dispose() { material.dispose(); if (own) geo.dispose(); } };
 }
+
+// ================================================================ the sand flat: not yet in the dive
+// A batch made for the sand flat of the first band, and one animal made for the oarfish's long body. Like the squid and the jellyfish they are
+// here to be looked at first: no band has them and nothing has been decided about what they do. Each has its rig in a file of its own (hermit.js,
+// trumpet.js, burrow.js, gardeneel.js, puffer.js), with the sources it was read from and the one trait proposed for it at the top. The pause menu's
+// testing tool brings each into the water beside the fish (sandpets.js says how each lives there).
+const SAND = { group: 'Not yet in the dive', bands: [], swim: null, beat: [0, 0], role: 'Nothing yet. It is a model to look at: no dive has one, and nothing has been decided about what it does.' };
+for (const spec of [
+  { ...SAND, id: 'hermit', name: 'Hermit crab', length: 0.4, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.08 },
+    about: 'The front half of a crab and the soft curled back half of a lobster, living in a shell it did not make. Two pairs of banded walking legs, the right claw far bigger than the left and flat enough to shut the shell like a door, eyes on stalks, two long feelers and two short ones. It can draw right in, peer out over its claw, walk, and climb out of its shell to take another. It comes in four sizes, and wears a plain snail shell or any of the ten the oarfish carries.',
+    palette: { body: '#e8553f', bodyPale: '#ffb894', belly: '#ffd9c8', leg: '#ec6a4c', legBand: '#fff1de', claw: '#d9433a', clawTip: '#4a1d2c', eye: '#1b1724', eyeRing: '#f4f0b0', feeler: '#ff8f5e', shell: '#f1e2c4', shellBand: '#c48a5c', shellLine: '#8d503b', mouth: '#38202f', lip: '#ffd3c2' },
+    build: (pal) => model.hermit(pal), assemble(a, pal) { hermitRig(a, pal, { shellOf: (kind) => geometry(`shell-${kind}`) }); },
+    states: [{ id: 'walk', name: 'Walking', speed: 0.12 }, { id: 'pick', name: 'Picking at the sand', speed: 0 }, { id: 'in', name: 'Drawn in, the big claw for a door', speed: 0 }, { id: 'peer', name: 'Peering out', speed: 0 },
+      { id: 'probe', name: 'Feeling an empty shell', speed: 0 }, { id: 'change', name: 'Out of its shell and into the next', speed: 0 }, { id: 'hold', name: 'In a line, holding the shell ahead', speed: 0 }, { id: 'wardrobe', name: 'In each of the shells by turns', speed: 0.1 }] },
+  { ...SAND, id: 'trumpet', name: 'Trumpetfish', length: model.TRUMPET.length, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
+    about: 'A metre of stiff stick: a tube of a snout with a barbel on the chin, a row of short spines along the back that lie flat or stand, and right at the back the two soft fins it swims by, a small round tail behind them. Mottled red-brown with silvery streaks; it has a yellow phase. It hangs head down among tall things, and it lies close along a big harmless body to get near what it hunts.',
+    palette: { back: '#7c3f37', flank: '#b8664b', belly: '#efd2ab', mottle: '#4e2429', streak: '#e9f0f2', fin: '#d6966a', bar: '#24161c', jawLine: '#2b1a20', eye: '#ffd98a', yellow: '#ffcf3a' },
+    build: (pal) => model.trumpet(pal), assemble(a, pal) { trumpetRig(a, pal); },
+    states: [{ id: 'hang', name: 'Hanging head down', speed: 0 }, { id: 'swim', name: 'Swimming on its back fins', speed: 0.5 }, { id: 'shadow', name: 'Lying along a big body', speed: 1.2 }, { id: 'stalk', name: 'Stalking, snout lowered', speed: 0 }, { id: 'strike', name: 'The strike', speed: 0 }, { id: 'yellow', name: 'Yellow phase', speed: 0 }] },
+]) { NPCS.push(spec); NPC[spec.id] = spec; }

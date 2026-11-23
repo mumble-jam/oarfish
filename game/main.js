@@ -14,6 +14,7 @@ import { createSurface, SKY } from './surface.js';
 import { createGuard, KEEPER_FIGHT, SHEARER_FIGHT } from './guards.js';
 import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
 import { clamp, damp, lerp, glowTexture } from './geo.js';
+import { SAND_PETS, bringSand } from './sandpets.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
 const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
@@ -944,13 +945,15 @@ export async function start(saved = {}) {
   };
   const fracOf = (x) => x - Math.floor(x);
   function bring(id, on) {
-    if (pets[id]) { for (const s of pets[id].list) { scene.remove(s.a.object); s.a.dispose(); } delete pets[id]; }
+    if (pets[id]) { if (pets[id].dispose) pets[id].dispose(); else for (const s of pets[id].list) { scene.remove(s.a.object); s.a.dispose(); } delete pets[id]; }
     if (!on || !BRING.some((n) => n.id === id)) return;
+    if (SAND_PETS[id]) { pets[id] = bringSand(id, sandCtx); return; } // the creatures of the sand flat live as sandpets.js says
     const ahead = (d, up) => new THREE.Vector3(rig.pos.x + rig.forward.x * d, rig.pos.y + up, rig.pos.z + rig.forward.z * d), L = LIVES[id];
     if (!L) { const a = make(id); scene.add(a.object); pets[id] = { list: [{ id, a, pos: ahead(5, 1), to: new THREE.Vector3(), yaw: rig.yaw + Math.PI, mood: 'hover', t: 2.5, n: 1 }] }; return; } // the squid
     pets[id] = { list: Array.from({ length: L.n }, (_, i) => { const a = make(id), ph = i * 2.399, r = i ? 1.3 + 0.55 * i : 0, s = { id, a, i, ph, pos: ahead(5, 1.2 + (i % 3) * 0.5).add(new THREE.Vector3(Math.sin(ph) * r, 0, Math.cos(ph) * r)), vel: new THREE.Vector3(), yaw: rig.yaw + 1.2 + ph, head: rig.yaw + 1.2 + ph, tilt: 0.6, k: 0, mood: L.moods[0][0], t: L.moods[0][1] * (0.4 + 0.6 * fracOf(i * 0.37 + 0.2)), leg: L.leg * fracOf(i * 0.53 + 0.4), n: i };
       scene.add(a.object); a.rig.pose.q = fracOf(i * 0.37); return s; }) }; // (no two of a group beat together)
   }
+  const sandCtx = { make, scene, rig, wrapD, get world() { return world; }, get time() { return run.time; } };
   const bringSquid = (on) => bring('squid', on);
   function squidStep(dt, s) {
     const p = s.pos, dx = wrapD(rig.pos.x - p.x), dz = wrapD(rig.pos.z - p.z), far = Math.hypot(dx, dz), turn = (a, rate) => { s.yaw += clamp(Math.atan2(Math.sin(a - s.yaw), Math.cos(a - s.yaw)), -rate * dt, rate * dt); };
@@ -986,7 +989,7 @@ export async function start(saved = {}) {
     p.x = rig.pos.x - wrapD(rig.pos.x - p.x); p.z = rig.pos.z - wrapD(rig.pos.z - p.z); // the nearest copy of the world to the fish
     s.a.rig.update(dt, { x: p.x, y: p.y, z: p.z, yaw: s.yaw, tilt: s.tilt, mood: s.mood, rate: s.idle ? 0 : undefined });
   }
-  function petStep(dt) { for (const id in pets) for (const s of pets[id].list) (LIVES[id] ? jellyStep : squidStep)(dt, s); }
+  function petStep(dt) { for (const id in pets) { if (pets[id].step) { pets[id].step(dt); continue; } for (const s of pets[id].list) (LIVES[id] ? jellyStep : squidStep)(dt, s); } }
   const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
   const lookK = () => Math.pow(4, feel.look - 0.5); // the Look speed slider: half speed to double
   function turnView(dx, dy, kx, ky = kx * 0.85) {
@@ -1399,6 +1402,7 @@ export async function start(saved = {}) {
   $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {} }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked. It shows from the next dive.'); });
   $('dev-bring').innerHTML = BRING.map((n) => `<button type="button" data-bring="${n.id}"${n.id === 'squid' ? ' id="dev-squid"' : ''} aria-pressed="false">${n.name}</button>`).join('');
   $('dev-bring').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const id = b.dataset.bring, on = !pets[id], name = NPC[id].name.toLowerCase(), many = LIVES[id]?.n > 1; bring(id, on); b.setAttribute('aria-pressed', String(on));
+    const sand = SAND_PETS[id]; if (sand) { showDev(on ? sand.here : sand.gone); return; }
     showDev(on ? (many ? `${LIVES[id].n} ${name === 'moon jelly' ? 'moon jellies' : `${name}s`} are in the water just ahead of you. They are only to look at.` : `A ${name} is in the water just ahead of you. It is only to look at.`) : many ? 'They are gone.' : `The ${name} is gone.`); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {

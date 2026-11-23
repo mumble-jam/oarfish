@@ -713,3 +713,209 @@ export function boxPiece(pal, def) {
   const { tentacle, band } = pal;
   return ribbon(mesher(), def, (s) => 0.0095 - 0.0045 * s, (i) => (i % 2 ? tint(tentacle, band, 0.55) : tentacle)).geometry(); // ringed: light and dark by turns
 }
+
+// ================================================================ the sand flat (not yet in the dive)
+// A batch made for the sand flat of the first band, and one for the oarfish's long body. Each after a real animal: the sources, and the
+// one trait chosen for each, are at the top of its own file (hermit.js, trumpet.js, burrow.js, gardeneel.js, puffer.js). Models only, as
+// everything here is; the files named put them together and move them. Nothing in the dive asks for any of them.
+const sandStrand = (side, long, root, way, n) => ({ side, long, root, way, cuts: Array.from({ length: n + 1 }, (_, i) => (long * i) / n) });
+// a tapered piece of a few sides from a to b, in bands of two colours: what a leg or a feeler is made of at this size
+const banded = (m, a, b, ra, rb, n, bands, c0, c1) => { for (let i = 0; i < bands; i++) { const t0 = i / bands, t1 = (i + 1) / bands, p = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; m.limb(p(t0), p(t1), ra + (rb - ra) * t0, ra + (rb - ra) * t1, n, i % 2 ? c1 : c0); } return m; };
+
+// ---------------------------------------------------------------- the hermit crab
+// The front half of a crab and the soft back half of a lobster, which lives in a shell it did not make. Head toward +z, back toward +y, its left
+// toward +x, in metres for the middle of the four sizes (hermit.js scales it). Made of pieces, which hermit.js puts together:
+//   hermit         the shield over its front half, the face, and the sockets of everything
+//   hermitLeg      the two lengths of a walking leg: two pairs walk (legs.js); the two pairs behind them are small and hold the shell from inside, and are not drawn
+//   hermitClaw     a claw in three pieces, as the Keeper's: arm, hand with the fixed finger, the finger that moves. The right one is the big one, wide and flat
+//                  enough to shut the shell's mouth like a door; the left is small
+//   hermitEye      a stalk and the eye on its top, which turns there
+//   hermitFeeler   the two long feelers and the two short ones, each trailed by strands.js
+//   hermitTail     the soft curled back half, which is only seen when it is out of its shell
+//   hermitShell    the plain snail shell it starts in: a turban of whorls with a lip and a dark mouth (it can also wear any of the ten the oarfish carries)
+// HERMIT says where they join, and where the mouth of its shell sits (`mouth`, and `inward`, the way into the shell).
+export const HERMIT = {
+  ride: 0.07, // how far the body's origin is carried over the ground its feet are on
+  legs: [1, -1].flatMap((s) => [0, 1].map((i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 0.085, l2: 0.118, hip: [s * 0.04, -0.012, [0.03, 0.002][i]], rest: [s * [0.12, 0.145][i], [0.13, 0.0][i]], curl: [s * 0.03, -0.02, 0.04] }))),
+  // the right claw is the big one (as in most hermit crabs of the family Paguridae): l1, l2: arm and hand; span: the fingers past the hinge; stout: how thick
+  claws: [
+    { side: -1, big: true, shoulder: [-0.03, -0.01, 0.06], l1: 0.052, l2: 0.075, span: 0.056, stout: 1.25, hinge: [0, 0.01, 0.068] },
+    { side: 1, big: false, shoulder: [0.03, -0.01, 0.06], l1: 0.042, l2: 0.045, span: 0.034, stout: 0.6, hinge: [0, 0.005, 0.042] },
+  ],
+  eyes: [1, -1].map((side) => ({ side, socket: [side * 0.013, 0.02, 0.066] })), stalk: 0.048,
+  feelers: [1, -1].flatMap((side) => [sandStrand(side, 0.21, [side * 0.024, 0.002, 0.07], [side * 0.5, 0.28, 0.82], 6), sandStrand(side, 0.055, [side * 0.006, 0.012, 0.072], [side * 0.18, 0.62, 0.76], 3)]),
+  mouth: [0, 0.0, -0.038], inward: [0, 0.36, -1], // the shell's mouth, where the shield goes into it, and the way in
+  sizes: [1, 1.3, 1.65, 2.1], // the four sizes of a line, each in a shell a size up from the one behind it (1 is the model as made, and the one in the library)
+};
+const HERMIT_SHIELD = [[-0.045, 0.03, 0.02, 0.018, 0.002], [-0.022, 0.046, 0.03, 0.022, 0.004], [0.012, 0.05, 0.034, 0.024, 0.006], [0.045, 0.042, 0.029, 0.02, 0.006], [0.068, 0.026, 0.017, 0.014, 0.004]];
+export function hermit(pal) {
+  const m = mesher(), { body, bodyPale, belly, leg } = pal, dark = dim(body, 0.72), top = tint(body, bodyPale, 0.35);
+  // the shield: hard and pale-flecked over the front, softer and paler behind, where it goes into the shell
+  m.skin(HERMIT_SHIELD.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, 8)), (i, k, n) => (k === 0 || k === n - 1 ? (i < 2 ? tint(top, belly, 0.4) : top) : k === n / 2 - 1 || k === n / 2 ? belly : i < 1 ? tint(body, belly, 0.4) : body));
+  m.cap(ringZ(-0.045, 0.03, 0.02, 0.018, 0.002, 8), [0, 0, -1], tint(belly, body, 0.3), 0.012);
+  m.cap(ringZ(0.068, 0.026, 0.017, 0.014, 0.004, 8), [0, 0, 1], dark, 0.008);
+  m.limb([0, 0.016, 0.06], [0, 0.012, 0.086], 0.007, 0.001, 3, [body, bodyPale]); // the point between the eyes
+  m.quad([-0.022, 0.03, -0.012], [0.022, 0.03, -0.012], [0.026, 0.031, 0.03], [-0.026, 0.031, 0.03], [bodyPale, bodyPale, top]); // the hard plate on top, the pale shield
+  for (const [x, z] of [[0.014, 0.0], [-0.016, 0.012], [0.006, 0.026], [-0.004, -0.004], [0.02, 0.02]]) m.tri([x, 0.0335, z + 0.004], [x - 0.0035, 0.0335, z - 0.003], [x + 0.0035, 0.0335, z - 0.003], '#fff4ea'); // pale flecks on it
+  // the sockets everything turns in
+  for (const e of HERMIT.eyes) m.limb([e.socket[0] * 0.6, e.socket[1] - 0.008, e.socket[2] - 0.008], e.socket, 0.009, 0.008, 5, dark);
+  for (const l of HERMIT.legs) m.limb([l.hip[0] * 0.6, l.hip[1] + 0.004, l.hip[2]], l.hip, 0.012, 0.011, 5, [dark, leg]);
+  for (const c of HERMIT.claws) m.limb([c.shoulder[0] * 0.5, c.shoulder[1] + 0.004, c.shoulder[2] - 0.008], c.shoulder, 0.015 * (c.big ? 1 : 0.8), 0.014 * (c.big ? 1 : 0.8), 5, dark);
+  // the mouthparts under the face: a little bundle of pale pieces that work
+  both((s) => m.limb([s * 0.008, -0.012, 0.062], [s * 0.012, -0.024, 0.074], 0.005, 0.002, 3, [belly, bodyPale]));
+  return m.geometry();
+}
+// the two lengths of a walking leg, banded: the upper from the body to the knee, the lower ending in a long dark point
+export function hermitLeg(pal) {
+  const { leg, legBand, clawTip } = pal, { l1, l2 } = HERMIT.legs[0];
+  const upper = banded(mesher(), [0, 0, -0.006], [0, 0.002, l1], 0.0135, 0.0115, 5, 3, leg, legBand);
+  upper.cap(upper.last, [0, 0, 1], legBand, 0.006);
+  for (const z of [0.03, 0.06, 0.085]) upper.limb([0, 0.008, z], [0, 0.015, z + 0.006], 0.0028, 0.0004, 3, legBand); // a few bristles along the top
+  const lower = banded(mesher(), [0, 0, -0.004], [0, 0.002, l2 * 0.62], 0.011, 0.0088, 5, 2, legBand, leg);
+  lower.limb([0, 0.002, l2 * 0.6], [0, 0, l2], 0.0082, 0.001, 4, [leg, clawTip]); // the last length, a long point
+  return { upper: upper.geometry(), lower: lower.geometry() };
+}
+// One claw (c: its entry in HERMIT.claws), in three pieces as the Keeper's are: the arm, the hand with the fixed finger, the finger that moves (its pin
+// at c.hinge, lifting toward +y). The big one's hand is broad and flat, studded with pale knobs, so that turned edge-on it shuts the mouth of the shell.
+export function hermitClaw(pal, c) {
+  const { claw, legBand, clawTip, bodyPale } = pal, w = c.stout, { l1, l2, span: f, hinge } = c, knob = tint(claw, '#fff4ea', 0.55), dark = dim(claw, 0.78);
+  const arm = mesher().limb([0, 0, -0.006], [0, 0, l1], 0.012 * w + 0.003, 0.011 * w + 0.003, 5, [dark, claw]); arm.cap(arm.last, [0, 0, 1], legBand, 0.005);
+  // the hand: wide across (x), flat (y), most of all on the big one
+  const flat = c.big ? 0.62 : 0.8, hand = mesher(), H = [[-0.004, 0.012, 0.011], [l2 * 0.25, 0.019, 0.015], [l2 * 0.6, 0.024, 0.017], [l2 * 0.94, 0.022, 0.016]].map(([z, wx, wy]) => ringZ(z, wx * w + 0.002, wy * w * flat + 0.002, wy * w * flat + 0.002, 0, 6));
+  hand.skin(H, (i, k) => (k === 0 || k === 5 ? tint(claw, bodyPale, 0.25) : k === 2 || k === 3 ? dark : claw)).cap(H[0], [0, 0, -1], dark, 0.004);
+  const low = [[0, -0.006 * w, l2 * 0.9], [0, -0.008 * w, l2 + f * 0.95]], up = [[0, 0, -0.004], [0, 0.002, f]];
+  const finger = (m, [a, b], r0) => { const mid = [0, a[1] + (b[1] - a[1]) * 0.75, a[2] + (b[2] - a[2]) * 0.75]; m.limb(a, mid, r0, r0 * 0.6, 5, claw).limb(mid, b, r0 * 0.6, 0.0015, 4, [claw, clawTip]); };
+  finger(hand, low, 0.012 * w + 0.002); hand.cap(H[3], [0, 0, 1], claw, 0.004);
+  const knobs = c.big ? [[0.3, 0.6], [0.5, -0.4], [0.62, 0.3], [0.78, -0.2], [0.45, 0.05], [0.85, 0.55]] : [[0.4, 0.3], [0.7, -0.2]];
+  for (const [t, x] of knobs) { const z = l2 * t; hand.limb([x * 0.018 * w, 0.012 * w * flat, z], [x * 0.02 * w, 0.019 * w * flat + 0.002, z + 0.002], 0.0032 * w + 0.001, 0.0006, 3, knob); } // pale knobs on its top
+  const top = mesher(); finger(top, up, 0.011 * w + 0.002);
+  for (const t of [0.3, 0.55]) top.limb([0, 0.008 * w, f * t], [0, 0.013 * w + 0.002, f * t + 0.003], 0.0026 * w + 0.0008, 0.0004, 3, knob);
+  return { arm: arm.geometry(), hand: hand.geometry(), finger: top.geometry(), hinge };
+}
+// an eye: the stalk stands up (+y) from its socket; the eye sits on its top, modelled about its own middle and looking along +z, dark with a pale rim
+export function hermitEye(pal) {
+  const { body, bodyPale, eye, eyeRing } = pal, L = HERMIT.stalk;
+  const stalk = banded(mesher(), [0, -0.006, 0], [0, L - 0.006, 0], 0.0075, 0.0068, 5, 2, body, tint(body, bodyPale, 0.5));
+  const m = mesher(), ball = [[-0.008, 0.006], [-0.002, 0.0115], [0.007, 0.012], [0.013, 0.007]].map(([z, r]) => ringZ(z, r, r, r, 0, 7));
+  m.skin(ball, (i) => (i < 1 ? body : i < 2 ? eyeRing : eye)).cap(ball[0], [0, 0, -1], body, 0.003).cap(ball[3], [0, 0, 1], eye, 0.004);
+  m.eye([0, 0.006, 0.0125], [0, 0.45, 1], 0.0052, { iris: eyeRing, pupil: eye, rim: eye, glow: true });
+  return { stalk: stalk.geometry(), ball: m.geometry() };
+}
+// a feeler (def: its entry in HERMIT.feelers): along +z, three-sided, ringed, thinning to nothing
+export function hermitFeeler(pal, def) {
+  const m = mesher(), { feeler, legBand } = pal, n = def.cuts.length - 1, r0 = def.long > 0.1 ? 0.0042 : 0.0036;
+  const ring = (z, i) => { const r = i === n ? 0.0006 : r0 * (1 - 0.7 * (i / n)); return [[-r, -0.5 * r, z], [0, r, z], [r, -0.5 * r, z]]; };
+  m.skin(def.cuts.map((z, i) => ring(i === 0 ? -0.006 : z, i)), (i) => (i % 2 ? tint(feeler, legBand, 0.5) : feeler));
+  if (def.long < 0.1) m.limb([0, 0, def.long * 0.6], [0, 0, def.long], 0.006, 0.0015, 4, tint(feeler, legBand, 0.3)); // the short ones end in a little brush
+  return m.geometry();
+}
+// The soft back half, curled to the right as the inside of a shell is, ending in the small hooked fan it grips the shell with. Hung on behind the
+// shield (at z -0.04) and only drawn when it is out of its shell.
+export function hermitTail(pal) {
+  const m = mesher(), { belly, bodyPale, clawTip } = pal, n = 10, rings = [];
+  const at = (t) => { const a = 3.3 * t; return [-0.05 * (1 - Math.cos(a)) * (1 - 0.35 * t), 0.012 + 0.03 * Math.sin(a) * (1 - 0.3 * t) + 0.025 * t, -0.036 - 0.105 * t]; };
+  for (let i = 0; i <= n; i++) { const t = i / n, p = at(t), q = at(Math.min(1, t + 0.02)), d = new THREE.Vector3(q[0] - p[0], q[1] - p[1], q[2] - p[2]).normalize(), u = new THREE.Vector3(0, 1, 0).addScaledVector(d, -d.y).normalize(), v = new THREE.Vector3().crossVectors(d, u), r = 0.029 * (1 - 0.62 * t) + 0.004;
+    rings.push(Array.from({ length: 6 }, (_, k) => { const a = (k / 6) * Math.PI * 2, c = Math.cos(a) * r, s = Math.sin(a) * r * 1.1; return [p[0] + u.x * c + v.x * s, p[1] + u.y * c + v.y * s, p[2] + u.z * c + v.z * s]; })); }
+  m.skin(rings, (i, k) => (k === 0 || k === 5 ? (i % 2 ? tint(belly, bodyPale, 0.4) : belly) : i % 2 ? belly : tint(belly, '#ffffff', 0.25)));
+  const e = at(1); m.cap(rings[n], [0, 0, -1], belly, 0.006);
+  both((s) => m.limb(e, [e[0] + s * 0.01, e[1] - 0.006, e[2] - 0.02], 0.005, 0.001, 3, [bodyPale, clawTip])); // the little hooks it holds on with
+  return m.geometry();
+}
+// The plain snail shell it is found in: a turban of three whorls and a half, the mouth at the foot with a lip turned out and the dark inside. Stood on
+// its own as the shells of the game are (the point up, y = 0 at the bottom), and HERMIT_WEAR says how it is worn like any of theirs.
+export function hermitShell(pal) {
+  const m = mesher(), { shell, shellBand, shellLine, mouth, lip } = pal, W = 3.4, n = 6, steps = 30, k = 2.4, g1 = Math.exp(-k), Rc = 0.13, Rt = 0.115, Hs = 0.42;
+  const c = (u) => { const g = Math.exp(-k * u), a = -u * W * Math.PI * 2; return [g * Rc * Math.cos(a), Hs * (1 - g) / (1 - g1) + 0.12, g * Rc * Math.sin(a)]; };
+  const rings = [];
+  for (let i = 0; i <= steps; i++) { const u = i / steps, p = c(u), q = c(Math.max(0, u - 0.01)), d = new THREE.Vector3(q[0] - p[0], q[1] - p[1], q[2] - p[2]).normalize(), r = Rt * Math.exp(-k * u) * (i === 0 ? 1.16 : 1) + 0.002;
+    const side = new THREE.Vector3(p[0], 0, p[2]).normalize(), up = new THREE.Vector3().crossVectors(d, side).normalize(), out = new THREE.Vector3().crossVectors(up, d).normalize();
+    rings.push(Array.from({ length: n }, (_, j) => { const a = (j / n) * Math.PI * 2, x = Math.cos(a) * r, y = Math.sin(a) * r; return [p[0] + out.x * x + up.x * y, p[1] + out.y * x + up.y * y, p[2] + out.z * x + up.z * y]; })); }
+  // banded across its whorls, with a darker line spiralling along the shoulder of each
+  m.skin(rings, (i, j) => (i === 0 ? lip : j === 1 ? shellLine : (Math.floor(i / 2) % 3 === 0 ? shellBand : j === 4 ? tint(shell, shellBand, 0.3) : shell)));
+  m.cap(rings[steps], [0, 1, 0], shellBand, 0.01);
+  m.cap(rings[0], [-c(0.01)[0] + c(0)[0], 0, -c(0.01)[2] + c(0)[2]], [mouth, lip, lip], -0.06); // the mouth: dark, deep inside
+  return m.geometry();
+}
+// How each shell is worn. Its mouth goes where HERMIT.mouth is, facing the way the crab faces and a little down, so that the way into it is
+// HERMIT.inward; the rest of the shell lies behind that, turned so that its `up` is up (and a little to the crab's right, as a shell carried on a
+// curled body leans). All in the shell's own space: `p` its mouth (or, for a shell with none, where the crab goes under it), `into` the way into it
+// from there, `up` the side of it to turn up; `fit`, how long it is (its longest measure) on a crab of size 1. Those with `lid` have no mouth, and
+// are carried like a roof. The snail first, then the oarfish's ten.
+export const HERMIT_WEAR = {
+  snail: { p: [0.13, 0.12, 0], into: [-0.1, 0.37, -0.92], up: [0, 1, 0], fit: 0.34 },
+  spire: { p: [0.26, 0.11, 0.24], into: [-0.6, 0.1, -0.8], up: [0, 1, 0], fit: 0.42 },
+  fan: { p: [0, 0.18, 0], into: [0, 1, 0], up: [0, 0, 1], fit: 0.3, lid: true },
+  coil: { p: [-0.34, 0.85, 0], into: [-0.57, -0.82, 0], up: [0.82, -0.57, 0], fit: 0.32 },
+  ring: { p: [0.6, 0.62, 0], into: [-1, 0, 0], up: [0, 1, 0], fit: 0.3, lid: true },
+  horn: { p: [0.46, 0.22, 0], into: [-0.89, 0.45, 0], up: [0.45, 0.89, 0], fit: 0.42 },
+  cap: { p: [0, 0.1, 0.32], into: [0, 0, -1], up: [0, 1, 0], fit: 0.3, lid: true },
+  spine: { p: [0.15, 0.28, 0.2], into: [-0.6, 0, -0.8], up: [0, 1, 0], fit: 0.38 },
+  lamp: { p: [0, 0.3, 0.36], into: [0, 0, -1], up: [0, 1, 0], fit: 0.3, lid: true },
+  tusk: { p: [0, 0.06, -0.4], into: [0.07, 0.35, 1], up: [0, 1, 0], fit: 0.42 },
+  pearl: { p: [0, 0.12, 0.16], into: [0, 0, -1], up: [0, 1, 0], fit: 0.3, lid: true },
+};
+
+// ---------------------------------------------------------------- the trumpetfish
+// A metre of stick: long, thin, flattened from side to side, a tube of a snout with a little mouth at its end and a barbel under the chin, a row
+// of short separate spines along the back, and the fins that drive it all at the back: the soft back fin over the fin under it, and a small round
+// tail. Head toward +z. Its pieces, which trumpet.js puts together:
+//   trumpet        the body, snout, eyes, the soft back fin and the fin under it. Those two fins ripple in its shader, and the floor of the snout
+//                  swells for the strike (`flex` on each corner: x, how far out along a fin; y, how much of the throat; z, which fin)
+//   trumpetSpine   one of the separate spines in front of the soft back fin, which lie flat or stand
+//   trumpetFin     a pectoral or a pelvic fin, which flutters; trumpetTail the round tail fin; trumpetJaw the lower lip of the snout, which drops
+//   trumpetBarbel  the barbel on the chin, trailed by strands.js
+export const TRUMPET = { length: 1, neck: 0.16,
+  body: [[0.5, 0.0075, 0.0075, 0.0075, -0.002], [0.47, 0.0085, 0.009, 0.009, -0.002], [0.38, 0.0105, 0.012, 0.012, 0], [0.29, 0.0135, 0.017, 0.016, 0.002], [0.23, 0.018, 0.027, 0.023, 0.004], [0.15, 0.021, 0.034, 0.029, 0.002],
+    [0.05, 0.023, 0.039, 0.033, 0], [-0.1, 0.023, 0.041, 0.035, 0], [-0.24, 0.02, 0.037, 0.033, 0], [-0.35, 0.014, 0.025, 0.023, 0], [-0.42, 0.0085, 0.013, 0.013, 0], [-0.445, 0.0075, 0.012, 0.012, 0]],
+  spines: Array.from({ length: 10 }, (_, i) => -0.2 + i * 0.031).reverse(), // along the back, head first
+  soft: [-0.24, -0.37], // the soft back fin and the fin under it, from and to
+  fins: [1, -1].flatMap((s) => [{ side: s, kind: 'pectoral', at: [s * 0.02, -0.006, 0.135], long: 0.045 }, { side: s, kind: 'pelvic', at: [s * 0.012, -0.033, -0.06], long: 0.035 }]),
+  tail: -0.44, jaw: [0, -0.004, 0.468], barbel: { root: [0, -0.011, 0.49], long: 0.03, cuts: [0, 0.01, 0.02, 0.03] },
+};
+const trumpetAt = (z) => { const B = TRUMPET.body; let i = 0; while (i < B.length - 2 && B[i + 1][0] > z) i++; const a = B[i], b = B[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return a.map((v, k) => v + (b[k] - v) * t); };
+export function trumpet(pal) {
+  const m = mesher(), { back, flank, belly, mottle, streak, fin, bar, jawLine, eye } = pal, N = 8;
+  const paint = (i, k) => { const top = k === 0 || k === N - 1, low = k === 3 || k === 4; if (top) return i === 3 || i === 4 ? jawLine : back; if (low) return belly; if ((k === 2 || k === 5) && i > 3 && i < 7 && i % 2) return tint(flank, streak, 0.45); return i % 3 === 1 ? tint(flank, mottle, 0.35) : flank; };
+  m.skin(TRUMPET.body.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), paint);
+  m.cap(ringZ(0.5, 0.0075, 0.0075, 0.0075, -0.002, N), [0, 0, 1], '#2a1a1e', -0.004); // the little mouth at the end of the tube
+  // dark blotches down the flanks, and silvery streaks along the head
+  let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) { const z = 0.2 - 0.58 * rnd(), s = i % 2 ? 1 : -1, [, w, up, dn, y] = trumpetAt(z), v = (rnd() - 0.4) * 0.8, h = v > 0 ? up * v : dn * v, x = s * (w * Math.sqrt(Math.max(0, 1 - v * v)) + 0.0012), l = 0.008 + 0.01 * rnd();
+    m.tri([x, y + h - 0.004, z - l], [x, y + h + 0.004, z], [x, y + h - 0.003, z + l], mottle); }
+  both((s) => { for (const [z0, z1, dy] of [[0.36, 0.2, 0.004], [0.3, 0.17, -0.008]]) { const a = trumpetAt(z0), b = trumpetAt(z1); m.quad([s * (a[1] + 0.0008), a[4] + dy, z0], [s * (b[1] + 0.0008), b[4] + dy * 1.6, z1], [s * (b[1] + 0.0008), b[4] + dy * 1.6 + 0.003, z1], [s * (a[1] + 0.0008), a[4] + dy + 0.002, z0], streak); } });
+  // the eyes, high on the head
+  both((s) => { const [, w, up, , y] = trumpetAt(0.205); m.eye([s * w * 0.86, y + up * 0.42, 0.205], [s, 0.25, 0.05], 0.0085, { iris: eye, pupil: '#1a1420', rim: tint(back, '#000000', 0.4) }); });
+  // the soft back fin and the fin under it: rays from the body out, a dark bar along the root, and the edge pale
+  const finFrom = m.triangles, [z0, z1] = TRUMPET.soft;
+  for (const s of [1, -1]) { const root = [], tip = [], n = 7;
+    for (let i = 0; i <= n; i++) { const z = z0 + (z1 - z0) * (i / n), [, , up, dn, y] = trumpetAt(z), h = 0.052 * Math.sin(Math.PI * (0.15 + 0.85 * (i / n))) ** 0.6 + 0.004; root.push([0, y + s * (s > 0 ? up : dn) * 0.92, z]); tip.push([0, y + s * ((s > 0 ? up : dn) + h), z - 0.022]); }
+    for (let i = 0; i < n; i++) { const mid = (a, b) => [0, a[1] + (b[1] - a[1]) * 0.28, a[2] + (b[2] - a[2]) * 0.28], r0 = root[i], r1 = root[i + 1], m0 = mid(r0, tip[i]), m1 = mid(r1, tip[i + 1]);
+      m.quad(r0, r1, m1, m0, bar).quad(m0, m1, tip[i + 1], tip[i], [fin, fin, tint(fin, '#fff3e0', 0.4)]); } }
+  const finTo = m.triangles;
+  const g = m.geometry(), P = g.attributes.position, F = new Float32Array(P.count * 4);
+  for (let i = 0; i < P.count; i++) { const z = P.getZ(i), y = P.getY(i), [, , up, dn, yc] = trumpetAt(z);
+    if (i >= finFrom * 3 && i < finTo * 3) { const s = y > yc ? 1 : -1, out = Math.max(0, (Math.abs(y - yc) - (s > 0 ? up : dn) * 0.9) / 0.055); F[i * 4] = out; F[i * 4 + 2] = s; }
+    else if (z > 0.3 && y < yc) F[i * 4 + 1] = Math.min(1, (yc - y) / 0.012) * Math.sin(Math.PI * Math.min(1, (z - 0.3) / 0.18)); } // the floor of the snout, which drops and swells when it strikes
+  g.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4));
+  return g;
+}
+// one spine of the back: modelled standing up (+y) from its root, raked back; trumpet.js lays it down by turning it about x
+export function trumpetSpine(pal) { const { fin, bar } = pal; return mesher().limb([0, -0.002, 0.002], [0, 0.026, -0.008], 0.0032, 0.0004, 3, [bar, tint(fin, '#fff3e0', 0.3)]).geometry(); }
+// a small fin, rays fanning back from its root: modelled flat in the x-z plane, out toward +x, root at the origin
+export function trumpetFin(pal, def) {
+  const m = mesher(), { fin } = pal, L = def.long, edge = tint(fin, '#fff3e0', 0.45), root = [], tip = [];
+  for (let i = 0; i <= 4; i++) { const a = -0.5 - i * 0.28; root.push([0, 0, -i * 0.005]); tip.push([Math.cos(a) * L * (1 - 0.1 * Math.abs(i - 2)), 0, Math.sin(a) * L * 0.7 - i * 0.004]); }
+  for (let i = 0; i < 4; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [fin, fin, edge]);
+  return m.geometry();
+}
+// the tail fin: round, fanned out behind its root, with the two black spots of the real one
+export function trumpetTail(pal) {
+  const m = mesher(), { fin, bar, back } = pal, edge = tint(fin, '#fff3e0', 0.4), n = 8, R = 0.05, root = [], tip = [];
+  for (let i = 0; i <= n; i++) { const a = -0.85 + (1.7 * i) / n; root.push([0, a * 0.008, 0]); tip.push([0, Math.sin(a) * R * 0.6, -Math.cos(a) * R]); }
+  for (let i = 0; i < n; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [tint(fin, back, 0.3), tint(fin, back, 0.3), edge]);
+  for (const y of [0.012, -0.012]) for (const s of [1, -1]) { const c = [s * 0.0008, y, -0.03]; m.quad([c[0], y + 0.006, -0.03], [c[0], y, -0.024], [c[0], y - 0.006, -0.03], [c[0], y, -0.036], bar); }
+  return m.geometry();
+}
+// the lower lip of the snout's end, hinged at its back (the origin) and reaching forward to the mouth
+export function trumpetJaw(pal) { const { belly, jawLine } = pal; return mesher().limb([0, -0.002, 0], [0, -0.002, 0.034], 0.0062, 0.0055, 5, [belly, jawLine]).geometry(); }
+export function trumpetBarbel(pal) { const m = mesher(), { belly, fin } = pal, c = TRUMPET.barbel.cuts; m.skin(c.map((z, i) => { const r = 0.0018 * (1 - i / c.length) + 0.0004; return [[-r, -0.5 * r, z], [0, r, z], [r, -0.5 * r, z]]; }), [belly, fin]); return m.geometry(); }
