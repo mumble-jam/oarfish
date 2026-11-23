@@ -43,6 +43,7 @@ export function crabRig(a, pal) {
   const leg = keeperLeg(pal); a.owned.push(leg.upper, leg.lower, leg.tip);
   const numbMat = mat.clone(); numbMat.emissive = new THREE.Color(pal.pale || '#e9dfc0'); a.owned.push(numbMat); // a leg that has gone numb is pale, and flickers: that is the one to go for
   const crackMat = mat.clone(); crackMat.emissive = new THREE.Color(pal.crack || '#ff4f7b'); crackMat.emissiveIntensity = 0.5; a.owned.push(crackMat); // a leg that has been cracked by a ram glows red in its seams, and stays so
+  const raiseMat = mat.clone(); raiseMat.emissive = new THREE.Color(pal.eye || '#eaff7c'); a.owned.push(raiseMat); // a leg raised to stomp flares, as its eyes do in a wind-up: the tell, from the dive's high camera
   const piece = (geo, parent = group) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
   const count = (g) => g.attributes.position.count / 3;
   const legs = KEEPER.legs.map((l) => ({ ...l, hip: V(l.hip), curl: V(l.curl), rest: { x: l.rest[0], z: l.rest[1] }, upper: piece(leg.upper), lower: piece(leg.lower), last: piece(leg.tip), cracked: false }));
@@ -84,9 +85,9 @@ export function crabRig(a, pal) {
     pose.pitch = damp(pose.pitch, limp ? 0.25 : id === 'slam' ? -0.12 * Math.min(1, k * 2.5) : id === 'stuck' ? 0.02 + 0.015 * Math.sin(t * 17) : id === 'spent' ? 0.07 : id === 'feed' ? 0.1 : -0.05 * pose.wary - (calm ? 0.08 * rage : 0), hard ? 26 : 8, dt); // it rears, and comes down with the claw (and, raging, stands reared back a little)
     pose.roll = damp(pose.roll, limp ? 2.2 : (id === 'sweep' ? -0.17 * Math.min(1, k * 2) : id === 'sweeping' ? 0.12 : 0) + pose.list + 0.06 * pose.heave * Math.sin(t * 30), limp ? 2.6 : 9, dt); // it leans back onto the claw's side, and then through; it lists toward a side whose legs are gone; heaving, it shudders
     walker.update(dt, { ...s, crouch: pose.crouch, tuck: pose.tuck, limp: pose.limp > 0.97 ? 1 : pose.limp, raise: pose.raise, pitch: pose.pitch, roll: pose.roll + (s.stun && !limp ? 0.17 * Math.sin(t * 16) : 0) + (calm ? 0.03 * rage * Math.sin(t * 23) : 0) }); // (raging, it shakes)
-    numbMat.emissiveIntensity = 1.2 + 0.5 * Math.sin(t * 11);
+    numbMat.emissiveIntensity = 1.2 + 0.5 * Math.sin(t * 11); raiseMat.emissiveIntensity = 0.7 + 0.5 * Math.sin(t * 19);
     let lost = 0;
-    walker.legs.forEach((l, i) => { const m = l.lame ? numbMat : l.cracked ? crackMat : mat; if (l.upper.material !== m) l.upper.material = l.lower.material = l.last.material = m; cracks[i].visible = l.gone; if (l.gone) lost++;
+    walker.legs.forEach((l, i) => { const m = l.raised ? raiseMat : l.lame ? numbMat : l.cracked ? crackMat : mat; if (l.upper.material !== m) l.upper.material = l.lower.material = l.last.material = m; cracks[i].visible = l.gone; if (l.gone) lost++;
       // A numb leg does not arch as the others do: its knee lies out to one side, low (toward the tail for a leg in front, toward the head for one behind), and now and then it jerks
       if (l.lame && !l.gone && pose.limp < 0.5) { const jerk = Math.max(0, Math.sin(t * 7.3 + i * 1.9)) ** 10;
         P1.set(l.side * 0.25, 0.22 + 1.5 * jerk, l.hip.z >= -0.2 ? -1 : 1); T1.copy(l.tip); T1.y += 0.25 * jerk; walker.ankleOf(l, D1).y += 0.25 * jerk;

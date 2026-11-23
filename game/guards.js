@@ -511,7 +511,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       const moved = Math.hypot(pos.x - was.x, pos.z - was.z), kk = dt > 1e-5 && moved < 5 ? 1 / dt : 0, close = pos.distanceTo(fish), st = S.state, k = S.T > 0 ? clamp(1 - S.t / S.T, 0, 1) : 0; // how it really moved, whatever moved it
       S.open = !S.done && S.sink < 0.5 && (S.stun > 0 || st === 'stuck' || st === 'rest' || st === 'feed' || st === 'grounded'); // open: a leg can be hurt
       const id = S.done || S.stun > 0 ? '' : st === 'slam' || st === 'sweep' || st === 'sweeping' || st === 'jab' || st === 'stuck' || st === 'feed' ? st : st === 'run' ? 'charge' : st === 'rest' ? (S.jabbed > 0 ? 'jabbed' : 'spent') : '';
-      rig.walker.legs.forEach((l, i) => { l.lame = S.leg[i] === 1; l.cracked = S.leg[i] === 3 || S.leg[i] === 1; });
+      rig.walker.legs.forEach((l, i) => { l.lame = S.leg[i] === 1; l.cracked = S.leg[i] === 3 || S.leg[i] === 1; l.raised = !!S.stomp && S.stomp.leg === i && (st === 'stomp' || st === 'stomped'); });
       rig.update(dt, { x: pos.x, z: pos.z, yaw, vx: (pos.x - was.x) * kk, vz: (pos.z - was.z) * kk, ground: world.footing, floor: S.sink > 0.05 ? undefined : world.footing(v.set(pos.x, 0, pos.z)).y, time: ctx.time,
         wary: awake && !S.done ? clamp(1.3 - close / 11, 0, 1) : 0, look: fish, act: id ? { id, k, at: st === 'feed' && bait ? bait.pos : aim } : null,
         tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink, rage: S.lost >= F.rage, list: S.list, wave: S.wave, heave: st === 'heave' ? 1 : 0, drop: st === 'drop' || st === 'grounded' ? 1 : 0 }); // (rage: only so that it can be seen to rage)
