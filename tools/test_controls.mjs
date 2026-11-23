@@ -348,7 +348,8 @@ await page.click('#note-copy'); await page.waitForFunction(() => document.getEle
 s = await ev(async () => { const g = window.__game, out = document.getElementById('note-out'); let clip = null; try { clip = await navigator.clipboard.readText(); } catch {}
   return { msg: document.getElementById('note-msg').textContent, clip, byHand: out.hidden ? null : out.value, body: g.noteBody() }; });
 const got = s.clip ?? s.byHand ?? '';
-check('Copy puts the note and how the dive went on the clipboard, or lays it out to be copied by hand where that is blocked', (/Copied/.test(s.msg) || /selected: copy it/.test(s.msg)) && got === s.body && /the crab is great/.test(got) && /How the dive went\nBand 1 of 5/.test(got) && /frames a second|Chrome on/.test(got), JSON.stringify({ msg: s.msg, got: got.slice(0, 260) }));
+const same = (t) => t.replace(/\d+ frames a second/, 'N frames a second').replace(/This dive [^\n]*\n/, 'This dive\n'); // the clock runs on between the copying and the asking: what it counts is not what is being checked
+check('Copy puts the note and how the dive went on the clipboard, or lays it out to be copied by hand where that is blocked', (/Copied/.test(s.msg) || /selected: copy it/.test(s.msg)) && same(got) === same(s.body) && /the crab is great/.test(got) && /How the dive went\nBand 1 of 5/.test(got) && /frames a second|Chrome on/.test(got), JSON.stringify({ msg: s.msg, got: got.slice(0, 260) }));
 await page.click('#note-facts'); s = await ev(() => window.__game.noteBody());
 check('the lines about the dive can be left out', !/How the dive went/.test(s) && /the crab is great/.test(s), s.slice(0, 120));
 await page.keyboard.press('Escape'); await frame(page);
