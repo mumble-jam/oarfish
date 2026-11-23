@@ -83,6 +83,15 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     return d;
   };
 
+  // The Shearer keeps to open water. It is as long as a column is tall, and where columns stand close it used to end a charge in among them and
+  // could not get out again: pushed off one, it was pushed onto the next. So it never goes round what stands: it goes over. `over` is the top of
+  // whatever stands under its length or just ahead of it; `struck` says whether a point is in stone, and puts it outside if it is.
+  // (What stands more than HOP over where it swims, a tall pillar, it does not climb: one of those alone cannot hold it, and it is pushed round it.)
+  const HOP = 3.2, over = (reach = 1.1) => { let top = -1e9; const sp = Math.hypot(vel.x, vel.z) || 1, fx = sp > 0.2 ? vel.x / sp : Math.sin(yaw), fz = sp > 0.2 ? vel.z / sp : Math.cos(yaw), most = pos.y + HOP + watch.lift;
+    for (const k of [-2.6, -1.3, 0, 1.3, 2.6, 4.2]) { const t = world.topNear(pos.x + fx * k, pos.z + fz * k, reach); if (t <= most) top = Math.max(top, t); } return top; };
+  const v2 = new THREE.Vector3(), struck = (radius = 0.7) => { v2.copy(pos); world.pushOut(pos, radius); return pos.distanceToSquared(v2) > 1e-6; };
+  const watch = { p: new THREE.Vector3(), t: 0, lift: 0, side: 0, dodge: 0 }, UP = new THREE.Vector3(0, 1, 0); // the last resort: if it is getting nowhere, the Shearer rises until it is, and the Keeper turns aside
+
   function update(dt, ctx) {
     W.set(well.x + T * Math.round((ctx.focus.x - well.x) / T), Y0, well.z + T * Math.round((ctx.focus.z - well.z) / T)); // where it lives, on the nearest copy of the world
     pos.x += T * Math.round((ctx.focus.x - pos.x) / T); pos.z += T * Math.round((ctx.focus.z - pos.z) / T);
@@ -90,7 +99,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
     const fish = ctx.pos, far = Math.hypot(fish.x - W.x, fish.z - W.z), awake = ctx.playing && far < 26;
     let warnSize = 0;
-    if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, pos.y - 1.6 * dt); if (!rig) mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
+    if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, kind === 'shearer' ? world.topNear(pos.x, pos.z, 0.9) + 0.4 : -1e9, pos.y - 1.6 * dt); if (!rig) mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
     else if (S.stun > 0) { S.stun -= dt; vel.multiplyScalar(Math.exp(-4 * dt)); pos.addScaledVector(vel, dt); }
     else if (kind === 'keeper') { // round and round its ground, sideways, as crabs go; a tail within reach gets snapped at
       if (S.state === 'snap') { // it turns on the tail as it winds up
@@ -101,7 +110,12 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       else if (target.progress > 0.15) vel.multiplyScalar(Math.exp(-6 * dt)); // a body going round it: it pulls into its shell and sits tight
       else {
         S.ang += dt * 0.17; aim.set(W.x + Math.sin(S.ang) * HOME[0], 0, W.z + Math.cos(S.ang) * HOME[0]); aim.y = world.height(aim.x, aim.z) + HOME[1]; // over the ground as it lies, not at one height
-        v.subVectors(aim, pos).setY(0); const d = v.length(); if (d > 1e-3) vel.lerp(v.multiplyScalar(1.5 / d), 1 - Math.exp(-2 * dt));
+        v.subVectors(aim, pos).setY(0); const d = v.length();
+        // Walking straight at a wall of things it is pushed straight back, and gets nowhere. So if it has got nowhere for a while it turns
+        // aside and walks along the wall, one way and then, if that was no good, the other, until it is past it.
+        watch.t += dt; if (watch.t > 2.5) { if (d > 3 && Math.hypot(pos.x - watch.p.x, pos.z - watch.p.z) < 0.7) { watch.side = watch.side > 0 ? -1 : 1; watch.dodge = 3.2; } watch.p.copy(pos); watch.t = 0; }
+        if (watch.dodge > 0) { watch.dodge -= dt; v.applyAxisAngle(UP, watch.side * 1.35); }
+        if (d > 1e-3) vel.lerp(v.multiplyScalar(1.5 / d), 1 - Math.exp(-2 * dt));
         pos.addScaledVector(vel, dt); world.steer(pos, 1.2); // round a column, not through it
         pos.y = damp(pos.y, world.height(pos.x, pos.z) + HOME[1], 3, dt);
         const face = awake && pos.distanceTo(fish) < 15 ? Math.atan2(fish.x - pos.x, fish.z - pos.z) : Math.atan2(pos.x - W.x, pos.z - W.z); // it watches a fish that is near; otherwise it looks out from its ground
@@ -111,7 +125,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     } else if (kind === 'shearer') { // it sweeps its saw over the rift and feels a fish that comes near. Then it strikes where the tail was: a slash through it if it is up in the water, a stoop onto it if it lies along the bed
       const J = ctx.joints, tail = J[J.length - 1], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the veil it keeps
       if (S.state === 'sense') { // something is there: it slows, and the saw swings round to it
-        vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); yaw += wrapPi(Math.atan2(fish.x - pos.x, fish.z - pos.z) - yaw) * (1 - Math.exp(-3 * dt));
+        vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); struck(); yaw += wrapPi(Math.atan2(fish.x - pos.x, fish.z - pos.z) - yaw) * (1 - Math.exp(-3 * dt));
         if (S.t <= 0) {
           if (!awake || pos.distanceTo(fish) > 24) set('idle');
           else { aim.copy(tail); S.mode = tail.y - floor(tail) < 1.5 ? 'pin' : 'slash'; S.side = rand() < 0.5 ? 1 : -1; set('aim', S.mode === 'pin' ? 1.1 : 0.8); }
@@ -121,25 +135,31 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         warnSize = 2.8; S.danger = 0.7; yaw += wrapPi(Math.atan2(aim.x - pos.x, aim.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt));
         if (S.mode === 'pin') { // up over the tail and a little short of it, nose down, the point of the saw hanging over it
           v.set(aim.x - pos.x, 0, aim.z - pos.z); const d = v.length() || 1; v.multiplyScalar(Math.max(0, d - 2.4) / d).add(pos).setY(aim.y + 6);
-          v.sub(pos); const off = v.length(); vel.lerp(off > 1e-3 ? v.multiplyScalar(Math.min(9, off * 4) / off) : v, 1 - Math.exp(-6 * dt)); pos.addScaledVector(vel, dt);
-        } else { vel.multiplyScalar(Math.exp(-5 * dt)); pos.y += clamp(aim.y - pos.y, -3 * dt, 3 * dt); } // level with the tail: the slash goes through it flat
+          v.sub(pos); const off = v.length(); vel.lerp(off > 1e-3 ? v.multiplyScalar(Math.min(9, off * 4) / off) : v, 1 - Math.exp(-6 * dt)); pos.addScaledVector(vel, dt); struck();
+        } else { vel.multiplyScalar(Math.exp(-5 * dt)); pos.y += clamp(aim.y - pos.y, -8 * dt, 8 * dt); } // level with the tail, from however high it had gone to clear something: the slash goes through it flat
         if (S.t <= 0) { vel.subVectors(aim, pos).setLength(10.5); set('charge', S.mode === 'pin' ? pos.distanceTo(aim) / 10.5 + 0.15 : Math.min(1.5, pos.distanceTo(aim) / 10.5 + 0.35)); }
       }
       else if (S.state === 'charge') {
         S.danger = 1; pos.addScaledVector(vel, dt);
-        const j = sawNear(ctx, 0.85), hit = j >= 0 && game.bite(3, j, pos); v.copy(vel).setLength(3.3).add(pos); const down = S.mode === 'pin' && v.y <= floor(v) + 0.1; // v: the point of the saw
+        if (world.inStone(pos, 0.7, 1.6)) { struck(); vel.set(0, 0, 0); S.stuck = false; set('tired', 2.4); game.event('clang', pos); } // it has run onto a column or a rock (not a kerb: it stoops past those): that stops it, and it is spent
+        const j = sawNear(ctx, 0.85), hit = S.state === 'charge' && j >= 0 && game.bite(3, j, pos); v.copy(vel).setLength(3.3).add(pos); const down = S.mode === 'pin' && v.y <= floor(v) + 0.1; // v: the point of the saw
         if (hit) S.bites++;
-        if (S.mode === 'pin' ? down || S.t <= -0.6 : hit || S.t <= 0) { // a slash stops on what it hits, or runs out; a stoop goes on down until the saw is in the bed
+        if (S.state === 'charge' && (S.mode === 'pin' ? down || S.t <= -0.6 : hit || S.t <= 0)) { // a slash stops on what it hits, or runs out; a stoop goes on down until the saw is in the bed
           if (S.mode === 'pin') { vel.set(0, 0, 0); set('tired', 2.6); S.stuck = true; } else set('tired', 2.2);
         }
       }
       else if (S.state === 'tired') { // spent, it coasts and sinks; stuck, it stays where its saw is
-        if (!S.stuck) { vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); pos.y = Math.max(floor(pos) + 0.8, pos.y - 0.5 * dt); }
+        if (!S.stuck) { vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); const rest = over(0.9) + 0.7, sunk = pos.y - 0.5 * dt; pos.y = Math.max(floor(pos) + 0.8, pos.y >= rest ? Math.max(sunk, rest) : sunk); struck(); } // over something, it sinks no lower than its top; beside it, it is kept out of it
         else pos.y = damp(pos.y, floor(pos) + 1.7, 8, dt); // its tail in the air, its saw in the bed
         if (S.t <= 0) { set('idle'); S.cool = 1.2; }
       }
       else {
-        S.ang += dt * 0.3; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1] + 0.35 * Math.sin(ctx.time * 0.5), W.z + Math.cos(S.ang) * HOME[0]); go(dt, aim, 3.2, 2.5); world.steer(pos, 1);
+        S.ang += dt * 0.3; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1] + 0.35 * Math.sin(ctx.time * 0.5), W.z + Math.cos(S.ang) * HOME[0]);
+        // on its round, or on its way back to it from wherever a charge left it: over whatever stands in the way, and up to that height before it gets there
+        watch.t += dt; if (watch.t > 2) { if (pos.distanceTo(aim) > 4 && Math.hypot(pos.x - watch.p.x, pos.z - watch.p.z) < 0.8) watch.lift = Math.min(12, watch.lift + 4); else watch.lift = Math.max(0, watch.lift - 2); watch.p.copy(pos); watch.t = 0; }
+        const clear = over() + 1.2 + watch.lift; aim.y = Math.max(aim.y, clear);
+        go(dt, aim, 3.2, 2.5); if (pos.y < clear) pos.y = Math.min(clear, pos.y + 7 * dt);
+        struck();
         const stir = dt > 1e-5 ? Math.min(fish.distanceTo(fishWas) / dt, 12) : 0; // it feels the water a fish moves: a still one has to come nearer
         if (awake && S.cool <= 0 && pos.distanceTo(fish) < 12 + 8 * clamp(stir / 9, 0, 1)) set('sense', 0.6);
       }
@@ -206,5 +226,5 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (p.y < top && rift.in(p.x, p.z) > rift.ledge - 0.3) p.y = top;
   }
   function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
-  return { update, ram, pushOut, dispose, wrapped: fall, state: S, kind, pos, rig, mesh, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt } };
+  return { update, ram, pushOut, dispose, wrapped: fall, state: S, kind, pos, rig, mesh, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; set('charge', 1.4); } } }; // (debug.charge: for the checks, a slash at a point)
 }

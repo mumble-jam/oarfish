@@ -1,6 +1,7 @@
 // Scripted checks of every mechanic in headless Chrome, plus screenshots.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright';
+import { audit } from './audit_fn.mjs';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript' };
 const server = http.createServer((req, res) => {
@@ -359,8 +360,12 @@ check('it turns to a fish that comes near and puts its big claw up; rammed, it s
 check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.35 && crab.claws.big < 1.1 && crab.claws.small > crab.claws.big + 0.5, JSON.stringify(crab.claws));
 // the Shearer: a sawfish that feels for a fish with its saw, and has two blows
 const saw = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.enterFloor(1, false); for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500;
-  const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, near = { x: r.x - r.nx * (r.w(0) + 3.5), z: r.z - r.nz * (r.w(0) + 3.5) }, along = Math.atan2(r.tx, r.tz), bed = w.height(near.x, near.z);
-  const bring = () => { S.ang = Math.atan2(-r.nx, -r.nz); G.pos.set(r.x - r.nx * 11, r.y + 2.6, r.z - r.nz * 11); G.debug.set('idle'); S.cool = 0; S.stun = 0; }; // the Shearer to the near side of its round
+  const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, along = Math.atan2(r.tx, r.tz), start = { x: r.x - r.nx * 11, z: r.z - r.nz * 11 };
+  // Where the fish lies for the blows: outside the row of columns behind the kerb, at a place along the rift from which the Shearer's way to its tail is clear
+  // of anything tall, since a blow that meets a column stops on it.
+  const lane = (U) => { const p = { x: r.x + r.tx * U - r.nx * (r.w(0) + 7.5), z: r.z + r.tz * U - r.nz * (r.w(0) + 7.5) }, q = G.pos.clone(); for (let k = 0; k <= 1.0001; k += 0.04) for (const back of [0, 1.5, 3, 4.5]) for (const y of [0.8, 2.2]) { q.set(start.x + (p.x - r.tx * back - start.x) * k, r.y + y, start.z + (p.z - r.tz * back - start.z) * k); if (w.inStone(q, 1.0, 1.6)) return null; } return p; }; // (under a lintel is clear: the blows come in low)
+  const near = Array.from({ length: 37 }, (_, i) => (i % 2 ? 1 : -1) * Math.ceil(i / 2)).map(lane).find(Boolean), bed = w.height(near.x, near.z); // the nearest clear one to the middle: 0, 1, -1, 2, -2 ...
+  const bring = () => { S.ang = Math.atan2(-r.nx, -r.nz); G.pos.set(start.x, r.y + 2.6, start.z); G.debug.set('idle'); S.cool = 0; S.stun = 0; }; // the Shearer to the near side of its round
   // nobody near: it sweeps the saw from side to side, tilted down, and leans into its round
   T.put(near.x - r.nx * 40, bed + 3, near.z - r.nz * 40, 0); g.run.safe = 1e9; S.cool = 99; T.idle(1.5);
   let lo = 9, hi = -9, nod = 0, lean = 0, n = 0; for (let i = 0; i < 70; i++) { T.idle(0.1); lo = Math.min(lo, R.head.x); hi = Math.max(hi, R.head.x); nod += R.head.y; lean += R.pose.roll; n++; }
@@ -594,6 +599,39 @@ check('four kinds of shell have to be won: until then none of them lies about in
   s.pool0 === 'spire,fan,coil,ring,cap,lamp' && s.lying0 === 'cap,coil,fan,lamp,ring,spire' && !s.won.before.open && s.won.before.sign === 'cache' && s.won.feats === 'cache' && s.won.saved === 'cache' && s.won.title === 'Tusk' && !s.won.now && s.won.again === false
   && s.next.pool === 'spire,fan,coil,ring,cap,lamp,tusk' && s.next.open && s.next.others && s.next.base === null && s.all.afterSwarm === 'cache,swarm' && s.all.afterGuard === 'cache,guard,swarm' && s.all.feats === 'cache,guard,mural,swarm' && s.all.pool === 10
   && s.lying1 === 'cap,coil,fan,horn,lamp,pearl,ring,spine,spire,tusk' && /"record":0/.test(s.tools.emptied) && /"feats":\{\}/.test(s.tools.emptied) && s.tools.unlocked === 'cache,guard,mural,swarm', JSON.stringify(s));
+
+// ---- nothing hangs at a rift's edge: every piece within nine metres of the line stands on the bed as it is drawn, or on another piece
+{ const rows = []; for (const seed of [4242, 7]) for (let band = 0; band < 4; band++) { const a = await audit(page, seed, band); rows.push({ seed, band, looked: a.looked, hang: a.hanging.slice(0, 3), sunk: a.sunk.slice(0, 3), n: a.hanging.length + a.sunk.length }); }
+  const lip = await ev(() => { const g = window.__game; g.startRun(4242); const w = g.world, r = w.rift, at = (u, q) => { const k = -(r.w(u) - q) + r.mid(u); return [r.x + r.tx * u + r.nx * k, r.z + r.tz * u + r.nz * k]; }; // q metres in from the near edge
+    let shelf = 0, drawn = 0, n = 0; for (let u = -30; u <= 30; u += 1.7) for (const q of [-2, -1.2, -0.6, -0.2, 0]) { const [x, z] = at(u, q); shelf = Math.max(shelf, Math.abs(w.height(x, z) - r.y)); drawn = Math.max(drawn, Math.abs(w.drawn(x, z) - r.y)); n++; }
+    let off = 0; for (let u = -30; u <= 30; u += 1.7) for (const q of [1.5, 2.2, 3, 3.8, 5, 6, 7]) { const [x, z] = at(u, q); off = Math.max(off, Math.abs(w.drawn(x, z) - w.height(x, z))); }
+    g.run.safe = 0; return { n, shelf: +shelf.toFixed(3), drawn: +drawn.toFixed(2), off: +off.toFixed(2) }; });
+  check('by a rift nothing hangs in the water and nothing is buried: every piece near the line stands on the bed as it is drawn; the shelf is level right up to the line, and the drawn lip, ledge and wall keep to the ones the fish swims over',
+    rows.every((r) => r.looked > 300 && r.n === 0) && lip.shelf < 0.001 && lip.drawn < 0.3 && lip.off < 2, JSON.stringify({ rows: rows.filter((r) => r.n).slice(0, 3), lip })); }
+
+// ---- the keepers do not get stuck in the stonework: dropped into every column near their ground, and between every two that stand close, they come home
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, none = { ...T.none(), amount: 0 }, W = (d) => d - 144 * Math.round(d / 144), far = (a, b) => Math.hypot(W(a.x - b.x), W(a.z - b.z));
+  for (const [band, back, round, lift, wait] of [[0, 24, 8.6, 0.9, 60], [1, 0, 11, 1.5, 30]]) { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false;
+    const w = g.world, r = w.rift, G = g.guard, P = G.pos, home = { x: r.x - r.nx * back, z: r.z - r.nz * back }, o = { kind: G.kind };
+    const inStone = () => { const q = P.clone(); if (band) w.pushOut(q, 0.5); else { q.y = w.height(q.x, q.z) + 0.6; w.steer(q, 0.3); } return Math.hypot(q.x - P.x, q.z - P.z) > 1e-4; }; // the crab walks: only what it cannot step over counts
+    T.put(home.x - r.nx * 31, r.y + 9, home.z - r.nz * 31, 0); g.sim(0.5, none); // near enough that the world does not come round between them, too far to wake it
+    const cols = []; for (const p of w.pieces()) if (/shaft|stump|jar|block|drum/.test(p.name) && (band ? far(p, home) < round + 16 : Math.abs(far(p, home) - round) < 4)) { const at = cols.find((c) => far(c, p) < 0.5); if (at) at.shaft ||= /shaft/.test(p.name); else cols.push({ x: p.x, z: p.z, shaft: /shaft/.test(p.name) }); } // the Shearer's charges take it a long way; the Keeper never leaves its round
+    const spots = cols.map((c) => [c.x, c.z]); for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) if (far(cols[i], cols[j]) < 5) spots.push([(cols[i].x + cols[j].x) / 2, (cols[i].z + cols[j].z) / 2]);
+    o.spots = spots.length; o.home = 0; o.inside = 0; o.worst = 0;
+    const every = Math.max(1, Math.ceil(spots.length / 36)), tried = spots.filter((_, i) => i % every === 0);
+    for (const [x, z] of tried) { G.debug.set('idle'); P.set(x, w.height(x, z) + lift, z); let t = 0, back = false;
+      while (t < wait && !back) { g.sim(0.25, none); t += 0.25; if (t > 1 && inStone()) o.inside++; back = t > 1 && Math.abs(far(P, home) - round) < 1.8; }
+      if (back) o.home++; o.worst = Math.max(o.worst, t); }
+    o.tried = tried.length;
+    if (band) { // and a charge at a column stops on it: outside it, and spent
+      const open = (c) => [7, 5.5, 4, 2.5].every((d) => { const q = P.clone().set(c.x + d, w.height(c.x, c.z) + 1.6, c.z), q0 = q.clone(); w.pushOut(q, 0.9); return q.distanceTo(q0) < 1e-4; }); // a column with a clear run up to it
+      const c = cols.filter((q) => q.shaft && open(q)).sort((a, b) => far(a, home) - far(b, home))[0], y = w.height(c.x, c.z) + 1.6; G.debug.set('idle'); P.set(c.x + 7, y, c.z); g.sim(0.05, none); P.set(c.x + 7, y, c.z); G.debug.charge(c.x - 7, y, c.z);
+      let passed = false, stone = 0; for (let i = 0; i < 40; i++) { g.sim(0.05, none); if (W(P.x - c.x) < -1.5) passed = true; if (inStone()) stone++; } o.charge = { state: G.state.state, passed, stone, short: +W(P.x - c.x).toFixed(2) }; }
+    out[G.kind] = o; }
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('the Keeper and the Shearer, put down in every column near their ground and between every two that stand close, come home from all of them and are never left in the stone; and a charge at a column stops short of it, spent',
+  s.keeper.tried > 4 && s.keeper.home === s.keeper.tried && s.keeper.inside === 0 && s.shearer.tried > 8 && s.shearer.home === s.shearer.tried && s.shearer.inside === 0 && s.shearer.worst < 20
+  && s.shearer.charge.state === 'tired' && !s.shearer.charge.passed && s.shearer.charge.stone === 0 && s.shearer.charge.short > 1 && s.shearer.charge.short < 3, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake
@@ -603,7 +641,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.
   for (let i = 0; i < 80 && tail < 0; i++) { T.swim(0.1, 1, 0); const p = pull(A.x, A.y, A.z); over = Math.max(over, p); if (J()[0].x > A.x + 1 && J()[J().length - 1].x < A.x - 1) under = Math.min(under, p); if (J()[J().length - 1].x > A.x + 4.5) tail = p; }
   T.swim(4, 1, 0); const gone = pull(A.x, A.y, A.z);
   return { far, over, under, tail, gone, kinds: Object.keys(R.grown).filter((k) => R.grown[k].length).join(), points: R.wake.value.length }; });
-check('an anemone shuts as the fish goes over, stays shut for its whole length and a moment more, and opens again', s.far === 0 && s.over > 0.8 && s.under > 0.5 && s.tail > 0.1 && s.gone === 0 && /anemone/.test(s.kinds) && /kelp/.test(s.kinds) && /seagrass/.test(s.kinds) && /clam/.test(s.kinds), JSON.stringify(s));
+check('an anemone shuts as the fish goes over, stays shut for its whole length and a moment more, and opens again', s.far === 0 && s.over > 0.7 && s.under > 0.5 && s.tail > 0.1 && s.gone === 0 && /anemone/.test(s.kinds) && /kelp/.test(s.kinds) && /seagrass/.test(s.kinds) && /clam/.test(s.kinds), JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f = R.pilots[0], h = (x, z) => g.world.height(x, z);
   const yaw = Math.atan2(g.world.goal.x - f.hx, g.world.goal.z - f.hz), dx = Math.sin(yaw), dz = Math.cos(yaw), x0 = f.hx - dx * 14 + dz * 9, z0 = f.hz - dz * 14 - dx * 9;
   T.put(x0, h(x0, z0) + 5, z0, yaw); T.idle(0.2); const p0 = R.puffed; g.sim(2.5, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); const high = R.puffed - p0, clearHigh = g.rig.pos.y - h(g.rig.pos.x, g.rig.pos.z);

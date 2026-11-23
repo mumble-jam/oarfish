@@ -8,6 +8,10 @@ import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from 
 
 export const T = 144;
 const CELL = 3, GRID = 46, NCELL = T / CELL;
+// By a rift the bed is drawn in small triangles, FINE to a side of a cell, since a lip a metre and a half wide cannot be drawn in triangles of three.
+// The lip itself begins RIM inside the rift's line: a little more than the longest side of a small triangle, so that every triangle that reaches
+// outside the line lies flat, and what stands on the shelf at the rift's edge stands on what is drawn there.
+const FINE = 4, SUB = CELL / FINE, RIM = SUB * Math.SQRT2 + 0.06, FINE_FROM = -2.6, FINE_TO = 9.6;
 const K = (Math.PI * 2) / T;
 export const SPAWN = new THREE.Vector3(T / 2, 0, T / 2);
 export const wrapD = (d) => d - T * Math.round(d / T); // shortest way round the repeating world
@@ -27,10 +31,10 @@ const KIND = { b: 'bolt', t: 'twin', g: 'glow' }, LOWER = { m: 's', l: 'm' };
 // new body is measured against it at a glance. To the right, a place for each kind of shell, in two rows: a dish that holds the shell once
 // that kind has been found. The first of them stand on the column tops that have been hauled to the rifts, one for each.
 export const NEST = { yaw: 2.5, line: -1.25, step: 0.42, rows: [2.3, 3.45], gap: 0.95, lift: 0.3, stand: 0.6 };
-// The mural at a rift: a stele by the near lip with three carvings, lit for what has been done in this band in this dive: its greatest swarm taken,
+// The mural at a rift: a stele back from the near lip, clear of the row of columns that stands behind the kerb, with three carvings, lit for what has been done in this band in this dive: its greatest swarm taken,
 // a cache opened, the rift's keeper beaten. They light, one after another, when the head comes within `near` metres; all three lit, the stele's
 // painted top lights too. Nothing is written on it. The third carving is the keeper's own sign, band by band.
-export const MURAL = { near: 13, each: 0.55, back: [16.5, 19, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
+export const MURAL = { near: 13, each: 0.55, back: [19.5, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
 const TIERS = 'smlh';
 // A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. A head held still over it (within `reach`, slower
 // than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
@@ -404,7 +408,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
     if (over >= 0) return -Math.hypot(over, a); // past its ends
     return riftW(u) - Math.abs(a - riftMid(u));
   }
-  const riftDrop = (q) => rift.step * smooth(clamp(q / rift.lip, 0, 1)) + (rift.deep - rift.step) * smooth(clamp((q - rift.ledge) / (rift.wall - rift.ledge), 0, 1));
+  const riftDrop = (q) => rift.step * smooth(clamp((q - RIM) / rift.lip, 0, 1)) + (rift.deep - rift.step) * smooth(clamp((q - rift.ledge) / (rift.wall - rift.ledge), 0, 1)); // the lip, RIM in from the line; then the ledge; then the wall
   const riftClear = (x, z, pad = 0) => !rift || riftIn(x, z) < -pad;
   function height(x, z) {
     let h = bed(x, z);
@@ -421,7 +425,14 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const meadow = (x, z) => Math.sin(K * (2 * x - z) + ph[5]) * Math.cos(K * (x + 3 * z) + ph[6]) + 0.25 * Math.sin(K * (6 * x + 5 * z) + ph[7]);
   goal.y = last ? height(goal.x, goal.z) : rift.y;
 
-  const nTri = GRID * GRID * 2;
+  // Which cells are drawn fine: any part of them near the rift's edge, from a little outside it to the foot of its walls. Kept for the whole world, which
+  // comes round every NCELL cells; so are the heights of the corners, and of the small corners inside the fine cells, worked out as they are asked for.
+  const wrapI = (i, n) => ((i % n) + n) % n, NF = NCELL * FINE;
+  const fineMap = new Uint8Array(NCELL * NCELL), cornerY = new Float32Array(NCELL * NCELL).fill(NaN), smallY = new Float32Array(NF * NF).fill(NaN);
+  let fineCells = 0;
+  if (rift) for (let iz = 0; iz < NCELL; iz++) for (let ix = 0; ix < NCELL; ix++) { const q = riftIn((ix + 0.5) * CELL, (iz + 0.5) * CELL), reach = CELL * 0.71; if (q > FINE_FROM - reach && q < FINE_TO + reach) { fineMap[iz * NCELL + ix] = 1; fineCells++; } }
+  const fineCell = (ix, iz) => fineMap[wrapI(iz, NCELL) * NCELL + wrapI(ix, NCELL)] === 1;
+  const nTri = GRID * GRID * 2 + fineCells * (FINE * FINE - 1) * 2;
   const tPos = new Float32Array(nTri * 9), tCol = new Float32Array(nTri * 9), tNor = new Float32Array(nTri * 9);
   const tGeo = new THREE.BufferGeometry();
   tGeo.setAttribute('position', new THREE.BufferAttribute(tPos, 3));
@@ -461,7 +472,31 @@ float seaLight(vec2 p, float t) {
   const sandA = new THREE.Color('#c8c9a6'), sandB = new THREE.Color('#b9bd9b'), sandHi = new THREE.Color('#d3d2ad');
   const grassA = new THREE.Color('#a5c09f'), grassB = new THREE.Color('#95b596'), pit = new THREE.Color(FLOORS[Math.min(floor + 1, FLOORS.length - 1)].water).multiplyScalar(0.55);
   const rockA = new THREE.Color('#a9ad97'), rockB = new THREE.Color('#7f8a80'); // the rock of the shelf, where the rift has laid it bare
-  const vertexY = (ix, iz) => height(ix * CELL, iz * CELL) + (hash2(ix, iz) - 0.5) * 0.36;
+  const vertexY = (ix, iz) => { const k = wrapI(iz, NCELL) * NCELL + wrapI(ix, NCELL); let y = cornerY[k]; if (y !== y) y = cornerY[k] = height(ix * CELL, iz * CELL) + (hash2(ix, iz) - 0.5) * 0.36; return y; };
+  // A small corner, gx and gz counted in small steps across the world. One that is also a cell's corner is that corner. One on a cell's side that the
+  // cell across it does not share (that cell is drawn coarse) lies on the straight line between the two corners, so that no crack opens there.
+  const smallVertexY = (gx, gz) => {
+    const k = wrapI(gz, NF) * NF + wrapI(gx, NF); let y = smallY[k]; if (y === y) return y;
+    const ix = Math.floor(gx / FINE), iz = Math.floor(gz / FINE), i = gx - ix * FINE, j = gz - iz * FINE;
+    if (!i && !j) y = vertexY(ix, iz);
+    else if (!i && !(fineCell(ix - 1, iz) && fineCell(ix, iz))) y = lerp(vertexY(ix, iz), vertexY(ix, iz + 1), j / FINE);
+    else if (!j && !(fineCell(ix, iz - 1) && fineCell(ix, iz))) y = lerp(vertexY(ix, iz), vertexY(ix + 1, iz), i / FINE);
+    else y = height(gx * SUB, gz * SUB) + (hash2(ix, iz, 11 + i * FINE + j) - 0.5) * 0.08;
+    return (smallY[k] = y);
+  };
+  // the height at (a, b) in a square whose corners stand at y00, y01 (one on in z), y10 (one on in x) and y11, cut along one diagonal or the other
+  const cutY = (a, b, odd, y00, y01, y10, y11) => (odd
+    ? (b >= a ? y00 + (y11 - y01) * a + (y01 - y00) * b : y00 + (y10 - y00) * a + (y11 - y10) * b)
+    : (a + b <= 1 ? y00 + (y10 - y00) * a + (y01 - y00) * b : y11 + (y01 - y11) * (1 - a) + (y10 - y11) * (1 - b)));
+  // The bed as it is drawn: the height of the triangle under a point. `height` is the bed as it is meant, and what the fish swims over; this is what
+  // a thing has to stand on if it is not to hang in the water or sink in the sand. With a radius, the lowest of the middle and four points round it.
+  function drawnY(x, z, r = 0) {
+    if (r > 0) return Math.min(drawnY(x, z), drawnY(x + r, z), drawnY(x - r, z), drawnY(x, z + r), drawnY(x, z - r));
+    const fx = x / CELL, fz = z / CELL, ix = Math.floor(fx), iz = Math.floor(fz);
+    if (fineCell(ix, iz)) { const gx = Math.floor(x / SUB), gz = Math.floor(z / SUB);
+      return cutY(x / SUB - gx, z / SUB - gz, (gx + gz) & 1, smallVertexY(gx, gz), smallVertexY(gx, gz + 1), smallVertexY(gx + 1, gz), smallVertexY(gx + 1, gz + 1)); }
+    return cutY(fx - ix, fz - iz, (ix + iz) & 1, vertexY(ix, iz), vertexY(ix, iz + 1), vertexY(ix + 1, iz), vertexY(ix + 1, iz + 1));
+  }
   let tcx = 1e9, tcz = 1e9;
   function rebuildTerrain(fx, fz) {
     const cx = Math.round(fx / CELL), cz = Math.round(fz / CELL);
@@ -469,8 +504,9 @@ float seaLight(vec2 p, float t) {
     tcx = cx; tcz = cz;
     const col = new THREE.Color(), A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), n = new THREE.Vector3(), e = new THREE.Vector3();
     let o = 0;
-    const tri = (ax, az, bx, bz, qx, qz, salt) => {
-      A.set(ax * CELL, vertexY(ax, az), az * CELL); B.set(bx * CELL, vertexY(bx, bz), bz * CELL); C.set(qx * CELL, vertexY(qx, qz), qz * CELL);
+    // one triangle, its corners given in steps of `step` metres: whole cells, or the small ones
+    const tri = (ax, az, bx, bz, qx, qz, salt, step = CELL, Y = vertexY) => {
+      A.set(ax * step, Y(ax, az), az * step); B.set(bx * step, Y(bx, bz), bz * step); C.set(qx * step, Y(qx, qz), qz * step);
       n.subVectors(B, A).cross(e.subVectors(C, A)).normalize();
       const mx = (A.x + B.x + C.x) / 3, mz = (A.z + B.z + C.z) / 3, my = (A.y + B.y + C.y) / 3;
       const h = hash2(ax + bx + qx, az + bz + qz, salt);
@@ -492,11 +528,15 @@ float seaLight(vec2 p, float t) {
       }
     };
     const half = GRID / 2;
+    const square = (x0, z0, step, Y) => { const x1 = x0 + 1, z1 = z0 + 1;
+      if ((x0 + z0) & 1) { tri(x0, z0, x0, z1, x1, z1, 1, step, Y); tri(x0, z0, x1, z1, x1, z0, 2, step, Y); }
+      else { tri(x0, z0, x0, z1, x1, z0, 1, step, Y); tri(x1, z0, x0, z1, x1, z1, 2, step, Y); } };
     for (let j = -half; j < half; j++) for (let i = -half; i < half; i++) {
-      const x0 = cx + i, z0 = cz + j, x1 = x0 + 1, z1 = z0 + 1;
-      if ((x0 + z0) & 1) { tri(x0, z0, x0, z1, x1, z1, 1); tri(x0, z0, x1, z1, x1, z0, 2); }
-      else { tri(x0, z0, x0, z1, x1, z0, 1); tri(x1, z0, x0, z1, x1, z1, 2); }
+      const x0 = cx + i, z0 = cz + j;
+      if (fineCell(x0, z0)) { for (let b = 0; b < FINE; b++) for (let a = 0; a < FINE; a++) square(x0 * FINE + a, z0 * FINE + b, SUB, smallVertexY); }
+      else square(x0, z0, CELL, vertexY);
     }
+    tGeo.setDrawRange(0, o / 3);
     tGeo.attributes.position.needsUpdate = true;
     tGeo.attributes.color.needsUpdate = true;
     tGeo.attributes.normal.needsUpdate = true;
@@ -515,15 +555,15 @@ float seaLight(vec2 p, float t) {
   const lie = (x, z, yaw = drand() * 6.28) => { const gx = (height(x + 0.4, z) - height(x - 0.4, z)) / 0.8, gz = (height(x, z + 0.4) - height(x, z - 0.4)) / 0.8; return new THREE.Quaternion().setFromUnitVectors(up, new THREE.Vector3(-gx, 1, -gz).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(up, yaw)); };
   const stoneLike = (tone) => tint(tone, dpick(stoneTones), 0.5);
   const greened = (tone, k = 0.4) => (floor <= 1 ? tint(tone, ['#8fbf8c', '#8ab59a'][floor], k) : tone); // growth on what faces the light, in the two bands that have any
-  const flagAt = (x, z, size = 1, yaw) => flags.push({ x, y: height(x, z) - 0.03, z, q: lie(x, z, yaw), s: S(size * dr(0.9, 1.25), 0.1, size * dr(0.9, 1.25)), color: tint(dpick(stoneTones), '#7c9794', dr(0.25, 0.5)) });
+  const flagAt = (x, z, size = 1, yaw) => flags.push({ x, y: drawnY(x, z) - 0.03, z, q: lie(x, z, yaw), s: S(size * dr(0.9, 1.25), 0.1, size * dr(0.9, 1.25)), color: tint(dpick(stoneTones), '#7c9794', dr(0.25, 0.5)) });
   const paveRing = (cx, cz, r, size = 1.2, miss = 0.14) => { const n = Math.max(5, Math.round((Math.PI * 2 * r) / (size * 1.12))); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; if (drand() >= miss) flagAt(cx + Math.sin(a) * r, cz + Math.cos(a) * r, size, a + dr(-0.15, 0.15)); } };
   const paveRoad = (ax, az, bx, bz, half = 1.3, size = 1.25) => { const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len; for (let d = 0; d < len; d += size * 1.1) for (const side of [-half, 0, half]) if (drand() > 0.2) flagAt(ax + ux * d + uz * side + dr(-0.12, 0.12), az + uz * d - ux * side + dr(-0.12, 0.12), size, Math.atan2(ux, uz) + dr(-0.12, 0.12)); };
-  const rubbleAt = (cx, cz, r0, r1, n) => { for (let i = 0; i < n; i++) { const a = drand() * 6.28, d = dr(r0, r1), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d, sz = dr(0.22, 0.62); rubbles.push({ x, y: height(x, z) - sz * 0.22, z, q: lie(x, z).multiply(qY(0, dr(-0.5, 0.5), dr(-0.5, 0.5))), s: S(sz * dr(0.8, 1.4), sz, sz * dr(0.8, 1.3)), color: stoneLike(dpick(stoneTones)) }); } };
+  const rubbleAt = (cx, cz, r0, r1, n) => { for (let i = 0; i < n; i++) { const a = drand() * 6.28, d = dr(r0, r1), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d, sz = dr(0.22, 0.62); rubbles.push({ x, y: drawnY(x, z, sz * 0.45) - sz * 0.22, z, q: lie(x, z).multiply(qY(0, dr(-0.5, 0.5), dr(-0.5, 0.5))), s: S(sz * dr(0.8, 1.4), sz, sz * dr(0.8, 1.3)), color: stoneLike(dpick(stoneTones)) }); } };
   const clay = () => tint('#c98f6c', district, dr(0.1, 0.45));
-  const shardsAt = (cx, cz, r, n, color) => { for (let i = 0; i < n; i++) { const a = drand() * 6.28, d = dr(0.2, r), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d; shards.push({ x, y: height(x, z) + 0.01, z, q: lie(x, z), s: S(dr(0.6, 1.5)), color: color || clay() }); } };
+  const shardsAt = (cx, cz, r, n, color) => { for (let i = 0; i < n; i++) { const a = drand() * 6.28, d = dr(0.2, r), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d; shards.push({ x, y: drawnY(x, z) + 0.01, z, q: lie(x, z), s: S(dr(0.6, 1.5)), color: color || clay() }); } };
   // a storage jar: standing (and then solid), lying on its side, or a broken base with its sherds about it
   function jarAt(x, z, how = drand() < 0.55 ? 'up' : drand() < 0.5 ? 'down' : 'broken') {
-    const sz = dr(0.85, 1.25), y = height(x, z), color = clay();
+    const sz = dr(0.85, 1.25), y = drawnY(x, z), color = clay();
     if (how === 'broken') { jarsBroken.push({ x, y: y - 0.04, z, q: lie(x, z), s: S(sz), color }); shardsAt(x, z, 1.1, 4, color); }
     else if (how === 'down') jars.push({ x, y: y + 0.3 * sz, z, q: qY(drand() * 6.28, Math.PI / 2 - 0.12), s: S(sz), color });
     else { jars.push({ x, y: y - 0.05, z, q: qY(drand() * 6.28, dr(-0.06, 0.06), dr(-0.06, 0.06)), s: S(sz), color }); colliders.push({ x, z, r: 0.3 * sz, top: y + 1.0 * sz }); }
@@ -540,7 +580,7 @@ float seaLight(vec2 p, float t) {
   // A column is a stack: a plinth, a moulded base, fluted drums that narrow as they climb, a cushion and a top slab
   // in the district's colour. Where it broke, the break is jagged; where it was sawn (the Narrowing) it is flat.
   function column(x, z, h, { capital = true, yaw = rand() * 3, collide = true, sawn = false } = {}) {
-    const y = height(x, z) - 0.25, tone = pick(stoneTones), tx = rr(-0.02, 0.02), tz = rr(-0.02, 0.02), top = y + 0.5 + h;
+    const y = drawnY(x, z) - 0.25, tone = pick(stoneTones), tx = rr(-0.02, 0.02), tz = rr(-0.02, 0.02), top = y + 0.5 + h;
     blocks.push({ x, y, z, q: qY(yaw), s: S(1.55, 0.5, 1.55), color: tone });
     bases.push({ x, y: y + 0.5, z, q: qY(yaw), s: S(1), color: tone });
     const n = Math.max(1, Math.round((h - 0.2) / 1.2)), each = (h - 0.2) / n;
@@ -562,12 +602,12 @@ float seaLight(vec2 p, float t) {
   }
   // a shaft that came down: its drums lie where they rolled, the last of them a little apart
   function fallen(x, z, len, yaw) {
-    const y = height(x, z) + 0.3, tip = Math.PI / 2 + rr(-0.06, 0.06), tone = pick(stoneTones);
+    const y = drawnY(x, z) + 0.3, tip = Math.PI / 2 + rr(-0.06, 0.06), tone = pick(stoneTones);
     const n = Math.max(2, Math.round(len / 1.3)), each = len / n;
     for (let i = 0; i < n; i++) {
       const end = i === n - 1, off = end ? dr(-0.45, 0.45) : dr(-0.06, 0.06), along = i * each + (end ? dr(0.15, 0.5) : 0), px = x + Math.sin(yaw) * along + Math.cos(yaw) * off, pz = z + Math.cos(yaw) * along - Math.sin(yaw) * off;
-      shaftEnds.push({ x: px, y: height(px, pz) + 0.3 - dr(0, 0.1), z: pz, q: qY(yaw + (end ? dr(-0.3, 0.3) : dr(-0.04, 0.04)), tip).multiply(new THREE.Quaternion().setFromAxisAngle(up, drand() * 6.28)), s: S(1.05, each * 0.94, 1.05), color: greened(stoneLike(tone), 0.25) });
-      growOn(px, height(px, pz) + 0.8, pz, 0.3);
+      shaftEnds.push({ x: px, y: drawnY(px, pz) + 0.3 - dr(0, 0.1), z: pz, q: qY(yaw + (end ? dr(-0.3, 0.3) : dr(-0.04, 0.04)), tip).multiply(new THREE.Quaternion().setFromAxisAngle(up, drand() * 6.28)), s: S(1.05, each * 0.94, 1.05), color: greened(stoneLike(tone), 0.25) });
+      growOn(px, drawnY(px, pz) + 0.8, pz, 0.3);
     }
     rubbleAt(x + Math.sin(yaw) * len * 0.5, z + Math.cos(yaw) * len * 0.5, 0.9, 2.2, 2);
     for (let i = 0.15; i < 1; i += 0.3) colliders.push({ x: x + Math.sin(yaw) * len * i, y, z: z + Math.cos(yaw) * len * i, r: 0.7 });
@@ -578,7 +618,7 @@ float seaLight(vec2 p, float t) {
   const chimeSets = [];
   function hang(ax, az, bx, bz, y, line = false) {
     const full = Math.hypot(bx - ax, bz - az), span = full - 1.7, n = clamp(Math.round(span / 0.95), 3, 7), gap = Math.min(0.72, span / n), yaw = Math.atan2(bx - ax, bz - az), ux = Math.sin(yaw), uz = Math.cos(yaw);
-    const mx = (ax + bx) / 2, mz = (az + bz) / 2, long = clamp(y - height(mx, mz) - 2.9, 1.1, 3.2), turn = xrand() < 0.5 ? 1 : -1;
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2, long = clamp(y - drawnY(mx, mz) - 2.9, 1.1, 3.2), turn = xrand() < 0.5 ? 1 : -1;
     const order = Array.from({ length: n }, (_, k) => k).sort((a, b) => Math.abs(a - (n - 1) / 2 + 0.01 * turn) - Math.abs(b - (n - 1) / 2 + 0.01 * turn)); // from the middle out, a side at a time
     const bars = Array.from({ length: n }, (_, k) => { const d = (k - (n - 1) / 2) * gap, rank = order.indexOf(k);
       return { x: mx + ux * d, z: mz + uz * d, y, len: long * lerp(1, 0.52, rank / (n - 1)) * xr(0.97, 1.03), note: rank, ox: 0, oz: 0, vx: 0, vz: 0, held: 0, lit: 0, i: 0 }; });
@@ -604,11 +644,11 @@ float seaLight(vec2 p, float t) {
     for (let k = 0; k < count && pairs > 1; k++) { const c = (first + Math.round((k * pairs) / count)) % pairs, a = cols[c], b = cols[(c + 1) % cols.length]; hang(a[0], a[1], b[0], b[1], Math.min(a[2], b[2]) - 0.14, true); }
   }
   // --- the pieces the story is told with
-  const post = (x, z, h, r = 0.5) => { const y = height(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: dpick(stoneTones) }); drums.push({ x, y, z, q: qY(rand() * 3), s: S(r * 2, h, r * 2), color: pick(stoneTones) }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
-  const slab = (x, z, r, color = district, lift = 0.02) => drums.push({ x, y: height(x, z) + lift, z, q: qY(0), s: S(r * 2, 0.07, r * 2), color });
+  const post = (x, z, h, r = 0.5) => { const y = drawnY(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: dpick(stoneTones) }); drums.push({ x, y, z, q: qY(rand() * 3), s: S(r * 2, h, r * 2), color: pick(stoneTones) }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
+  const slab = (x, z, r, color = district, lift = 0.02) => drums.push({ x, y: drawnY(x, z) + lift, z, q: qY(0), s: S(r * 2, 0.07, r * 2), color });
   const coinStack = (x, y, z, n) => { for (let i = 0; i < n; i++) coins.push({ x: x + rr(-0.03, 0.03), y: y + i * 0.1, z: z + rr(-0.03, 0.03), q: qY(rand() * 6), s: S(1), color: i % 3 ? '#e9dfc0' : district }); };
-  const coinHeap = (cx, cz, r, n) => { for (let i = 0; i < n; i++) { const a = rand() * 6.28, d = Math.sqrt(rand()) * r, x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d; coins.push({ x, y: height(x, z) + 0.06 + rand() * 0.2, z, q: qY(rand() * 6, rr(-0.6, 0.6), rr(-0.6, 0.6)), s: S(rr(0.8, 1.2)), color: rand() < 0.3 ? district : '#e9dfc0' }); } };
-  const hoop = (x, z, s = 1, flat = 0) => hoops.push({ x, y: height(x, z) + flat, z, q: flat ? qY(rand() * 6, Math.PI / 2) : qY(rand() * 6), s: S(s), color: flat ? pick(stoneTones) : district });
+  const coinHeap = (cx, cz, r, n) => { for (let i = 0; i < n; i++) { const a = rand() * 6.28, d = Math.sqrt(rand()) * r, x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d; coins.push({ x, y: drawnY(x, z, 0.12) + 0.06 + rand() * 0.2, z, q: qY(rand() * 6, rr(-0.6, 0.6), rr(-0.6, 0.6)), s: S(rr(0.8, 1.2)), color: rand() < 0.3 ? district : '#e9dfc0' }); } };
+  const hoop = (x, z, s = 1, flat = 0) => hoops.push({ x, y: drawnY(x, z) + flat, z, q: flat ? qY(rand() * 6, Math.PI / 2) : qY(rand() * 6), s: S(s), color: flat ? pick(stoneTones) : district });
   // A hero's monument: a ring of columns, one for each segment of the hero's body, round a carved coil.
   function heroRing(cx, cz, n, { sawn = false, gap = 0, carved = true } = {}) {
     const R = Math.max(3.4, n * 0.5); // wide enough to swim between the columns
@@ -616,7 +656,7 @@ float seaLight(vec2 p, float t) {
     const stood = [];
     for (let i = gap; i < n; i++) { const a = (i / n) * Math.PI * 2, x = cx + Math.sin(a) * R, z = cz + Math.cos(a) * R; stood.push([x, z, column(x, z, sawn ? 1.1 : 4.4, { capital: !sawn, yaw: a, sawn })]); }
     if (!sawn) strung(stood, gap === 0, n >= 14 ? 2 : 1);
-    const py = height(cx, cz) - 0.3;
+    const py = drawnY(cx, cz) - 0.3;
     blocks.push({ x: cx, y: py, z: cz, q: qY(0.2), s: S(2.6, 0.7, 2.6), color: pick(stoneTones) });
     blocks.push({ x: cx, y: py - 0.05, z: cz, q: qY(0.2), s: S(3.5, 0.4, 3.5), color: stoneLike(dpick(stoneTones)) });
     paveRing(cx, cz, 2.9, 1.0); if (R > 5) paveRing(cx, cz, R - 1.5, 1.25);
@@ -626,18 +666,18 @@ float seaLight(vec2 p, float t) {
     return R;
   }
   // a low ring of kerb stones where a swarm was kept
-  function pen(cx, cz, r) { for (let i = 0; i < 12; i++) { if (i === 0) continue; const a = (i / 12) * Math.PI * 2, x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r; blocks.push({ x, y: height(x, z) - 0.15, z, q: qY(a), s: S(0.9, 0.5, 0.4), color: pick(stoneTones) }); }
-    for (const a of [-0.3, 0.3]) { const x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r, y = height(x, z) - 0.15; drums.push({ x, y, z, q: qY(0), s: S(0.34, 1.05, 0.34), color: dpick(stoneTones) }); blocks.push({ x, y: y + 1.05, z, q: qY(a), s: S(0.46, 0.1, 0.46), color: district }); }
+  function pen(cx, cz, r) { for (let i = 0; i < 12; i++) { if (i === 0) continue; const a = (i / 12) * Math.PI * 2, x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r; blocks.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(a), s: S(0.9, 0.5, 0.4), color: pick(stoneTones) }); }
+    for (const a of [-0.3, 0.3]) { const x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r, y = drawnY(x, z) - 0.15; drums.push({ x, y, z, q: qY(0), s: S(0.34, 1.05, 0.34), color: dpick(stoneTones) }); blocks.push({ x, y: y + 1.05, z, q: qY(a), s: S(0.46, 0.1, 0.46), color: district }); }
     flagAt(cx, cz + r + 0.9, 1.1, 0); flagAt(cx + dr(-0.3, 0.3), cz + r + 2.0, 0.9); }
   // a round house wall with a doorway, and the small hoops the young swam through beside it
   function house(cx, cz, kids) {
-    for (let i = 1; i < 9; i++) { const a = (i / 9) * Math.PI * 2, x = cx + Math.sin(a) * 2.2, z = cz + Math.cos(a) * 2.2; blocks.push({ x, y: height(x, z) - 0.2, z, q: qY(a), s: S(1.3, 1.0, 0.45), color: pick(stoneTones) }); }
-    for (let i = 3; i < 7; i++) if (drand() < 0.7) { const a = ((i + 0.5) / 9) * Math.PI * 2, x = cx + Math.sin(a) * 2.2, z = cz + Math.cos(a) * 2.2; blocks.push({ x, y: height(x, z) + 0.8, z, q: qY(a + dr(-0.05, 0.05)), s: S(dr(0.9, 1.25), dr(0.5, 0.8), 0.42), color: stoneLike(dpick(stoneTones)) }); }
-    { let t = 0; for (const a of [-0.36, 0.36]) { const x = cx + Math.sin(a) * 2.25, z = cz + Math.cos(a) * 2.25, y = height(x, z) - 0.2; drums.push({ x, y, z, q: qY(0), s: S(0.3, 1.6, 0.3), color: dpick(stoneTones) }); t = Math.max(t, y + 1.6); }
+    for (let i = 1; i < 9; i++) { const a = (i / 9) * Math.PI * 2, x = cx + Math.sin(a) * 2.2, z = cz + Math.cos(a) * 2.2; blocks.push({ x, y: drawnY(x, z) - 0.2, z, q: qY(a), s: S(1.3, 1.0, 0.45), color: pick(stoneTones) }); }
+    for (let i = 3; i < 7; i++) if (drand() < 0.7) { const a = ((i + 0.5) / 9) * Math.PI * 2, x = cx + Math.sin(a) * 2.2, z = cz + Math.cos(a) * 2.2; blocks.push({ x, y: drawnY(x, z) + 0.8, z, q: qY(a + dr(-0.05, 0.05)), s: S(dr(0.9, 1.25), dr(0.5, 0.8), 0.42), color: stoneLike(dpick(stoneTones)) }); }
+    { let t = 0; for (const a of [-0.36, 0.36]) { const x = cx + Math.sin(a) * 2.25, z = cz + Math.cos(a) * 2.25, y = drawnY(x, z) - 0.2; drums.push({ x, y, z, q: qY(0), s: S(0.3, 1.6, 0.3), color: dpick(stoneTones) }); t = Math.max(t, y + 1.6); }
       blocks.push({ x: cx, y: t, z: cz + 2.25, q: qY(Math.PI / 2), s: S(0.36, 0.2, 2.1), color: district }); flagAt(cx, cz + 2.4, 1.3, 0); flagAt(cx + dr(-0.2, 0.2), cz + 3.5, 1.0); }
     for (let i = 0; i < 4; i++) { const a = drand() * 6.28, d = dr(0, 1.2); flagAt(cx + Math.sin(a) * d, cz + Math.cos(a) * d, 0.9); }
     for (let i = 0; i < 2; i++) { const a = dr(1.2, 5.1), d = 3.0 + dr(0, 0.5); jarAt(cx + Math.sin(a) * d, cz + Math.cos(a) * d); }
-    colliders.push({ x: cx, z: cz, r: 2.3, top: height(cx, cz) + 1.5 });
+    colliders.push({ x: cx, z: cz, r: 2.3, top: drawnY(cx, cz) + 1.5 });
     for (let i = 0; i < kids; i++) hoop(cx + rr(2.8, 4.2) * (i % 2 ? 1 : -1), cz + rr(-2, 2), rr(0.75, 1));
   }
   // a narrow stall: two short posts and a low lintel, where a citizen held still to be shorn
@@ -649,7 +689,7 @@ float seaLight(vec2 p, float t) {
     spots.biters.push([x + Math.sin(yaw) * 1.6, z + Math.cos(yaw) * 1.6]);
   }
   // a stone table with the day's takings on it
-  function table(x, z, size, stack) { const y = height(x, z) - 0.1; drums.push({ x, y, z, q: qY(0), s: S(0.5, 0.75, 0.5), color: pick(stoneTones) }, { x, y: y + 0.75, z, q: qY(rand()), s: S(size * 2, 0.16, size * 2), color: pick(stoneTones) }); colliders.push({ x, z, r: size, top: y + 1 }); coinStack(x, y + 0.96, z, stack); { const a = drand() * 6.28; jarAt(x + Math.sin(a) * (size + 0.6), z + Math.cos(a) * (size + 0.6)); shardsAt(x, z, size + 1.2, 3); } }
+  function table(x, z, size, stack) { const y = drawnY(x, z) - 0.1; drums.push({ x, y, z, q: qY(0), s: S(0.5, 0.75, 0.5), color: pick(stoneTones) }, { x, y: y + 0.75, z, q: qY(rand()), s: S(size * 2, 0.16, size * 2), color: pick(stoneTones) }); colliders.push({ x, z, r: size, top: y + 1 }); coinStack(x, y + 0.96, z, stack); { const a = drand() * 6.28; jarAt(x + Math.sin(a) * (size + 0.6), z + Math.cos(a) * (size + 0.6)); shardsAt(x, z, size + 1.2, 3); } }
   const along = (d, side = 0) => { const [x, z] = polar(goalAngle, d); return [x + Math.cos(goalAngle) * side, z - Math.sin(goalAngle) * side]; }; // a point on the way to the goal
   const goalDist = Math.hypot(goal.x - SPAWN.x, goal.z - SPAWN.z);
 
@@ -711,7 +751,7 @@ float seaLight(vec2 p, float t) {
     { const [x, z] = polar(goalAngle + 2.4, 36); heroRing(x, z, 18); }
   } else if (floor === 2) { // The Lamp Streets: the light failed, faith turned downward
     for (let d = 9, i = 0; d < goalDist - 12; d += 8, i++) for (const side of [-4.2, 4.2]) { // an avenue of lamp plinths, some still occupied
-      const [x, z] = along(d, side), y = height(x, z) - 0.2;
+      const [x, z] = along(d, side), y = drawnY(x, z) - 0.2;
       sites.push([x, z, 2.5]);
       blocks.push({ x, y, z, q: qY(goalAngle), s: S(1.3, 1.5, 1.3), color: pick(stoneTones) }, { x, y: y + 1.5, z, q: qY(goalAngle), s: S(1.6, 0.2, 1.6), color: district });
       colliders.push({ x, z, r: 1, top: y + 1.9 });
@@ -736,7 +776,7 @@ float seaLight(vec2 p, float t) {
     { const [x, z] = polar(goalAngle - 1.0, 30); heroRing(x, z, 16, { sawn: true, gap: 3 }); }
     for (let r = 0; r < 2; r++) for (let i = 0; i < 6; i++) { const [x, z] = along(16 + i * 3.2, r ? 6 : -6); sites.push([x, z, 2]); stall(x, z, goalAngle + (r ? -Math.PI / 2 : Math.PI / 2)); } // halls of stalls
     for (let i = 0; i < 9; i++) { const [x, z] = along(goalDist - 20, (i - 4) * 3.1); sites.push([x, z, 2]); stall(x, z, goalAngle); } // a wall of gates too small for a long body
-    for (let i = 0; i < 4; i++) { const [x, z] = polar(goalAngle + 2.2 + i * 0.5, rr(16, 30)); sites.push([x, z, 3]); for (let k = 0; k < 7; k++) hoops.push({ x: x + rr(-0.1, 0.1), y: height(x, z) + 0.05 + k * 0.1, z: z + rr(-0.1, 0.1), q: qY(rand() * 6, Math.PI / 2), s: S(0.8), color: pick(stoneTones) }); } // hoops never used, stacked
+    for (let i = 0; i < 4; i++) { const [x, z] = polar(goalAngle + 2.2 + i * 0.5, rr(16, 30)); sites.push([x, z, 3]); for (let k = 0; k < 7; k++) hoops.push({ x: x + rr(-0.1, 0.1), y: drawnY(x, z) + 0.05 + k * 0.1, z: z + rr(-0.1, 0.1), q: qY(rand() * 6, Math.PI / 2), s: S(0.8), color: pick(stoneTones) }); } // hoops never used, stacked
     for (let i = 0; i < 4; i++) { const [x, z] = polar(rand() * 6.28, rr(24, 55)); if (clearNow(x, z, 6)) heroRing(x, z, 8, { sawn: true, gap: 2, carved: false }); }
     coinHeap(goal.x, goal.z, 8, 40);
   } else { // Ryūgū: no houses, no pens; what is left is coin, and a marked floor
@@ -747,7 +787,7 @@ float seaLight(vec2 p, float t) {
   }
   // Great sealed jars. A dash breaks one open; what was put by in it comes out.
   const urns = [];
-  const urnAt = (x, z, size, prize) => { const y = height(x, z) - 0.06, col = { x, z, r: 0.36 * size, top: y + size }; colliders.push(col); const u = { x, y, z, size, r: 0.42 * size, prize, broken: false, col, color: clay(), mesh: null }; urns.push(u); for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; flagAt(x + Math.sin(a) * 0.5 * size, z + Math.cos(a) * 0.5 * size, 0.9); } return u; };
+  const urnAt = (x, z, size, prize) => { const y = drawnY(x, z) - 0.06, col = { x, z, r: 0.36 * size, top: y + size }; colliders.push(col); const u = { x, y, z, size, r: 0.42 * size, prize, broken: false, col, color: clay(), mesh: null }; urns.push(u); for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; flagAt(x + Math.sin(a) * 0.5 * size, z + Math.cos(a) * 0.5 * size, 0.9); } return u; };
   // The nursery: where the young of the Long Ones were taught, and where a first dive begins. A paved way runs out from
   // the start, a little aside of the line to the well: three hoops to swim through, a pen with one small swarm, two more
   // small pens with a bigger one beyond them (which cannot be taken until the small ones are eaten), and a sealed jar across the way.
@@ -757,12 +797,12 @@ float seaLight(vec2 p, float t) {
     const P = (d, side = 0) => [SPAWN.x + ux * (d + 4.5) + nx * side, SPAWN.z + uz * (d + 4.5) + nz * side]; // measured from where the head is when the dive begins, a body's length out from the start
     for (let d = 0; d <= 48; d += 6) sites.push([...P(d), 8.5]);
     for (const [d, side, lift] of [[8, 0, 1.9], [14, 1.8, 3.9], [20, -1.8, 2.3]]) {
-      const [x, z] = P(d, side), y = height(x, z) + lift, R = 1.7;
-      for (const sg of [-1, 1]) { const px = x + nx * sg * (R + 0.2), pz = z + nz * sg * (R + 0.2), py = height(px, pz) - 0.2; drums.push({ x: px, y: py, z: pz, q: qY(A), s: S(0.42, y - py, 0.42), color: pick(stoneTones) }); bases.push({ x: px, y: py + 0.15, z: pz, q: qY(A), s: S(0.75, 0.8, 0.75), color: dpick(stoneTones) }); blocks.push({ x: px, y, z: pz, q: qY(A), s: S(0.56, 0.12, 0.56), color: district }); colliders.push({ x: px, z: pz, r: 0.4, top: y + 0.2 }); }
+      const [x, z] = P(d, side), y = drawnY(x, z) + lift, R = 1.7;
+      for (const sg of [-1, 1]) { const px = x + nx * sg * (R + 0.2), pz = z + nz * sg * (R + 0.2), py = drawnY(px, pz) - 0.2; drums.push({ x: px, y: py, z: pz, q: qY(A), s: S(0.42, y - py, 0.42), color: pick(stoneTones) }); bases.push({ x: px, y: py + 0.15, z: pz, q: qY(A), s: S(0.75, 0.8, 0.75), color: dpick(stoneTones) }); blocks.push({ x: px, y, z: pz, q: qY(A), s: S(0.56, 0.12, 0.56), color: district }); colliders.push({ x: px, z: pz, r: 0.4, top: y + 0.2 }); }
       nurse.hoops.push({ x, y, z, r: R, ux, uz, mesh: null });
     }
     nurse.keep[0] = P(26.5); nurse.keep[1] = P(33.5, 5.2); nurse.keep[2] = P(33.5, -5.2); nurse.keep[5] = P(41.5); // one small; then two small and, beyond them, a middling one that is too big to take until all three small ones are eaten
-    { const [x, z] = P(26.5, 3.6), y = height(x, z) - 0.2; blocks.push({ x, y, z, q: qY(A), s: S(1.3, 0.7, 1.3), color: pick(stoneTones) }); coils.push({ x, y: y + 0.86, z, q: qY(A), s: S(0.62), color: district }); } // the lesson, carved: a body closed round a swarm
+    { const [x, z] = P(26.5, 3.6), y = drawnY(x, z) - 0.2; blocks.push({ x, y, z, q: qY(A), s: S(1.3, 0.7, 1.3), color: pick(stoneTones) }); coils.push({ x, y: y + 0.86, z, q: qY(A), s: S(0.62), color: district }); } // the lesson, carved: a body closed round a swarm
     nurse.jar = urnAt(...P(49), 2.7, 'shell');
     paveRoad(...P(-3), ...P(47), 1.2, 1.2);
     { const [jx, jz] = P(51), gd = Math.hypot(goal.x - jx, goal.z - jz), gx2 = (goal.x - jx) / gd, gz2 = (goal.z - jz) / gd; // and on from the jar to the rift, small hoops marking the way
@@ -784,7 +824,7 @@ float seaLight(vec2 p, float t) {
     // a curb along both edges, capped in the district's colour, with gaps to swim in through, and bollards on it
     for (const side of [-1, 1]) for (let i = -6; i <= 6; i++) {
       if (i === 0 || Math.abs(i) === 4) continue;
-      const u = i * 2.5, [x, z] = at(u, side * (riftW(u) + 0.7)), y = height(x, z) - 0.15;
+      const u = i * 2.5, [x, z] = at(u, side * (riftW(u) + 0.7)), y = drawnY(x, z) - 0.15;
       blocks.push({ x, y, z, q: qY(yawT), s: S(2.3, 0.8, 0.8), color: pick(stoneTones) }, { x, y: y + 0.8, z, q: qY(yawT), s: S(2.45, 0.16, 0.95), color: district });
       colliders.push({ x, z, r: 0.85, top: y + 1.0 });
       if (Math.abs(i) % 3 === 2) { drums.push({ x, y: y + 0.96, z, q: qY(yawT), s: S(0.4, 0.5, 0.4), color: dpick(stoneTones) }); blocks.push({ x, y: y + 1.46, z, q: qY(yawT), s: S(0.5, 0.1, 0.5), color: district }); if (floor >= 2) grownBulbs.push({ x, y: y + 1.56, z, q: qY(0), s: S(1, 0.3, 1) }); } // lamps on them once it is dark
@@ -796,10 +836,13 @@ float seaLight(vec2 p, float t) {
     }
     for (const side of [-1, 1]) for (let u = -19; u <= 19; u += 1.4) for (const out of [1.95, 4.6]) if (drand() > (out > 2 ? 0.32 : 0.12)) { const [x, z] = at(u, side * (riftW(u) + out)); flagAt(x, z, out > 2 ? 1.4 : 1.25, yawT + dr(-0.15, 0.15)); }
     // steps let into the near wall, going down into the dark
-    for (let i = 0; i < 15; i++) {
-      const u = -10 + i * 1.25, [x, z] = at(u, -(riftW(u) - rift.ledge - 0.35 - i * 0.17));
-      blocks.push({ x, y: rift.y - rift.step - 0.25 - i * 0.66, z, q: qY(yawT), s: S(1.5, 0.2, 1.0), color: i % 5 === 4 ? district : stoneLike(dpick(stoneTones)) });
-    }
+    // Each is set into the wall where the wall is at that step's own height, a third of it in the rock, so that none of them hangs clear of it.
+    { const inv = (t) => 0.5 - Math.sin(Math.asin(1 - 2 * clamp(t, 0, 1)) / 3); // smooth(), the other way round
+      for (let i = 0; i < 15; i++) {
+        const down = 0.25 + i * 0.66, face = rift.ledge + (rift.wall - rift.ledge) * inv(down / (rift.deep - rift.step)); // how far in from the rift's line the wall's face is, that far below the ledge
+        const u = -10 + i * 1.25, [x, z] = at(u, -(riftW(u) - face - 0.2));
+        blocks.push({ x, y: rift.y - rift.step - down, z, q: qY(yawT), s: S(1.5, 0.2, 1.1), color: i % 5 === 4 ? district : stoneLike(dpick(stoneTones)) });
+      } }
     { // a tall pillar on the ledge at either side of the mouth, to mark the rift's middle from far off. Nothing hangs between them: a ring there
       // looked like the nursery's hoops, which are for swimming through, and this is no place to be told to swim through anything
       const out = riftW(0) - rift.ledge + 0.9, [ax, az] = at(0, -out), [bx, bz] = at(0, out);
@@ -844,12 +887,12 @@ float seaLight(vec2 p, float t) {
   const PUZZLE = { food: [12, 16, 20, 24, 28], turns: 1.25, reach: 4.6, gap: 5.5, between: 6, plug: 1.5 };
   const puzzles = [];
   {
-    const kerb = (x, z, r, n = 9) => { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, bx = x + Math.sin(a) * r, bz = z + Math.cos(a) * r; blocks.push({ x: bx, y: height(bx, bz) - 0.15, z: bz, q: qY(a), s: S(0.74, 0.5, 0.36), color: stoneTones[i % stoneTones.length] }); } };
+    const kerb = (x, z, r, n = 9) => { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, bx = x + Math.sin(a) * r, bz = z + Math.cos(a) * r; blocks.push({ x: bx, y: drawnY(bx, bz) - 0.15, z: bz, q: qY(a), s: S(0.74, 0.5, 0.36), color: stoneTones[i % stoneTones.length] }); } };
     // a post, as `post` makes one, but with nothing drawn from the runs of numbers the rest of the band is laid out by
-    const stand = (x, z, h, r) => { const y = height(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: stoneTones[1 % stoneTones.length] }); drums.push({ x, y, z, q: qY(xr(0, 3)), s: S(r * 2, h, r * 2), color: stoneTones[0] }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
-    const flagsTo = (ax, az, bx, bz) => { const len = Math.hypot(bx - ax, bz - az); for (let d = 0.9; d < len - 0.6; d += 1.15) { const x = lerp(ax, bx, d / len) + xr(-0.1, 0.1), z = lerp(az, bz, d / len) + xr(-0.1, 0.1); flags.push({ x, y: height(x, z) - 0.03, z, q: lie(x, z, Math.atan2(bx - ax, bz - az)), s: S(0.95, 0.1, 0.8), color: tint(stoneTones[0], '#7c9794', 0.35) }); } };
+    const stand = (x, z, h, r) => { const y = drawnY(x, z) - 0.2; bases.push({ x, y: y + 0.18, z, q: qY(0), s: S(r * 2.3, r * 2.2, r * 2.3), color: stoneTones[1 % stoneTones.length] }); drums.push({ x, y, z, q: qY(xr(0, 3)), s: S(r * 2, h, r * 2), color: stoneTones[0] }); colliders.push({ x, z, r: r + 0.25, top: y + h + 0.2 }); return y + h; };
+    const flagsTo = (ax, az, bx, bz) => { const len = Math.hypot(bx - ax, bz - az); for (let d = 0.9; d < len - 0.6; d += 1.15) { const x = lerp(ax, bx, d / len) + xr(-0.1, 0.1), z = lerp(az, bz, d / len) + xr(-0.1, 0.1); flags.push({ x, y: drawnY(x, z) - 0.03, z, q: lie(x, z, Math.atan2(bx - ax, bz - az)), s: S(0.95, 0.1, 0.8), color: tint(stoneTones[0], '#7c9794', 0.35) }); } };
     // a cist: a ring of kerb stones with a round lid in the band's paint, and what was put by inside it
-    const cist = (x, z) => { kerb(x, z, 1.05); const y = height(x, z); for (let i = 0; i < 7; i++) { const a = xr(0, 6.28), d = xr(0, 0.6); coins.push({ x: x + Math.sin(a) * d, y: y + 0.05 + i * 0.03, z: z + Math.cos(a) * d, q: qY(xr(0, 6), xr(-0.5, 0.5), xr(-0.5, 0.5)), s: S(1), color: i % 2 ? '#e9dfc0' : district }); } return { x, y: y + 0.42, z, open: 0 }; };
+    const cist = (x, z) => { kerb(x, z, 1.05); const y = drawnY(x, z); for (let i = 0; i < 7; i++) { const a = xr(0, 6.28), d = xr(0, 0.6); coins.push({ x: x + Math.sin(a) * d, y: y + 0.05 + i * 0.03, z: z + Math.cos(a) * d, q: qY(xr(0, 6), xr(-0.5, 0.5), xr(-0.5, 0.5)), s: S(1), color: i % 2 ? '#e9dfc0' : district }); } return { x, y: y + 0.42, z, open: 0 }; };
     // somewhere clear for one: first beside the way to the well, where it will be come upon; failing that, anywhere in the band
     const spot = (pad) => { for (let t = 0; t < 260; t++) { const [x, z] = t < 90 ? along(xr(16, Math.max(goalDist - 16, 22)), (xrand() < 0.5 ? -1 : 1) * xr(9, 26)) : polar(xr(0, 6.28), xr(16, 66)); if (clearNow(x, z, pad) && puzzles.every((p) => farFrom(x, z, p.x, p.z, 15))) return [x, z]; } return null; };
     const kinds = last ? ['capstan', 'vent'] : ['capstan', 'windows', 'vent'];
@@ -857,7 +900,7 @@ float seaLight(vec2 p, float t) {
       if (kind === 'capstan') {
         const at = spot(5.5); if (!at) continue; const [x, z] = at, a = xr(0, 6.28), cx = x + Math.sin(a) * 5.2, cz = z + Math.cos(a) * 5.2;
         const top = stand(x, z, 2.5, 0.34); kerb(x, z, 0.95, 7); flagsTo(x, z, cx, cz);
-        blocks.push({ x: (x + cx) / 2, y: height((x + cx) / 2, (z + cz) / 2) + 0.2, z: (z + cz) / 2, q: qY(a), s: S(0.06, 0.06, 5.2), color: '#4a4036' }); // the line from the capstan to the lid
+        blocks.push({ x: (x + cx) / 2, y: drawnY((x + cx) / 2, (z + cz) / 2) + 0.2, z: (z + cz) / 2, q: qY(a), s: S(0.06, 0.06, 5.2), color: '#4a4036' }); // the line from the capstan to the lid
         sites.push([x, z, 6.5, 'puzzle'], [cx, cz, 2.5, 'puzzle']);
         puzzles.push({ kind, x, z, y: top - 0.55, cache: cist(cx, cz), ax: Math.sin(a), az: Math.cos(a), turn: 0, was: null, done: false, k: 0, ring: { x, z, y: top - 0.55, left: 1, can: true, threat: 1, orbit: 2.0 } }); // `ring`: what the wrap keys go round, as they do a swarm
       } else if (kind === 'windows') {
@@ -868,14 +911,14 @@ float seaLight(vec2 p, float t) {
           if ([...pts, end].every(([hx, hz]) => clearNow(hx, hz, 2.7) && puzzles.every((q) => farFrom(hx, hz, q.x, q.z, 12)))) made = { dir, ux, uz, pts, end }; }
         if (!made) continue;
         const { dir, ux, uz, pts, end } = made, nx = Math.cos(dir), nz = -Math.sin(dir), R = 1.55;
-        const hoops4 = pts.map(([hx, hz], k) => { const y = height(hx, hz) + 2.3 + 0.5 * Math.sin(k * 2.1 + 1);
-          for (const sg of [-1, 1]) { const px = hx + nx * sg * (R + 0.2), pz = hz + nz * sg * (R + 0.2), py = height(px, pz) - 0.2; drums.push({ x: px, y: py, z: pz, q: qY(dir), s: S(0.4, y - py, 0.4), color: stoneTones[k % stoneTones.length] }); bases.push({ x: px, y: py + 0.15, z: pz, q: qY(dir), s: S(0.72, 0.8, 0.72), color: stoneTones[(k + 1) % stoneTones.length] }); blocks.push({ x: px, y, z: pz, q: qY(dir), s: S(0.54, 0.12, 0.54), color: district }); colliders.push({ x: px, z: pz, r: 0.4, top: y + 0.2 }); }
+        const hoops4 = pts.map(([hx, hz], k) => { const y = drawnY(hx, hz) + 2.3 + 0.5 * Math.sin(k * 2.1 + 1);
+          for (const sg of [-1, 1]) { const px = hx + nx * sg * (R + 0.2), pz = hz + nz * sg * (R + 0.2), py = drawnY(px, pz) - 0.2; drums.push({ x: px, y: py, z: pz, q: qY(dir), s: S(0.4, y - py, 0.4), color: stoneTones[k % stoneTones.length] }); bases.push({ x: px, y: py + 0.15, z: pz, q: qY(dir), s: S(0.72, 0.8, 0.72), color: stoneTones[(k + 1) % stoneTones.length] }); blocks.push({ x: px, y, z: pz, q: qY(dir), s: S(0.54, 0.12, 0.54), color: district }); colliders.push({ x: px, z: pz, r: 0.4, top: y + 0.2 }); }
           sites.push([hx, hz, 3, 'puzzle']); return { x: hx, y, z: hz, r: R, lit: 0, side: 0, mesh: null }; });
         flagsTo(pts[0][0] - ux * 2.5, pts[0][1] - uz * 2.5, end[0], end[1]); sites.push([end[0], end[1], 2.5, 'puzzle']);
         puzzles.push({ kind, x: pts[0][0], z: pts[0][1], y: hoops4[0].y, dir, ux, uz, hoops: hoops4, cache: cist(end[0], end[1]), next: -1, step: 0, timer: 0, done: false, k: 0 });
       } else {
         const at = spot(5.5); if (!at) continue; const [x, z] = at, a = xr(0, 6.28), bx = x + Math.sin(a) * 6, bz = z + Math.cos(a) * 6;
-        const chimney = (vx, vz) => { const y = height(vx, vz) - 0.2; bases.push({ x: vx, y: y + 0.12, z: vz, q: qY(a), s: S(1.5, 1.1, 1.5), color: stoneTones[1 % stoneTones.length] }); shafts.push({ x: vx, y: y + 0.3, z: vz, q: qY(a), s: S(1.3, 1.25, 1.3), color: stoneTones[0] }); drums.push({ x: vx, y: y + 1.5, z: vz, q: qY(a), s: S(0.84, 0.06, 0.84), color: '#1d2530' }); colliders.push({ x: vx, z: vz, r: 0.72, top: y + 1.56 }); return y + 1.56; };
+        const chimney = (vx, vz) => { const y = drawnY(vx, vz) - 0.2; bases.push({ x: vx, y: y + 0.12, z: vz, q: qY(a), s: S(1.5, 1.1, 1.5), color: stoneTones[1 % stoneTones.length] }); shafts.push({ x: vx, y: y + 0.3, z: vz, q: qY(a), s: S(1.3, 1.25, 1.3), color: stoneTones[0] }); drums.push({ x: vx, y: y + 1.5, z: vz, q: qY(a), s: S(0.84, 0.06, 0.84), color: '#1d2530' }); colliders.push({ x: vx, z: vz, r: 0.72, top: y + 1.56 }); return y + 1.56; };
         const topA = chimney(x, z), topB = chimney(bx, bz); flagsTo(x, z, bx, bz); kerb(bx, bz, 1.25, 8);
         sites.push([x, z, 4, 'puzzle'], [bx, bz, 4, 'puzzle']);
         puzzles.push({ kind, x, z, y: topA, cache: { x: bx, y: topB + 0.02, z: bz, open: 0, shell: true }, press: 0, puff: 0, done: false, k: 0 });
@@ -888,14 +931,14 @@ float seaLight(vec2 p, float t) {
   for (let i = 0, t = 0; i < 2 && t < 300; t++) { const [x, z] = t < 120 ? along(xr(12, Math.max(goalDist - 26, 16)), (xrand() < 0.5 ? -1 : 1) * xr(7, 22)) : polar(xr(0, 6.28), xr(14, 60));
     if (!clearNow(x, z, 2.5) || !farFrom(x, z, goal.x, goal.z, 24) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 16)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 7))) continue;
     sites.push([x, z, 2.2, 'puzzle']); i++;
-    fragments.push({ x, y: height(x, z) + LIE, z, yaw: xr(0, 6.28), tilt: xr(1.2, 1.36), held: false, gone: false, sink: 0, mesh: null, ring: { x, z, left: 1, can: true, threat: 1, orbit: 1.5 } }); }
+    fragments.push({ x, y: drawnY(x, z) + LIE, z, yaw: xr(0, 6.28), tilt: xr(1.2, 1.36), held: false, gone: false, sink: 0, mesh: null, ring: { x, z, left: 1, can: true, threat: 1, orbit: 1.5 } }); }
   // A cleaning station (CLEAN), near where tail-biters live if they have a place of their own in this band, else off the way to the rift.
   const stations = [];
   if (F.biters > 0) for (let t = 0; t < 300 && !stations.length; t++) {
     const from = t < 200 && spots.biters.length ? spots.biters[Math.floor(xrand() * spots.biters.length)] : null, a = xr(0, 6.28), d = xr(9, 15);
     const [x, z] = from ? [from[0] + Math.sin(a) * d, from[1] + Math.cos(a) * d] : along(xr(14, Math.max(goalDist - 20, 18)), (xrand() < 0.5 ? -1 : 1) * xr(8, 20));
     if (!clearNow(x, z, 4.5) || !farFrom(x, z, goal.x, goal.z, 20) || (hall && !farFrom(x, z, hall.x, hall.z, hall.R + 6)) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 7)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8))) continue;
-    const y = height(x, z), col = { x, z, r: 1.25, top: y + 1.15 }; colliders.push(col); sites.push([x, z, 4, 'puzzle']);
+    const y = drawnY(x, z), col = { x, z, r: 1.25, top: y + 1.15 }; colliders.push(col); sites.push([x, z, 4, 'puzzle']);
     stations.push({ x, y, z, top: y + 1.3, yaw: xr(0, 6.28), k: 0, uses: CLEAN.uses, rest: 0, on: false, near: false, live: false, cx: x, cz: z, away: 0, ring: null, arc: null,
       fish: Array.from({ length: CLEAN.fish }, (_, i) => ({ p: new THREE.Vector3(x, y + 1.9, z), v: new THREE.Vector3(), ph: xr(0, 6.28), slot: 0.08 + 0.84 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, yaw: xr(0, 6.28), pitch: 0, size: 1 })) });
   }
@@ -906,7 +949,7 @@ float seaLight(vec2 p, float t) {
       const x = rift.x - rift.nx * back + rift.tx * side * sgn, z = rift.z - rift.nz * back + rift.tz * side * sgn;
       if (floor === 0 && !farFrom(x, z, rift.x - rift.nx * 24, rift.z - rift.nz * 24, 14)) continue; // the Keeper walks the shelf at the near edge (guards.js): not on its ground
       if (!clearNow(x, z, 2.6) || stations.some((o) => !farFrom(x, z, o.x, o.z, 8)) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 5)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8))) continue;
-      const yaw = Math.atan2(rift.x - rift.nx * (back + 11) - x, rift.z - rift.nz * (back + 11) - z), y = height(x, z) - 0.12;
+      const yaw = Math.atan2(rift.x - rift.nx * (back + 11) - x, rift.z - rift.nz * (back + 11) - z), y = drawnY(x, z) - 0.12;
       for (const k of [-1.3, 0, 1.3]) colliders.push({ x: x + Math.cos(yaw) * k, z: z - Math.sin(yaw) * k, r: 0.5, top: y + 3.2 });
       sites.push([x, z, 3, 'puzzle']);
       mural = { x, y, z, yaw, cx: x, cz: z, near: false, whole: false, glow: 0, wait: 0, signs: MURAL.signs.map((kind) => ({ kind, earned: false, lit: 0, on: false, mesh: null })) };
@@ -984,7 +1027,7 @@ float seaLight(vec2 p, float t) {
     const base = big ? rr(1.6, 3.4) : rr(0.35, 1.3);
     const s = S(base * rr(0.8, 1.3), base * rr(0.55, 1.0), base * rr(0.8, 1.3)), q = qY(rand() * 6.28, rr(-0.3, 0.3), rr(-0.3, 0.3)), tone = pick(rockTones);
     if (!clearOfSites(x, z, big ? 3 : 0)) continue;
-    const y = height(x, z) + s.y * 0.2;
+    const y = drawnY(x, z) + s.y * 0.2;
     rocks.push({ x, y, z, q, s, color: tone });
     if (base > 0.9) colliders.push({ x, y, z, r: (s.x + s.z) * 0.47 });
   }
@@ -1001,10 +1044,10 @@ float seaLight(vec2 p, float t) {
       const cx = rand() * T, cz = rand() * T, n = 3 + Math.floor(rand() * 7), tall = rr(3, 7.5);
       for (let i = 0; i < n; i++) {
         const a = rand() * 6.28, d = rr(0, 2.8), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d, w = rr(1.3, 2.2), hgt = tall * rr(0.6, 1.1), yaw = rand() * 6.28, tone = pick(kelpTones);
-        if (clearOfSites(x, z)) kelp.push({ x, y: height(x, z) - 0.15, z, q: qY(yaw), s: S(w, hgt, w), color: tone });
+        if (clearOfSites(x, z)) kelp.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(yaw), s: S(w, hgt, w), color: tone });
       }
     }
-    for (const [x, z] of spots.kelpRows || []) kelp.push({ x, y: height(x, z) - 0.15, z, q: qY(rand() * 6.28), s: S(1.6, rr(3.6, 4.6), 1.6), color: pick(kelpTones) });
+    for (const [x, z] of spots.kelpRows || []) kelp.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(rand() * 6.28), s: S(1.6, rr(3.6, 4.6), 1.6), color: pick(kelpTones) });
     scatter(G.kelp, kelpMat, (grownAt.kelp = kelp), { receive: false });
   }
 
@@ -1014,7 +1057,7 @@ float seaLight(vec2 p, float t) {
   for (let i = 0; i < F.coral; i++) {
     const c = pick(reefs), a = rand() * 6.28, d = rr(1.8, 8), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d;
     const s = rr(0.8, 1.9), q = qY(rand() * 6.28, rr(-0.12, 0.12), rr(-0.12, 0.12)), tone = pick(coralTones), finger = rand() < 0.62;
-    if (clearOfSites(x, z)) (finger ? fingers : tables).push({ x, y: height(x, z) - 0.1, z, q, s: S(s), color: finger ? tone : tableTones[coralTones.indexOf(tone) % tableTones.length] });
+    if (clearOfSites(x, z)) (finger ? fingers : tables).push({ x, y: drawnY(x, z) - 0.1, z, q, s: S(s), color: finger ? tone : tableTones[coralTones.indexOf(tone) % tableTones.length] });
   }
   for (const g of grownFingers) fingers.push({ ...g, color: dpick(coralTones) });
   const coralMat = mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }));
@@ -1024,9 +1067,9 @@ float seaLight(vec2 p, float t) {
   for (let i = 0; i < F.glow; i++) {
     const c = rand() < 0.7 ? pick(reefs) : [rand() * T, rand() * T], a = rand() * 6.28, d = rr(0.5, 9), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d;
     const hgt = rr(0.5, 1.9), q = qY(rand() * 6.28, rr(-0.25, 0.25), rr(-0.25, 0.25)), tone = pick(glowTones);
-    if (clearOfSites(x, z)) (i % 3 === 2 ? pens : lanterns).push({ x, y: height(x, z) - 0.05, z, q, s: i % 3 === 2 ? S(1.5, hgt * 0.9 + 0.4, 1.5) : S(1.25, hgt * 0.75 + 0.35, 1.25), color: i % 3 === 2 ? penTones[glowTones.indexOf(tone) % penTones.length] : tone });
+    if (clearOfSites(x, z)) (i % 3 === 2 ? pens : lanterns).push({ x, y: drawnY(x, z) - 0.05, z, q, s: i % 3 === 2 ? S(1.5, hgt * 0.9 + 0.4, 1.5) : S(1.25, hgt * 0.75 + 0.35, 1.25), color: i % 3 === 2 ? penTones[glowTones.indexOf(tone) % penTones.length] : tone });
   }
-  for (const [x, z] of spots.glowRows || []) lanterns.push({ x, y: height(x, z) - 0.05, z, q: qY(rand() * 6.28), s: S(1.3, rr(1.2, 1.6), 1.3), color: glowTones[0] });
+  for (const [x, z] of spots.glowRows || []) lanterns.push({ x, y: drawnY(x, z) - 0.05, z, q: qY(rand() * 6.28), s: S(1.3, rr(1.2, 1.6), 1.3), color: glowTones[0] });
   for (const g of grownBulbs) lanterns.push({ ...g, s: S(g.s.x * 1.1, g.s.y * 1.6 + 0.2, g.s.z * 1.1), color: dpick(glowTones) });
   scatter(G.lantern, plant({ sway: 0.3, glow: 1.15, give: 0.2 }), lanterns, { cast: false, receive: false });
   scatter(G.pen, plant({ sway: 0.3, glow: 1.15, shy: 1 }), (grownAt.seapen = pens), { cast: false, receive: false });
@@ -1037,15 +1080,15 @@ float seaLight(vec2 p, float t) {
     const open = (pad = 1) => { for (let t = 0; t < 8; t++) { const x = drand() * T, z = drand() * T; if (clearOfSites(x, z, pad)) return [x, z]; } return null; };
     const byReef = (r0, r1) => { for (let t = 0; t < 8; t++) { const c = dpick(reefs), a = drand() * 6.28, d = dr(r0, r1), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d; if (clearOfSites(x, z, 1)) return [x, z]; } return null; };
     const strew = (n, where, make) => { const out = []; for (let i = 0; i < n; i++) { const p = where(); if (p) { const it = make(p[0], p[1]); if (it) out.push(it); } } return out; };
-    const flat = (tones, s0, s1, lift = 0.012) => (x, z) => ({ x, y: height(x, z) + lift, z, q: lie(x, z), s: S(dr(s0, s1)), color: dpick(tones) });
-    const rooted = (tones, s0, s1, sink = 0.06) => (x, z) => { const sz = dr(s0, s1); return { x, y: height(x, z) - sink * sz, z, q: qY(drand() * 6.28, dr(-0.1, 0.1), dr(-0.1, 0.1)), s: S(sz), color: dpick(tones) }; };
+    const flat = (tones, s0, s1, lift = 0.012) => (x, z) => ({ x, y: drawnY(x, z) + lift, z, q: lie(x, z), s: S(dr(s0, s1)), color: dpick(tones) });
+    const rooted = (tones, s0, s1, sink = 0.06) => (x, z) => { const sz = dr(s0, s1); return { x, y: drawnY(x, z) - sink * sz, z, q: qY(drand() * 6.28, dr(-0.1, 0.1), dr(-0.1, 0.1)), s: S(sz), color: dpick(tones) }; };
     const still = plant({ double: false }), stillBoth = plant();
     // seagrass in the green patches of the two bands that have light
-    { const grass = []; for (let i = 0, n = at([1400, 700]); i < n * 7 && grass.length < n; i++) { const x = drand() * T, z = drand() * T; if (meadow(x, z) > 0.5 && clearOfSites(x, z, 0.5)) grass.push({ x, y: height(x, z) - 0.04, z, q: qY(drand() * 6.28), s: S(dr(1.1, 1.8), dr(0.4, 0.95), dr(1.1, 1.8)), color: dpick(tonesOf('seagrass')) }); }
+    { const grass = []; for (let i = 0, n = at([1400, 700]); i < n * 7 && grass.length < n; i++) { const x = drand() * T, z = drand() * T; if (meadow(x, z) > 0.5 && clearOfSites(x, z, 0.5)) grass.push({ x, y: drawnY(x, z) - 0.04, z, q: qY(drand() * 6.28), s: S(dr(1.1, 1.8), dr(0.4, 0.95), dr(1.1, 1.8)), color: dpick(tonesOf('seagrass')) }); }
       if (grass.length) scatter(G.tuft, plant({ sway: 1.3, give: 0.35 }), (grownAt.seagrass = grass), { cast: false, receive: false, reach: 44 }); }
     // pebbles and broken shell, in drifts
     { const stones = [], tones = tonesOf('pebble');
-      for (let c = 0, n = at([170, 170, 190, 210, 200]); c < n; c++) { const p = open(0.5); if (!p) continue; for (let i = 0, k = 3 + Math.floor(drand() * 6); i < k; i++) { const x = p[0] + dr(-1.3, 1.3), z = p[1] + dr(-1.3, 1.3), sz = dr(0.05, 0.2); stones.push({ x, y: height(x, z) - sz * 0.25, z, q: lie(x, z), s: S(sz * dr(0.8, 1.5), sz, sz * dr(0.8, 1.3)), color: dpick(tones) }); } }
+      for (let c = 0, n = at([170, 170, 190, 210, 200]); c < n; c++) { const p = open(0.5); if (!p) continue; for (let i = 0, k = 3 + Math.floor(drand() * 6); i < k; i++) { const x = p[0] + dr(-1.3, 1.3), z = p[1] + dr(-1.3, 1.3), sz = dr(0.05, 0.2); stones.push({ x, y: drawnY(x, z) - sz * 0.25, z, q: lie(x, z), s: S(sz * dr(0.8, 1.5), sz, sz * dr(0.8, 1.3)), color: dpick(tones) }); } }
       scatter(G.pebble, still, stones, { cast: false, reach: 40 }); }
     scatter(G.star, still, strew(at([70, 60, 30]), () => open(), flat(tonesOf('starfish'), 0.2, 0.38)), { cast: false, reach: 44 });
     scatter(G.brittle, still, strew(at([0, 0, 30, 60, 60]), () => open(), flat(tonesOf('brittlestar'), 0.3, 0.55)), { cast: false, reach: 44 });
@@ -1085,7 +1128,7 @@ float seaLight(vec2 p, float t) {
 
   // ------------------------------------------------------------ all the stonework, instanced once every builder has added its pieces
   { const places = sites.slice(1).filter(([x, z, r, what]) => r >= 5 && !what && (!hall || farFrom(x, z, hall.x, hall.z, hall.R + 8)) && (!nurse || urns.every((u) => farFrom(x, z, u.x, u.z, 12))));
-    for (let i = 0; i < 5 && places.length; i++) { const [sx, sz, r] = places.splice(Math.floor(drand() * places.length), 1)[0], a = drand() * 6.28, p = new THREE.Vector3(sx + Math.sin(a) * r * 0.45, 0, sz + Math.cos(a) * r * 0.45); p.y = height(p.x, p.z) + 1; pushOut(p, 1.3); urnAt(p.x, p.z, dr(1.9, 2.4), 'food'); } }
+    for (let i = 0; i < 5 && places.length; i++) { const [sx, sz, r] = places.splice(Math.floor(drand() * places.length), 1)[0], a = drand() * 6.28, p = new THREE.Vector3(sx + Math.sin(a) * r * 0.45, 0, sz + Math.cos(a) * r * 0.45); p.y = drawnY(p.x, p.z) + 1; pushOut(p, 1.3); urnAt(p.x, p.z, dr(1.9, 2.4), 'food'); } }
   const single = [];
   for (const u of urns) { u.mesh = add(new THREE.Mesh(G.jar, mat(new THREE.MeshLambertMaterial({ color: u.color, vertexColors: true, side: THREE.DoubleSide })))); u.mesh.scale.setScalar(u.size); u.mesh.rotation.y = drand() * 6.28; u.mesh.castShadow = true; u.mesh.frustumCulled = false; single.push(u); }
   if (nurse) for (const h of nurse.hoops) { h.mesh = add(new THREE.Mesh(G.wreath, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: '#ffe9b0', emissiveIntensity: 0 })))); h.mesh.scale.setScalar(h.r); h.mesh.rotation.y = nurse.dir; h.mesh.castShadow = true; h.mesh.frustumCulled = false; single.push(h); }
@@ -1135,12 +1178,12 @@ float seaLight(vec2 p, float t) {
       m.castShadow = m.receiveShadow = true; m.frustumCulled = false; g.add(m); owned.push({ dispose: () => m.dispose() }); return m; };
     // the line: a stone every `step`, the two ends standing and painted
     const L = nest.record > 0 ? nest.record * 0.312 + 0.5 : 0, n = Math.round(L / NEST.step), tones = tonesOf('pebble'), stones = [];
-    for (let i = 0; i <= n && n > 0; i++) { const [x, z] = at(0.5 - (i / n) * L, NEST.line), p = new THREE.Vector3(x, height(x, z) - 0.03, z), q = p.clone(); pushOut(q, 0.15); if (q.distanceToSquared(p) > 1e-6) continue; // not where something stands
+    for (let i = 0; i <= n && n > 0; i++) { const [x, z] = at(0.5 - (i / n) * L, NEST.line), p = new THREE.Vector3(x, drawnY(x, z) - 0.03, z), q = p.clone(); pushOut(q, 0.15); if (q.distanceToSquared(p) > 1e-6) continue; // not where something stands
       const end = i === 0 || i === n, k = 0.2 + 0.035 * Math.sin(i * 2.3); stones.push({ p: here(p.x, p.y, p.z), q: turned, s: end ? new THREE.Vector3(0.24, 0.75, 0.24) : new THREE.Vector3(k, k * 0.9, k * 1.2), color: end ? district : tones[i % tones.length] }); }
     lay(G.pebble, stones);
     // the places for shells: a kerb under each row, a dish at each place, and under the first of the found ones a column top that was hauled
     const places = [], dishes = [], blocks = [], stumps = [], cushions = [], S = NEST.stand; let stood = 0;
-    (nest.places || []).forEach((pl, i) => { const row = i < 5 ? 0 : 1, [x, z] = at(0.4 - (i % 5) * NEST.gap, NEST.rows[row]), ground = height(x, z), raised = pl.found && stood < (nest.fragments | 0); let top = ground + 0.12;
+    (nest.places || []).forEach((pl, i) => { const row = i < 5 ? 0 : 1, [x, z] = at(0.4 - (i % 5) * NEST.gap, NEST.rows[row]), ground = drawnY(x, z), raised = pl.found && stood < (nest.fragments | 0); let top = ground + 0.12;
       if (raised) { stood++; const neck = ground + 0.9 * S - 0.14; stumps.push({ p: here(x, neck, z), q: upside, s: new THREE.Vector3(S, S, S), color: stoneTones[0] }); cushions.push({ p: here(x, neck, z), s: new THREE.Vector3(S, S, S), color: stoneTones[0] });
         blocks.push({ p: here(x, neck + 0.2 * S, z), q: turned, s: new THREE.Vector3(1.5 * S, 0.18 * S, 1.5 * S), color: district }); top = neck + 0.38 * S; }
       dishes.push({ p: here(x, top, z), s: new THREE.Vector3(0.62, 0.07, 0.62), color: pl.found ? stoneTones[1 % stoneTones.length] : new THREE.Color(stoneTones[0]).multiplyScalar(0.6) });
@@ -1148,7 +1191,7 @@ float seaLight(vec2 p, float t) {
       if (pl.sign) { const sg = new THREE.Mesh(SIGNS[pl.sign === 'guard' ? 'claw' : pl.sign], mat(new THREE.MeshLambertMaterial({ color: pl.open ? '#fff1c4' : '#3a4a52', vertexColors: true, side: THREE.DoubleSide, emissive: '#ffdf9a', emissiveIntensity: pl.open ? 0.8 : 0 })));
         sg.rotation.set(-Math.PI / 2, yaw + Math.PI, 0, 'YXZ'); sg.position.set(x - SPAWN.x, top + 0.078, z - SPAWN.z); sg.scale.setScalar(0.52); sg.userData.sign = pl.sign; g.add(sg); }
       places.push({ type: pl.type, found: !!pl.found, sign: pl.sign || null, open: pl.open !== false, raised, x: x - SPAWN.x, y: top + 0.07 + NEST.lift, z: z - SPAWN.z, top: top + 0.07 }); });
-    for (const r of places.length ? NEST.rows : []) { const [x, z] = at(0.4 - 2 * NEST.gap, r); blocks.push({ p: here(x, height(x, z) - 0.06, z), q: turned, s: new THREE.Vector3(0.9, 0.18, 4.7), color: stoneTones[0] }); }
+    for (const r of places.length ? NEST.rows : []) { const [x, z] = at(0.4 - 2 * NEST.gap, r); blocks.push({ p: here(x, drawnY(x, z) - 0.06, z), q: turned, s: new THREE.Vector3(0.9, 0.18, 4.7), color: stoneTones[0] }); }
     lay(G.drum, dishes); lay(G.block, blocks); lay(G.stump, stumps); lay(G.echinus, cushions);
     nestAt = { x: SPAWN.x, y: 0, z: SPAWN.z, mesh: g, group: g, places, line: L, stones: stones.length, stood, yaw }; single.push(nestAt); }
   if (mural) { const g = add(new THREE.Group()), lambert = (color, more) => mat(new THREE.MeshLambertMaterial({ color, vertexColors: true, ...more }));
@@ -1643,6 +1686,29 @@ float seaLight(vec2 p, float t) {
     }
     return p;
   }
+  // The top of whatever stands within `radius` of a point: a column, a lintel, a rock; the bed itself if nothing does. For what swims over things
+  // and not round them (the Shearer, guards.js).
+  function topNear(x, z, radius) {
+    let top = height(x, z);
+    for (const c of colliders) {
+      if (c.off) continue;
+      const dx = wrapD(x - c.x), dz = wrapD(z - c.z), R = c.r + radius;
+      if (dx * dx + dz * dz < R * R) top = Math.max(top, c.top !== undefined ? c.top : c.y + c.r);
+    }
+    return top;
+  }
+  // Is a point in something that stands at least `rise` above the bed: a column, a lintel, a big rock, and not a kerb or a jar?
+  function inStone(p, radius, rise = 0) {
+    for (const c of colliders) {
+      if (c.off) continue;
+      const dx = wrapD(p.x - c.x), dz = wrapD(p.z - c.z), R = c.r + radius;
+      if (dx * dx + dz * dz >= R * R) continue;
+      const top = c.top !== undefined ? c.top : c.y + c.r;
+      if (top - height(c.x, c.z) < rise) continue;
+      if (c.top !== undefined ? p.y < c.top - 0.25 : dx * dx + (p.y - c.y) * (p.y - c.y) + dz * dz < R * R) return true;
+    }
+    return false;
+  }
   function pushOut(p, radius) {
     for (const c of colliders) {
       const dx = wrapD(p.x - c.x), dz = wrapD(p.z - c.z);
@@ -1790,6 +1856,10 @@ float seaLight(vec2 p, float t) {
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
   const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, mural, earn, nest: nestAt, carved: muralNews, greatest: [...F.schools].reduce((a, b) => (TIERS.indexOf(b) > TIERS.indexOf(a) ? b : a), 's'), opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
-  return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  // for the tools that audit what stands where (tools/audit_rift.mjs): every instanced piece with the name of its model, and the single ones
+  const pieces = () => [...scatters.flatMap((sc) => { const name = Object.keys(G).find((k) => G[k] === sc.mesh.geometry) || 'other'; if (!sc.mesh.geometry.boundingBox) sc.mesh.geometry.computeBoundingBox(); const b = sc.mesh.geometry.boundingBox;
+    return sc.items.map((it) => ({ name, x: it.x, y: it.y, z: it.z, sx: it.s.x, sy: it.s.y, sz: it.s.z, lo: b.min.y, hi: b.max.y, half: Math.max(b.max.x, -b.min.x, b.max.z, -b.min.z), tilt: 2 * Math.acos(Math.min(1, Math.hypot(it.q.w, it.q.y))) })); }),
+    ...single.filter((o) => o.signs || o.uses !== undefined || (o.held !== undefined && !o.held && !o.gone)).map((o) => ({ name: o.signs ? 'mural' : o.uses !== undefined ? 'station' : 'fragment', x: o.x, y: o.y - (o.held !== undefined ? 0.45 : 0), z: o.z, sx: 1, sy: 1, sz: 1, lo: 0, hi: 1, half: o.signs ? 1.6 : 0.6, tilt: 0 }))]; // (a fragment lies with its middle 0.45 m up; the moving parts of the puzzles hang where they are meant to)
+  return { update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }
