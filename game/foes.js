@@ -3,7 +3,6 @@
 
 import * as THREE from 'three';
 import { rng, clamp, soup, M, glowTexture } from './geo.js';
-import { T } from './world.js';
 import { alive } from './kit.js';
 import { make, geometry } from './npc.js';
 
@@ -18,7 +17,7 @@ function geometries() {
 
 // game: { safe(): bool, bite(segments, joint, from, kind): bool }
 export function createFoes(scene, world, { seed = 1 } = {}, game) {
-  const G = geometries(), F = world.floor;
+  const G = geometries(), F = world.floor, T = world.size; // how far across the world is, is the world's to say
   const rand = rng(seed * 31 + world.index * 1013 + 5);
   const rr = (a, b) => a + (b - a) * rand();
   const owned = [], materials = [];

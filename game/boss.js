@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { buildOarfish } from './oarfish.js';
 import { NPC, geometry, paintOf, resolve } from './npc.js';
-import { T, wrapD, canWrap } from './world.js';
+import { canWrap } from './world.js';
 import { rng, lerp, clamp, damp, soup, M, glowTexture, windingNumber } from './geo.js';
 
 const SEG = 0.72; // metres of body to one segment of the wall
@@ -24,7 +24,7 @@ const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const smooth = (k) => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
 
 export function createSum(scene, world, { seed = 1 } = {}, game) {
-  const hall = world.hall, R = hall.R, GAP = hall.gapHalf, CIRC = Math.PI * 2 * R;
+  const hall = world.hall, R = hall.R, GAP = hall.gapHalf, CIRC = Math.PI * 2 * R, T = world.size, wrapD = world.wrap; // T, wrapD: how far across this world is, and the shortest way round it
   const rand = rng(seed * 31 + 977), rr = (a, b) => a + (b - a) * rand();
   const ground = (x, z) => world.height(hall.x + x, hall.z + z);
   const root = new THREE.Group();

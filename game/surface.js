@@ -67,7 +67,7 @@ export function createSurface(scene, at, raftAt) {
     for (const m of [sea.material, deep.material, hull.material, dark, lineMat]) m.dispose();
   }
   return {
-    update, dispose, time, floor: F, index: -1, raft, hall: null, portal: { level: 1 },
+    update, dispose, time, floor: F, index: -1, raft, hall: null, portal: { level: 1 }, wrap: (d) => d, // the open sea does not come round as a band does
     height: () => -40, ceiling: 1.6, pushOut() {}, // the fish levels off a little under its ceiling, which puts its back at the waterline
     goal: { x: at.x, y: 0, z: at.z, kind: 'none' }, schools: [], take: () => [], atGoal: () => false, spots: { hooks: [], biters: [], anglers: [] },
   };

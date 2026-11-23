@@ -1,20 +1,19 @@
 // One depth band of the dive: the seabed and everything rooted on it.
-// The world repeats every T metres in x and z; fog hides the seam, so it reads as open water.
+// A band is a square of sea that repeats in x and z; fog hides the seam, so it reads as open water. How far across the square is belongs
+// to the band (`size` in FLOORS; BASE where a band gives none), and so to the world that createWorld builds of it, never to this file:
+// world.size, world.spawn (the start, at its middle) and world.wrap(d) (the shortest way round) are what everything else reads.
 
 import * as THREE from 'three';
 import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from './geo.js';
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing, WAKE } from './kit.js';
 import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from './npc.js';
 
-export const T = 144;
-const CELL = 3, GRID = 46, NCELL = T / CELL;
+export const BASE = 144; // a band is this far across unless it says otherwise. What a band counts (rocks, kelp, the wave counts of its bed) is counted for a square of this size
+const CELL = 3, GRID = 46;
 // By a rift the bed is drawn in small triangles, FINE to a side of a cell, since a lip a metre and a half wide cannot be drawn in triangles of three.
 // The lip itself begins RIM inside the rift's line: a little more than the longest side of a small triangle, so that every triangle that reaches
 // outside the line lies flat, and what stands on the shelf at the rift's edge stands on what is drawn there.
 const FINE = 4, SUB = CELL / FINE, RIM = SUB * Math.SQRT2 + 0.06, FINE_FROM = -2.6, FINE_TO = 9.6;
-const K = (Math.PI * 2) / T;
-export const SPAWN = new THREE.Vector3(T / 2, 0, T / 2);
-export const wrapD = (d) => d - T * Math.round(d / T); // shortest way round the repeating world
 
 // Swarms of small fish are the treasure chests: a swarm is only caught whole, by a body long enough to
 // go round the entire ball, so the big ones wait for a long body. n fish, ball radius r in metres.
@@ -48,9 +47,16 @@ const GATE = wrapRule(0.6); // which body length may take which swarm never depe
 export const canWrap = (total, room) => (0.9 * total) / GATE.sweep >= room * GATE.squeeze + 0.12;
 
 // The five bands of the dive. Counts are per band; light fades and the hunters multiply on the way down.
+// A band may say three things about its ground, and the first band does:
+//   size  how far across it is, in metres. It has to be a whole number of pairs of the bed's 3 m cells (a multiple of 6), or the bed's seam shows
+//   way   how far from the start its rift lies. Without it the distance is drawn by chance, 58 to 70 m
+//   food  how far across the square round the start is in which its swarms have their homes. Less than `size`, and the sea beyond holds no swarms:
+//         the first band is wider than the others but its food is no further from the nest, which is where a dive lost to the Keeper begins again
+// What is scattered by chance (reefs, rocks, kelp, coral, what lives on the bed) is counted for a BASE square and made in proportion to the band's
+// area, so a wider band is as thickly grown, not thinner. What is counted for the dive (swarms, hunters, ruins, puzzles, shells) is as written.
 export const FLOORS = [
   { name: 'The sunlight zone', depth: 40, water: '#2b93a3', sky: '#e2f8ff', bed: '#4f97a0', hemi: 2.0, sun: 2.3, lamp: 0, lampReach: 30, fog: [0.75, 42], seaLight: 0.2, shafts: 0.42, fishGlow: 0, finGlow: 0,
-    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'] },
+    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'], size: 204, way: 100, food: 144 },
   { name: 'The edge of light', depth: 180, water: '#1d6f8e', sky: '#bfe6f5', bed: '#2f6f85', hemi: 1.5, sun: 1.35, lamp: 3, lampReach: 26, fog: [0.7, 36], seaLight: 0.1, shafts: 0.22, fishGlow: 0.2, finGlow: 0.12,
     rocks: 180, kelp: 34, coral: 90, glow: 30, schools: 'ssssmmml', kinds: '...b.t..', biters: 3, hooks: 6, anglers: 0, ruins: ['gate', 'remains', 'arch'] },
   { name: 'The twilight zone', depth: 450, water: '#12426a', sky: '#7fb4d8', bed: '#173f5e', hemi: 0.85, sun: 0.4, lamp: 10, lampReach: 24, fog: [0.62, 28], seaLight: 0.03, shafts: 0, fishGlow: 0.7, finGlow: 0.3,
@@ -61,12 +67,13 @@ export const FLOORS = [
     rocks: 190, kelp: 0, coral: 30, glow: 200, schools: 'smmllh', kinds: '.btg..', biters: 6, hooks: 0, anglers: 6, ruins: ['remains'] },
 ];
 
-function hash2(ix, iz, salt = 0) {
+// a number from 0 to 1 for a cell of the bed, the same on every copy of a world that comes round every `NCELL` cells
+const hasher = (NCELL) => function hash2(ix, iz, salt = 0) {
   ix = ((ix % NCELL) + NCELL) % NCELL; iz = ((iz % NCELL) + NCELL) % NCELL;
   let h = (Math.imul(ix, 374761393) + Math.imul(iz, 668265263) + Math.imul(salt, 1442695041)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
+};
 
 // ---------------------------------------------------------------- geometry, built once and shared by every band
 let GEO = null;
@@ -320,9 +327,10 @@ function geometries() {
 const SIGHT = { step: 2, light: 4 }; // it is seated again when the fish has gone this far, and the box is taken this much wider to cover that
 class Scatter {
   // reach: small things are only drawn within this many metres of the fish; beyond it they are too small to miss
-  constructor(geometry, material, items, { cast = true, receive = true, reach = 0, shade = material } = {}) {
+  // size: how far across the world it is scattered in is
+  constructor(geometry, material, items, { cast = true, receive = true, reach = 0, shade = material, size = BASE } = {}) {
     const n = items.length;
-    this.items = items; this.reach = reach; this.shaded = n;
+    this.items = items; this.reach = reach; this.shaded = n; this.size = size;
     this.mesh = new THREE.InstancedMesh(geometry, material, Math.max(n, 1));
     this.mesh.count = n;
     this.mesh.frustumCulled = false;
@@ -348,7 +356,7 @@ class Scatter {
   // light: the two axes across the sun's rays and half the width of its box; null, and everything that can cast does; false, and nothing does (there is no sun to cast by)
   wrap(fx, fy, fz, light) {
     const { items, base, tone, span, mesh } = this, n = items.length, im = mesh.instanceMatrix.array, ic = mesh.instanceColor.array, sm = this.shade ? this.shade.instanceMatrix.array : null;
-    const r2 = this.reach ? this.reach * this.reach : Infinity;
+    const r2 = this.reach ? this.reach * this.reach : Infinity, T = this.size;
     let a = 0, b = 0;
     for (let i = 0; i < n; i++) {
       const it = items[i], x = it.x + T * Math.round((fx - it.x) / T), z = it.z + T * Math.round((fz - it.z) / T), dx = x - fx, dz = z - fz, s = i * 16;
@@ -368,6 +376,14 @@ class Scatter {
 export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery = false, nest = null } = {}) {
   const F = FLOORS[floor], G = geometries();
   const last = floor === FLOORS.length - 1;
+  // How far across this world is, and what follows from it: how many cells of bed come round, the start at its middle, the shortest way round.
+  // They are this world's own (world.size, world.spawn, world.wrap); the hunters, keepers and shells read them from the world they are given.
+  const T = F.size || BASE, NCELL = T / CELL, K = (Math.PI * 2) / T, hash2 = hasher(NCELL);
+  if (T % (CELL * 2)) throw new Error(`a band ${T} m across cannot be laid: its size has to be a multiple of ${CELL * 2}`);
+  const SPAWN = new THREE.Vector3(T / 2, 0, T / 2);
+  const wrapD = (d) => d - T * Math.round(d / T); // shortest way round the repeating world
+  const area = (T * T) / (BASE * BASE), dense = (n) => Math.round(n * area); // what is scattered by chance is counted for a BASE square: a wider band has more of it, as thickly
+  const wave = (n) => Math.round((n * T) / BASE) || Math.sign(n); // and the bed's rolls are counted the same way, so that a wider band has more of them and not longer ones
   const rand = rng(seed * 977 + floor * 7919 + 13);
   const rr = (a, b) => a + (b - a) * rand();
   const pick = (list) => list[Math.floor(rand() * list.length)];
@@ -381,7 +397,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const mat = (m) => { materials.push(m); return m; };
   const blanks = new Map(), blank = (m) => { if (m.map || m.alphaMap || m.alphaTest || m.wireframe) return m; const key = `${m.side}:${m.shadowSide}`;
     if (!blanks.has(key)) blanks.set(key, mat(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, side: m.side, shadowSide: m.shadowSide }))); return blanks.get(key); };
-  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, { ...opts, shade: blank(material) }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
+  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, { ...opts, shade: blank(material), size: T }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
@@ -390,7 +406,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   // ------------------------------------------------------------ where this band leads: a rift down, or the palace
   const goalAngle = floor === 0 ? 3.9 : rr(0, Math.PI * 2);
   const goalD = rr(50, 62);
-  const [gx, gz] = polar(goalAngle, last ? goalD : floor === 0 ? 70 : goalD + 8); // a rift lies further out than the palace does, so that what is built on the way to it stands on the shelf
+  const [gx, gz] = polar(goalAngle, last ? goalD : F.way || goalD + 8); // a rift lies further out than the palace does, so that what is built on the way to it stands on the shelf; a band that says how far (`way`) has it there
   const goal = { x: gx, z: gz, y: 0, kind: last ? 'palace' : 'rift' };
   // Ryūgū is one ring hall whose wall is the Sum (boss.js). The gate stands just outside the wall's only gap.
   // phi is the bearing of that gap from the hall's centre; gapHalf is half its width along the ring, in metres.
@@ -398,10 +414,13 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
 
   // ------------------------------------------------------------ the lie of the seabed
   const ph = Array.from({ length: 8 }, () => rr(0, Math.PI * 2));
-  const bed = (x, z) => 1.5 * Math.sin(K * x + ph[0]) * Math.cos(K * z + ph[1])
-    + 0.9 * Math.sin(K * (2 * x + z) + ph[2])
-    + 0.55 * Math.cos(K * (3 * x - 2 * z) + ph[3])
-    + 0.3 * Math.sin(K * (5 * x + 4 * z) + ph[4]); // before anything is cut into it
+  // Its rolls are whole numbers of waves across the world, so that they meet at the seam. The numbers are those of a BASE square; a wider band has
+  // more waves in proportion (`wave`), each as near the same length as a whole number allows. (The longest roll is one wave across whatever the size.)
+  const [[b1x, b1z], [b2x, b2z], [b3x, b3z], [b4x, b4z]] = [[1, 1], [2, 1], [3, -2], [5, 4]].map(([a, b]) => [wave(a), wave(b)]);
+  const bed = (x, z) => 1.5 * Math.sin(K * (b1x * x) + ph[0]) * Math.cos(K * (b1z * z) + ph[1])
+    + 0.9 * Math.sin(K * (b2x * x + b2z * z) + ph[2])
+    + 0.55 * Math.cos(K * (b3x * x + b3z * z) + ph[3])
+    + 0.3 * Math.sin(K * (b4x * x + b4z * z) + ph[4]); // before anything is cut into it
   // The rift. The shelf this band stands on has cracked across the way, and the crack is the way down: long and ragged,
   // closing to nothing at both ends, stepping down to a ledge and then dropping sheer into the dark of the next band.
   // Its middle is the goal. n points along the way from the start to the goal, t runs along the crack; a point is
@@ -435,7 +454,8 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
     return h;
   }
   if (hall) hall.y = height(hall.x, hall.z);
-  const meadow = (x, z) => Math.sin(K * (2 * x - z) + ph[5]) * Math.cos(K * (x + 3 * z) + ph[6]) + 0.25 * Math.sin(K * (6 * x + 5 * z) + ph[7]);
+  const [[m1x, m1z], [m2x, m2z], [m3x, m3z]] = [[2, -1], [1, 3], [6, 5]].map(([a, b]) => [wave(a), wave(b)]); // the green patches are counted as the rolls are
+  const meadow = (x, z) => Math.sin(K * (m1x * x + m1z * z) + ph[5]) * Math.cos(K * (m2x * x + m2z * z) + ph[6]) + 0.25 * Math.sin(K * (m3x * x + m3z * z) + ph[7]);
   goal.y = last ? height(goal.x, goal.z) : rift.y;
 
   // Which cells are drawn fine: any part of them near the rift's edge, from a little outside it to the foot of its walls. Kept for the whole world, which
@@ -1892,6 +1912,7 @@ float seaLight(vec2 p, float t) {
   // for the checks: have everything cast (false) or only what is in the sun's box (true), and count what is drawn and what the shadow pass draws
   const sorting = (on) => { sight.on = on; sight.fx = NaN; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
-  return { update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed
+  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

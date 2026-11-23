@@ -7,7 +7,7 @@
 // Any of them can be beaten by rams alone, so a short body is never stuck.
 
 import * as THREE from 'three';
-import { T, canWrap } from './world.js';
+import { canWrap } from './world.js';
 import { rng, lerp, clamp, damp, glowTexture } from './geo.js';
 import { make, paintOf } from './npc.js';
 
@@ -50,7 +50,7 @@ export const SHEARER_FIGHT = {
 export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const kind = KINDS[floor], tint = paintOf(floor);
   const rand = rng(seed * 61 + floor * 311 + 7), rr = (a, b) => a + (b - a) * rand();
-  const rift = world.rift;
+  const rift = world.rift, T = world.size; // T: how far across this world is (the first band is wider than the others)
   // where it lives: over the middle of the rift, or, for the Keeper, which walks, on the shelf at the near edge
   const well = kind === 'keeper' ? { x: rift.x - rift.nx * 24, y: rift.y, z: rift.z - rift.nz * 24 } : world.goal, Y0 = well.y; // the level of the shelf at the rift's edge
   const root = new THREE.Group(); scene.add(root);

@@ -5,7 +5,7 @@ import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
 import { resolve, make, NPC, inOrder } from './npc.js';
-import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, NEST, wrapD, wrapRule, canWrap } from './world.js';
+import { createWorld, FLOORS, SWARMS, CLEAN, NEST, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
@@ -260,6 +260,7 @@ export async function start(saved = {}) {
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
+  const wrapD = (d) => (world ? world.wrap(d) : d); // the shortest way round the world the dive is in: each band says how far across it is
   let sum = null, arena = null, guard = null; // guard: what keeps this band's rift // the last band's boss, and the band's collisions with the boss's body added
   // how the dive ends, once the Sum is dealt with: 'open' (its head ringed) or 'close' (its gap filled)
   const end = { kind: null, swap: 0, quake: 0, vista: 0, turn: 0, burst: -9 };
@@ -327,8 +328,8 @@ export async function start(saved = {}) {
     Object.assign(end, { kind: null, swap: 0, quake: 0, vista: 0, burst: -9 }); cam.shake = 0;
     goalEl.style.display = ''; fade(false);
     applyLook(world.floor);
-    const y = Math.min(world.height(SPAWN.x, SPAWN.z) + (fromAbove ? 9.5 : 3.3), world.ceiling - 1);
-    rig.reset(new THREE.Vector3(SPAWN.x, y, SPAWN.z), fromAbove ? rig.yaw : world.nursery ? world.nursery.dir : NEST.yaw, fromAbove ? -0.5 : 0);
+    const y = Math.min(world.height(world.spawn.x, world.spawn.z) + (fromAbove ? 9.5 : 3.3), world.ceiling - 1);
+    rig.reset(new THREE.Vector3(world.spawn.x, y, world.spawn.z), fromAbove ? rig.yaw : world.nursery ? world.nursery.dir : NEST.yaw, fromAbove ? -0.5 : 0);
     if (world.nursery) { cam.yaw = world.nursery.dir + Math.PI; cam.ease = null; rig.speed = SPEED.idle; } // looking down the paved way at the first hoop, and at rest: the first move is the player's
     focus.copy(rig.joints[0]);
     run.state = fromAbove ? 'arrive' : 'play'; run.stateT = 0; run.safe = 1.5;

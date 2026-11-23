@@ -3,7 +3,6 @@
 // bait, the bait takes the shell's other power. Nothing is kept between dives.
 
 import * as THREE from 'three';
-import { T, wrapD } from './world.js';
 import { rng, glowTexture } from './geo.js';
 import { mesher, ringY, alive, tint, dim } from './kit.js';
 import { register, resolve } from './npc.js';
@@ -133,6 +132,7 @@ export function createShellKit() {
 // The shells lying about one band. Swim the head over one to take it.
 export function createShellField(scene, world, kit, { seed = 1, floor = 0, count = 3, types = SHELL_TYPES } = {}) {
   const rand = rng(seed * 53 + floor * 173 + 29), rr = (a, b) => a + (b - a) * rand();
+  const T = world.size, wrapD = world.wrap, start = world.spawn; // how far across the world is, the shortest way round it, and where the dive begins in it: all the world's own
   const items = [], spriteMats = [];
   const pool = [...types]; // the kinds that may lie about in this dive
   function drop(x, z, type, lift = 1.2) {
@@ -149,7 +149,7 @@ export function createShellField(scene, world, kit, { seed = 1, floor = 0, count
     let x = 0, z = 0;
     for (let t = 0; t < 30; t++) { // not in the rift, not in the hall, not on top of the start
       const a = rr(0, Math.PI * 2), d = i === 0 && floor === 0 ? rr(13, 18) : rr(16, 48);
-      x = T / 2 + Math.sin(a) * d; z = T / 2 + Math.cos(a) * d;
+      x = start.x + Math.sin(a) * d; z = start.z + Math.cos(a) * d;
       const g = world.goal, h = world.hall;
       if (Math.hypot(wrapD(x - g.x), wrapD(z - g.z)) < 11 || (world.rift && world.rift.in(x, z) > -3)) continue;
       if (h && Math.hypot(wrapD(x - h.x), wrapD(z - h.z)) < h.R + 5) continue;
