@@ -214,8 +214,8 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); g.ru
   g.run.safe = 0; const b2 = g.foes.biters[1]; g.bite(2, g.rig.spine.length, b2.pos, 'biter'); return { first, afterCap, segs, after: g.run.segs, biter2: b2.alive }; });
 check('a Cap takes one bite and breaks; a Spine kills the biter that bites', s.first === true && s.afterCap.segs === s.segs && s.afterCap.worn === 'spine' && s.afterCap.biter === false && s.after === s.segs - 2 && s.biter2 === false, JSON.stringify(s));
 
-// 8e. the four guards: each attacks in its own way, and each can be beaten by rams alone
-for (const f of [0, 1, 2, 3]) {
+// 8e. the guards of the three lower rifts: each attacks in its own way, and each can be beaten by rams alone (the Keeper, whose fight is its own, comes after)
+for (const f of [1, 2, 3]) {
   s = await ev((f) => { const g = window.__game, T = window.T; g.startRun(31); g.run.segs = 14; g.buildFish(14); g.enterFloor(f, false); T.idle(0.6);
     for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const a of g.foes.anglers) { a.alive = false; a.group.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500;
     const G = g.guard, S = G.state, w = g.world.goal, kind = G.kind, shells0 = g.field.items.length;
@@ -227,15 +227,53 @@ for (const f of [0, 1, 2, 3]) {
     let rams = 0; const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } };
     while (!G.done && rams < 9) { S.stun = 0; S.flash = 0; if (kind === 'shearer') G.debug.set('tired', 3); if (kind === 'lamplighter') G.debug.set('dim', 4);
       T.put(G.pos.x, G.pos.y, G.pos.z - 2.9, 0); g.run.safe = 5; g.run.dashCool = 0; g.sim(1 / 60, { ...fwd, dashNow: true }); g.sim(0.35, fwd); rams++; }
-    const hp = { keeper: 3, shearer: 3, lamplighter: 3, warden: 4 }[kind];
+    const hp = { shearer: 3, lamplighter: 3, warden: 4 }[kind];
     g.sim(0.5, T.none()); const y = g.world.height(w.x, w.z) + 1; T.put(w.x - 1, y, w.z, 0); g.run.safe = 0; T.idle(0.2);
     return { kind, attack, rams, hp, done: G.done, dropped: g.field.items.length - shells0, state: g.run.state }; }, f);
   check(`band ${f + 1}: the ${s.kind} bites a fish left in its reach, falls to ${s.hp} rams, leaves a shell, and the rift opens`, s.attack.bites >= 1 && s.attack.lost >= 2 && s.done && s.rams === s.hp && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
 }
-s = await ev(() => { const g = window.__game, T = window.T; g.startRun(31); g.run.segs = 16; g.buildFish(16); T.idle(0.5); const G = g.guard; G.state.cool = 99;
-  T.put(G.pos.x + 2.8, G.pos.y, G.pos.z + 0.9, 1.1); T.idle(0.3); let t = 0, prog = 0; while (!G.done && t < 9) { G.state.cool = 99; g.sim(0.1, { ...T.none(), coil: 1 }); t += 0.1; prog = Math.max(prog, G.ring ? G.ring.progress : 0); }
-  return { done: G.done, t: +t.toFixed(1), prog: +prog.toFixed(2) }; });
-check('a long enough body can wrap the Keeper instead', s.done, JSON.stringify(s));
+// 8f. the Keeper's fight (KEEPER_FIGHT in guards.js). First the blows: each is told, lands where it was aimed, and takes what it says
+const keeperKit = () => { const g = window.__game, T = window.T, G = g.guard, S = G.state, none = T.none();
+  for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
+  return { g, T, G, S, F: g.KEEPER_FIGHT,
+    ready(o = {}) { G.debug.set('stalk'); Object.assign(S, { cool: 0, stun: 0, flash: 0, jabT: 9, chargeT: 9, digT: 9, last: '' }, o); g.run.segs = 16; g.buildFish(16); g.run.safe = 0; },
+    // the fish laid across the crab's front, `far` metres off and `up` over the bed; side 1 turns that toward the crab's left
+    lie(far, side = 0, up = 1.6, toward = G.mesh.rotation.y) { const yaw = toward + side * 1.1, fx = Math.sin(yaw), fz = Math.cos(yaw), half = g.rig.length / 2, x = G.pos.x + fx * far + fz * half, z = G.pos.z + fz * far - fx * half; T.put(x, g.world.height(x, z) + up, z, yaw + Math.PI / 2); }, // its head to the crab's left, heading on that way, its body trailing back across the front
+    until(state, secs = 8) { let t = 0; while (S.state !== state && t < secs) { g.sim(0.02, none); t += 0.02; } return +t.toFixed(2); },
+    // a dash at leg i from outside it
+    ramLeg(i) { const f = G.debug.leg(i), dx = f.x - G.pos.x, dz = f.z - G.pos.z, d = Math.hypot(dx, dz), at = { ...none, dir: { x: -dx / d, y: 0, z: -dz / d } };
+      T.put(f.x + dx / d * 2.9, G.pos.y + 0.3, f.z + dz / d * 2.9, Math.atan2(-dx, -dz)); g.run.safe = 5; g.run.dashCool = 0; g.run.stamina = 1; g.sim(1 / 60, { ...at, dashNow: true }); g.sim(0.35, at); } }; };
+await page.evaluate(`window.keeperKit = ${keeperKit.toString()}`);
+s = await ev(() => { window.__game.startRun(31); const { g, T, G, S, F, ready, lie, until } = window.keeperKit(); T.idle(0.5);
+  const out = {};
+  ready({ last: 'sweep' }); lie(3.6); out.told = until('slam') < 8; const t0 = g.run.time; until('stuck', 3); out.wind = +(g.run.time - t0).toFixed(2); out.slam = 16 - g.run.segs; // stood under: it takes three
+  ready({ last: 'sweep' }); lie(3.6); until('slam'); g.sim(F.slam.wind * F.slam.aim + 0.06, T.none()); { const r = g.world.rift; T.put(G.pos.x - r.nx * 11, G.pos.y + 1, G.pos.z - r.nz * 11, 0); } // once it is aimed, gone
+  until('stuck', 3); out.dodged = 16 - g.run.segs; out.open = (g.sim(0.05, T.none()), S.open); { const t1 = g.run.time; until('stalk', 6); out.stuck = +(g.run.time - t1).toFixed(2); }
+  ready({ last: 'slam' }); lie(3.0); until('sweep'); until('rest', 3); out.sweep = 16 - g.run.segs; // lying low across its front
+  ready({ last: 'slam' }); lie(3.0); until('sweep'); lie(3.0, 0, 4.2); until('rest', 3); out.over = 16 - g.run.segs; // and the same body risen over it
+  ready({ jabT: 0 }); lie(1.9, 1); until('jab'); until('rest', 2); out.jab = 16 - g.run.segs;
+  { const r = g.world.rift; ready({ chargeT: 0 }); lie(6.5, 0, 1.6, Math.atan2(r.x - r.nx * 24 - G.pos.x, r.z - r.nz * 24 - G.pos.z)); } out.side = until('charge') < 8; until('rest', 4); out.charge = 16 - g.run.segs; // (toward the middle of its ground: it does not run past the end of it)
+  ready({ last: 'sweep' }); lie(3.6); until('slam'); g.run.safe = 0; g.shed(); g.sim(0.05, T.none()); out.parry = S.state; until('feed', 7); out.fed = S.state; g.sim(0.05, T.none()); out.feeding = S.open; out.bait = 16 - g.run.segs; // a shed tail: it leaves the blow and goes to eat
+  return out; });
+check('the Keeper’s blows are told and land where they were aimed: the great claw takes three from a body under it and none from one that has gone, and then sticks for two seconds and more, open; its sweep takes two from a body lying low and passes under one that has risen; a jab takes one, a sideways run two; and a shed tail calls it off the blow to eat, open',
+  s.told && s.wind > 0.7 && s.slam === 3 && s.dodged === 0 && s.open === true && s.stuck >= 2 && s.sweep === 2 && s.over === 0 && s.jab === 1 && s.side && s.charge === 2 && s.parry === 'fetch' && s.fed === 'feed' && s.feeding === true && s.bait === 3, JSON.stringify(s));
+// then its legs: the shell turns a ram; open, a ram numbs a leg and a second takes it off; a body drawn round a numb leg takes it off; two gone and it digs; four and it is done
+s = await ev(() => { window.__game.startRun(31); const { g, T, G, S, F, ready, lie, until, ramLeg } = window.keeperKit(); T.idle(0.5); const out = {}, shells0 = g.field.items.length;
+  ready({ cool: 99 }); ramLeg(1); out.turned = { hits: S.hits, leg: S.leg[1], hp: S.hp }; // not open: nothing
+  ready(); G.debug.set('stuck', 4); T.idle(0.05); ramLeg(1); out.numbed = { hits: S.hits, leg: S.leg[1], hp: S.hp, open: S.open };
+  S.stun = 0; S.flash = 0; G.debug.set('stuck', 4); T.idle(0.05); ramLeg(1); out.torn = { hits: S.hits, leg: S.leg[1], hp: S.hp, lost: S.lost, walking: G.rig.walker.legs[1].gone };
+  // a second leg, by going round it while it is numb
+  S.stun = 0; S.flash = 0; G.debug.set('rest', 60); T.idle(0.05); G.debug.numb(6); S.stun = 60; const f = G.debug.leg(6); T.aroundPoint(f.x, G.pos.y + 0.4, f.z, 0.4); g.run.safe = 1e9;
+  let t = 0, prog = 0; while (S.lost < 2 && t < 12) { g.sim(0.1, { ...T.none(), coil: 1 }); t += 0.1; prog = Math.max(prog, G.ring ? G.ring.progress : 0); }
+  out.wrapped = { lost: S.lost, t: +t.toFixed(1), prog: +prog.toFixed(2), rage: S.lost >= F.rage };
+  // raging, it digs: down, under, and up under the body
+  ready({ digT: 0, chargeT: 0, stun: 0 }); lie(8.5); out.dug = until('dig') < 8; until('under', 3); g.sim(0.3, T.none()); out.under = { sink: S.sink, ram: G.ram(G.pos.clone(), 1) }; until('rest', 6); out.up = 16 - g.run.segs; g.sim(0.6, T.none()); out.sink = +S.sink.toFixed(2);
+  // the last two
+  for (const i of [3, 4]) { S.stun = 0; S.flash = 0; G.debug.set('stuck', 4); T.idle(0.05); G.debug.tear(i, false); }
+  g.sim(0.5, T.none()); const w = g.world.goal, y = g.world.height(w.x, w.z) + 1; T.put(w.x - 1, y, w.z, 0); g.run.safe = 0; T.idle(0.2);
+  return { ...out, done: G.done, hp: S.hp, dropped: g.field.items.length - shells0, state: g.run.state }; });
+check('the Keeper’s shell turns a ram and so does a leg it stands on; open, a ram numbs a leg and a second takes it off; a body drawn round a numb leg takes that one off; with two gone it digs, cannot be reached under the sand, and comes up under the body; with four gone it is done, leaves a shell, and the rift opens',
+  s.turned.hits === 0 && s.turned.leg === 0 && s.turned.hp === 4 && s.numbed.leg === 1 && s.numbed.hits === 1 && s.numbed.hp === 4 && s.torn.leg === 2 && s.torn.hp === 3 && s.torn.walking === true && s.wrapped.lost === 2 && s.wrapped.rage && s.dug && s.under.sink === 1 && s.under.ram === null && s.up === 3 && s.sink === 0 && s.done && s.hp === 0 && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
 await ev(() => { const g = window.__game, T = window.T; g.startRun(31); g.enterFloor(3, false); T.idle(0.5); const w = g.world.goal; T.put(w.x + 13, w.y + 3.2, w.z + 3, -1.4); g.cam.pitch = 0.42; g.cam.zoom = 0.9; g.snap(); T.idle(0.4); }); await snap(page, 'g-well');
 
 // 8f. two more kinds of trouble: spined drifters and leeches
@@ -315,9 +353,11 @@ const len = await ev(() => { const g = window.__game, T = window.T; g.startRun(4
   const grow = { first: costs[0], last: costs[15], total: costs.reduce((a, b) => a + b, 0), rising: costs.every((c, i) => !i || c >= costs[i - 1]), bitten: g.growCost(6), pearl: g.growCost(10, 0.8) };
   const b0 = g.run.segs; g.addFood(5); grow.five = g.run.segs - b0; g.run.segs = 25; g.buildFish(25); g.run.food = 0; g.addFood(16); grow.sixteen = g.run.segs; g.addFood(1); grow.seventeen = g.run.segs;
   // full grown: thirty more fish fill the crest; charged, a dash carries further and the ram that lands counts double and spends it
-  g.addFood(15); const half = g.run.charge; g.addFood(15); const G = g.guard, hp0 = G.state.hp;
-  T.put(G.pos.x, G.pos.y, G.pos.z - 2.9, 0); g.run.safe = 5; g.run.dashCool = 0; g.sim(1 / 60, { ...fwd, dashNow: true }); const reach = g.rig.dashT; g.sim(0.35, fwd);
-  const crest = { half, full: 1, reach: +reach.toFixed(2), blows: hp0 - G.state.hp, after: g.run.charge, segs: g.run.segs };
+  g.addFood(15); const half = g.run.charge; g.addFood(15); const G = g.guard, hits0 = G.state.hits;
+  { G.debug.set('stuck', 5); T.idle(0.05); const f = G.debug.leg(1), dx = f.x - G.pos.x, dz = f.z - G.pos.z, d = Math.hypot(dx, dz); // the Keeper open, and the dash at one of its legs, from outside
+    T.put(f.x + dx / d * 2.9, G.pos.y + 0.3, f.z + dz / d * 2.9, Math.atan2(-dx, -dz)); g.run.safe = 5; g.run.dashCool = 0; var at = { ...T.none(), dir: { x: -dx / d, y: 0, z: -dz / d } }; }
+  g.sim(1 / 60, { ...at, dashNow: true }); const reach = g.rig.dashT; g.sim(0.35, at);
+  const crest = { half, full: 1, reach: +reach.toFixed(2), blows: G.state.hits - hits0, after: g.run.charge, segs: g.run.segs };
   // the toll: a body of twenty goes down the rift and comes out fifteen, and the shells that rode on what was taken move up it
   const dive = () => { const r = g.world.rift, w = g.world.goal; T.put(w.x + r.tx * 14 + r.nx * r.mid(14), r.y - r.step - 5.2, w.z + r.tz * 14 + r.nz * r.mid(14), 0); T.idle(0.1); const at = g.run.state; T.idle(2.6); return at; };
   G.debug.fall(); T.idle(0.3); g.run.segs = 20; g.buildFish(20); g.run.shells = []; g.giveShell('fan'); g.giveShell('ring'); g.run.safe = 1e9;
@@ -348,7 +388,7 @@ const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(
   const big = R.claws.find((k) => k.big), small = R.claws.find((k) => !k.big);
   const wary = { pose: +R.pose.wary.toFixed(2), claws: +big.wrist.y.toFixed(2), turn: +turn.toFixed(2) };
   // its tail left in reach: the strike is the big claw's, the one on its right
-  T.put(G.pos.x - r.nx * 5.4, w.height(G.pos.x - r.nx * 5.4, G.pos.z - r.nz * 5.4) + 1.1, G.pos.z - r.nz * 5.4, Math.atan2(r.nx, r.nz) + Math.PI); g.run.safe = 1e9; T.idle(0.3); G.debug.set('snap', 0.6);
+  T.put(G.pos.x - r.nx * 5.4, w.height(G.pos.x - r.nx * 5.4, G.pos.z - r.nz * 5.4) + 1.1, G.pos.z - r.nz * 5.4, Math.atan2(r.nx, r.nz) + Math.PI); g.run.safe = 1e9; T.idle(0.3); G.debug.set('slam', 0.5);
   const tip = (k) => k.hand.localToWorld(p.set(0, -0.2 * k.stout, k.l2 + k.span * 0.8)).clone(), reach = { big: 9, small: 9 };
   for (let i = 0; i < 16; i++) { T.idle(0.05); G.mesh.updateMatrixWorld(true); const J = g.rig.joints; let tail = J[J.length - 1], near = 1e9; for (let j = Math.ceil((J.length - 1) * 0.4); j < J.length; j++) { const d = J[j].distanceTo(G.pos); if (d < near) { near = d; tail = J[j]; } }
     reach.big = Math.min(reach.big, tip(big).distanceTo(tail)); reach.small = Math.min(reach.small, tip(small).distanceTo(tail)); }

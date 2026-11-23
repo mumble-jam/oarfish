@@ -93,12 +93,12 @@ export const NPCS = [
       line.position.set(0.2, 0.8, 0); line.scale.y = 70; bait.position.set(-0.05, 0.02, 0); g.add(a.body, line, bait, sprite(a, pal.glow, 0.8)); a.object = g; a.parts = { line, bait }; },
     states: [{ id: 'idle', name: 'Hanging', speed: 0, sway: true }] },
 
-  { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 6, role: 'Slow and armoured. Snaps at a tail that comes near. Wrap it, or ram it three times.',
+  { id: 'keeper', group: 'Keepers of the rifts', name: 'The Keeper', bands: [0], length: 6, role: 'Its shell turns a ram, and every blow it means to land is shown first. When it has struck and missed it is open: ram a leg then, and ram it again or go round it, and the leg comes off. Four legs, and it is done. With two gone it is quicker, and digs.',
     about: 'A great crab under a dome of plates, its right claw far bigger than its left. It keeps the first rift.',
     paintOf: 0, palette: { tone: DISTRICT[0], pale: '#e9dfc0', dark: '#3b2a4d', deep: '#2a1d38', eye: '#eaff7c' },
     build: (pal) => model.keeper(pal), swim: null, beat: [0, 0], material: GUARD,
     assemble(a, pal) { crabRig(a, pal); }, // the shell is the model; its legs and claws are hung on it, and walk (crab.js)
-    states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'walk', name: 'Walking', speed: 1.5 }, { id: 'wary', name: 'Claws up', speed: 0 }, { id: 'snap', name: 'Snapping', speed: 0 }, { id: 'tuck', name: 'Shut tight', speed: 0 }, { id: 'stun', name: 'Stunned', speed: 0 }, { id: 'down', name: 'Beaten', speed: 0 }] },
+    states: [{ id: 'idle', name: 'Waiting', speed: 0 }, { id: 'walk', name: 'Walking', speed: 1.5 }, { id: 'wary', name: 'Claws up', speed: 0 }, { id: 'snap', name: 'The great claw comes down, and sticks', speed: 0 }, { id: 'sweep', name: 'The great claw goes across', speed: 0 }, { id: 'jab', name: 'A jab of the small claw', speed: 0 }, { id: 'tuck', name: 'Drawn in, about to run', speed: 0 }, { id: 'charge', name: 'Running, sideways', speed: 6 }, { id: 'dig', name: 'Digging in', speed: 0 }, { id: 'feed', name: 'Feeding on a shed tail', speed: 0 }, { id: 'stun', name: 'Hurt', speed: 0 }, { id: 'lame', name: 'Two legs gone', speed: 0 }, { id: 'down', name: 'Beaten', speed: 0 }] },
   { id: 'shearer', group: 'Keepers of the rifts', name: 'The Shearer', bands: [1], length: 7, role: 'Feels a fish that comes near. Slashes through a tail that is up in the water, or drops on one that lies along the bed. Ram or wrap it once it has struck.',
     about: 'A sawfish, the saw toothed in the district’s colour. The saw is how it finds you and what it hits you with. It keeps the second rift.',
     paintOf: 1, palette: { tone: DISTRICT[1], back: '#3b2a4d', flank: '#55406b', belly: '#d9cfe0', saw: '#e9dfc0', eye: '#eaff7c' },

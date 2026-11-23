@@ -78,7 +78,7 @@ The library shows the answer as a second pose without being asked. None of this 
 
 | Creature | Real animal | Trait | State |
 |---|---|---|---|
-| The Keeper | a crab | one great claw | Done: walks, leans, seven poses |
+| The Keeper | a crab | one great claw | Done: walks, leans, fights (four blows and a dig, legs that come off), fifteen poses |
 | The Shearer | a sawfish | the saw, with lit teeth | Done: bends, two blows, nine poses |
 | The Lamplighter | an anglerfish | to be found | To do |
 | The Warden | a moray | to be found | To do |

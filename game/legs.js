@@ -40,12 +40,14 @@ function spring(o, key, to, f, z, dt) {
 // object: the group the body and its legs are in. legs: [{ hip: Vector3, rest: { x, z }, side: 1 | -1, group: 0 | 1, upper, lower:
 // the two pieces, modelled along +z, l1, l2: their lengths, curl: Vector3, where the foot goes when the animal is done for }],
 // all in the body's own space. ride: how far the body's origin is carried over the ground under its feet.
+// A leg may be marked `lame` (it carries nothing and is dragged, its foot trailing a little wide of where it stood) or `gone` (it is not there: whoever
+// took it has its two pieces). The body sags toward either, since the plane it rides on is taken a little low where they were.
 //   stride  how far the body may leave a foot behind before the foot steps     swing  how long a step takes, at most
 //   lift    how high a foot comes off the ground                               lead   how far ahead of itself a moving body puts a foot, in seconds
 export function createWalker(object, legs, { ride, stride = 0.6, swing = 0.19, lift = 0.42, lead = 0.2, freq = 2.3, ease = 0.55 } = {}) {
   object.rotation.order = 'YXZ';
   const L = legs.map((l, i) => ({ ...l, foot: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(), t: -1, dur: swing, wait: 0,
-    odd: 0.86 + 0.28 * ((i * 0.618034) % 1), knee: new THREE.Vector3(), tip: new THREE.Vector3(), pole: new THREE.Vector3(l.side * 0.5, 1, 0) })); // odd: no two legs step at quite the same distance
+    odd: 0.86 + 0.28 * ((i * 0.618034) % 1), knee: new THREE.Vector3(), tip: new THREE.Vector3(), pole: new THREE.Vector3(l.side * 0.5, 1, 0), lame: false, gone: false })); // odd: no two legs step at quite the same distance
   const body = { y: 0, yV: 0, pitch: 0, pitchV: 0, roll: 0, rollV: 0, x: 0, z: 0, set: false, idle: 1.5, clock: 0, ground: 0, steps: 0, slope: [0, 0] };
   const home = new THREE.Vector3(), inv = new THREE.Matrix4(), busy = [0, 0];
   let seed = 7; const chance = () => (seed = (seed * 16807) % 2147483647) / 2147483647; // which leg fidgets is nobody's business but the walker's
@@ -66,11 +68,12 @@ export function createWalker(object, legs, { ride, stride = 0.6, swing = 0.19, l
     else if (Math.hypot(s.x - body.x, s.z - body.z) > 5 * sc) { const dx = s.x - body.x, dz = s.z - body.z; fresh = true; for (const l of L) { l.foot.x += dx; l.foot.z += dz; l.from.x += dx; l.from.z += dz; if (l.t < 0) s.ground(l.foot); } }
     body.x = s.x; body.z = s.z; body.set = true;
 
-    busy[0] = busy[1] = 0; for (const l of L) if (l.t >= 0) busy[l.group]++;
+    busy[0] = busy[1] = 0; for (const l of L) if (l.t >= 0 && !l.lame && !l.gone) busy[l.group]++;
     body.idle -= dt;
     for (const l of L) {
-      if (limp >= 1) { l.t = -1; continue; }
+      if (limp >= 1 || l.gone) { l.t = -1; continue; }
       place(l, home, 0); // where this foot would stand if the body had always been here
+      if (l.lame) { l.t = -1; home.x = s.x + (home.x - s.x) * 1.16; home.z = s.z + (home.z - s.z) * 1.16; s.ground(home); l.foot.lerp(home, 1 - Math.exp(-2.2 * dt)); l.foot.y = home.y; continue; } // dragged after the body
       if (l.t < 0) {
         if (s.treadmill) { l.foot.x -= vx * dt; l.foot.z -= vz * dt; }
         l.wait -= dt;
@@ -87,7 +90,7 @@ export function createWalker(object, legs, { ride, stride = 0.6, swing = 0.19, l
     }
     // the ground the feet are on, as a plane: its height under the body, and how it slopes across the body and along it
     let n = 0, sx = 0, sz = 0, sy = 0, sxx = 0, szz = 0, sxz = 0, sxy = 0, szy = 0;
-    for (const l of L) { const y = l.t < 0 ? l.foot.y : lerp(l.from.y, l.to.y, l.t), x = l.rest.x * sc, z = l.rest.z * sc; n++; sx += x; sz += z; sy += y; sxx += x * x; szz += z * z; sxz += x * z; sxy += x * y; szy += z * y; }
+    for (const l of L) { let y = l.t < 0 ? l.foot.y : lerp(l.from.y, l.to.y, l.t); const x = l.rest.x * sc, z = l.rest.z * sc; if (l.gone) y = place(l, home, 0).y - 0.5 * sc; else if (l.lame) y -= 0.28 * sc; n++; sx += x; sz += z; sy += y; sxx += x * x; szz += z * z; sxz += x * z; sxy += x * y; szy += z * y; }
     const Sxx = sxx - sx * sx / n, Szz = szz - sz * sz / n, Sxz = sxz - sx * sz / n, Sxy = sxy - sx * sy / n, Szy = szy - sz * sy / n, det = Sxx * Szz - Sxz * Sxz || 1;
     const across = (Sxy * Szz - Szy * Sxz) / det, along = (Szy * Sxx - Sxy * Sxz) / det, under = (sy - across * sx - along * sz) / n;
     body.ground = under; body.slope[0] = across; body.slope[1] = along;
@@ -101,6 +104,7 @@ export function createWalker(object, legs, { ride, stride = 0.6, swing = 0.19, l
     object.updateMatrix(); inv.copy(object.matrix).invert();
     // and the legs, from where they join the body to where the feet are
     for (const l of L) {
+      if (l.gone) continue;
       l.tip.copy(l.foot).applyMatrix4(inv);
       if (limp > 0) l.tip.lerp(l.curl, limp);
       twoBone(l.hip, l.tip, l.l1, l.l2, l.pole, l.knee); lay(l.upper, l.hip, l.knee, l.pole); lay(l.lower, l.knee, l.tip, l.pole);
