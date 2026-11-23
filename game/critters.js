@@ -435,6 +435,17 @@ export function moonPiece(pal, def) {
   return m.geometry();
 }
 
+// The moon jelly from a little way off, for a bloom of them (bloom.js draws dozens at once): the saucer in eight sides and the four horseshoes
+// laid on top of it, about sixty faces where the whole animal has 550. No strands, nothing that squeezes: what moves it is how it is drawn.
+export function moonFar(pal) {
+  const m = mesher(), { bell, rim, gonad, gonadPale } = pal, rings = [[0.068, 0.07], [0.04, 0.14], [0.006, 0.19], [-0.014, 0.2]].map(([y, r]) => ringY(y, r, 8, { turn: TAU / 16 }));
+  m.cap(rings[0], [0, 1, 0], bell, 0.008);
+  sheet(m, rings, (i) => (i < 2 ? bell : [bell, rim]), [0, -0.05, 0]);
+  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.085, 0), at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad, r = Math.hypot(x, z); return [x, 0.071 - 0.29 * r * r + 0.009, z]; };
+    for (let i = 0; i < 3; i++) m.quad(at(i / 3, 0.022), at(i / 3, 0.06), at((i + 1) / 3, 0.06), at((i + 1) / 3, 0.022), [gonad, gonad, gonadPale]); } // a little bigger and bolder than the whole animal's, so that they still read from across the bloom
+  return m.geometry();
+}
+
 // ---------------------------------------------------------------- the sea nettle (the Pacific one, Chrysaora fuscescens)
 // A deep amber bell, darkest toward the rim, with no more than a faint pale star on it (the stripes belong to its northern cousin). Its rim is cut into
 // lappets. Twenty-four fine dark red tentacles hang from it, three between each two of its eight sense organs, and from the mouth four long pale oral arms,

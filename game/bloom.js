@@ -42,9 +42,9 @@ export const BLOOM = {
   current: { speed: 0.5, swing: 0.6 }, // a slow current through it, outward from the start give or take `swing`: every nettle's train streams with it
   shafts: { n: 3, wide: [6, 9], tall: 44, glow: 0.3, colour: '#f4fff0' }, // the sun it hangs in: seen past the fog, as the rift's beam is
   // the moon jellies. scale: of the 0.4 m model. high: how far over the bed. live: how many of the nearest are drawn whole, with every strand;
-  // the rest are a lighter version (the bell and what shows through it, no strands), drawn all at once. part: how near a part of the body has to be
+  // the rest are a lighter version (critters.js, moonFar: the saucer and its horseshoes in about sixty faces), drawn all at once. part: how near a part of the body has to be
   // before a bell gives way; push: how hard; back: how fast it comes back. beat: strokes a second. lean: how far each lies over into the current
-  moon: { n: 70, scale: 1.8, high: [1.6, 5.6], live: 6, near: 22, part: 1.7, push: 4, back: 0.9, beat: 0.5, lean: 0.35 },
+  moon: { n: 70, scale: 1.8, high: [1.6, 5.6], live: 4, near: 22, part: 1.7, push: 4, back: 0.9, beat: 0.5, lean: 0.35 },
   // the fry, a swarm of the smallest size (a few fish more than the band's food, and they come back: one every `back` seconds while nothing is in the bloom,
 // up to their number; slow enough that waiting for them is never worth it). inside: how far in (of R) the head has to be before they can be cornered; hide: where they keep while it is
   // not (of R, from the middle); flee: how far toward the nettles' side they go when the squid hunt them (of R); drift: how far they wander
@@ -52,9 +52,11 @@ export const BLOOM = {
   // the sea nettles. at: how far out (of R); apart: radians between them round the down-current side; wander: metres they drift along the edge;
   // scale: of the 3 m model; high: the bell over the bed. The train, for what it touches: from the bell, `train` metres long, going down-current
   // and sagging by `sag` (radians below level), `reach` metres thick; `bell`: a sphere round the bell that is safe. A sting: `cost` segments, the second
-  // if `more` or more joints of the body cross the train; never the last of the body (it stops at `keep` segments). `fry`: a fish a second it takes
+  // if `more` or more joints of the body (a joint to about 0.31 m) lie in the train at once within `look` seconds of the first touch; never the last of
+  // the body (it stops at `keep` segments); and then not again from that nettle for `rest` seconds. `stream`: how fast the water seems to go by it,
+  // which is what draws the train out (for the eye only). `fry`: a fish a second it takes
   // from a swarm whose middle is in its train
-  nettle: { n: 3, at: 0.95, apart: 0.85, wander: 3.5, scale: 1.7, high: 5.2, stream: 1.1, train: 3.5, sag: 0.6, reach: 0.75, bell: 0.85, look: 0.4, cost: [1, 2], more: 6, keep: 6, fry: 0.6 },
+  nettle: { n: 3, at: 0.95, apart: 0.85, wander: 3.5, scale: 1.7, high: 5.2, stream: 1.1, train: 3.5, sag: 0.6, reach: 0.75, bell: 0.85, look: 0.4, rest: 2, cost: [1, 2], more: 6, keep: 6, fry: 0.6 },
   // the squid. n in the shoal; home: how far out (of R) on the up-current side; high: over the bed; swim, jet: metres a second
   // fright: see, calm (a closing speed under this frightens nothing), gain, crowd (more for being nearer than `close`), cool (what it loses a second,
   //   and `still`, more when the fish is all but still), and the three steps: bluff, flee, ink. A dash within `dash` metres, or a body drawn round it, is ink at once
@@ -144,11 +146,9 @@ export function createBloom(scene, world, hooks) {
 
   // ---- the moon jellies: the nearest few drawn whole, the rest as the bell and what shows through it, all at once
   const M = BLOOM.moon, pal = resolve('moonjelly').palette;
-  const bodyGeo = geometry('moonjelly'), skinGeo = model.moonBell(pal); owned.push(skinGeo);
-  const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.12 });
-  const skinMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, transparent: true, opacity: 0.42, depthWrite: false, emissive: '#e8f4ff', emissiveIntensity: 0.25 }); owned.push(bodyMat, skinMat);
-  const farBody = add(new THREE.InstancedMesh(bodyGeo, bodyMat, plan.bells.length)), farSkin = add(new THREE.InstancedMesh(skinGeo, skinMat, plan.bells.length));
-  farBody.frustumCulled = farSkin.frustumCulled = false; farSkin.renderOrder = 2; farBody.castShadow = false;
+  const farGeo = model.moonFar(pal), farMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, transparent: true, opacity: 0.55, depthWrite: false, emissive: '#e8f4ff', emissiveIntensity: 0.18 }); owned.push(farGeo, farMat);
+  farMat.forceSinglePass = true; // (both faces in one pass: a clear double-sided thing is otherwise drawn twice)
+  const far = add(new THREE.InstancedMesh(farGeo, farMat, plan.bells.length)); far.frustumCulled = false; far.renderOrder = 2; far.castShadow = false;
   const live = Array.from({ length: M.live }, () => { const a = make('moonjelly'); a.object.scale.multiplyScalar(M.scale); a.object.visible = false; scene.add(a.object); return { a, bell: null }; });
   let pick = 0;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), none = new THREE.Vector3();
@@ -162,7 +162,7 @@ export function createBloom(scene, world, hooks) {
 
   // ---- the squid
   const SQ = BLOOM.squid, FR = SQ.fright;
-  const squid = Array.from({ length: SQ.n }, (_, i) => { const a = make('squid'); a.object.scale.multiplyScalar(SQ.scale); scene.add(a.object);
+  const squid = Array.from({ length: SQ.n }, (_, i) => { const a = make('squid'); a.object.scale.multiplyScalar(SQ.scale); scene.add(a.object); for (const arm of a.rig.arms) arm.st.mesh.castShadow = false; // (only the body casts: ten arms to a squid were a great many shadows to draw)
     const slot = { side: (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 1.6, back: Math.ceil(i / 2) * 0.9, up: ((i * 0.37) % 1 - 0.5) * 0.8 }; // a loose line abreast, the leader in the middle
     const pos = new THREE.Vector3(C.home.x + slot.side * cur.z, C.home.y + slot.up, C.home.z - slot.side * cur.x);
     return { a, i, slot, pos, vel: new THREE.Vector3(), yaw: Math.atan2(cur.x, cur.z), mood: 'hover', fright: 0, d: 99, was: 99, step: 'calm', away: null, t: 0, aimT: 0, face: 0, lit: 0 }; });
@@ -198,7 +198,7 @@ export function createBloom(scene, world, hooks) {
     const grade = state.best.grade | 0, pebble = new THREE.IcosahedronGeometry(0.12, 0); owned.push(pebble);
     for (let k = 0; k < 4; k++) { const lit = k < grade, mm = new THREE.MeshLambertMaterial({ color: lit ? resolve('squid').palette.back : '#3a4148', flatShading: true, emissive: lit ? '#ff8fb8' : '#000000', emissiveIntensity: lit ? 0.7 : 0 }); owned.push(mm);
       const p = new THREE.Mesh(pebble, mm), u = (k - 1.5) * 0.34; p.position.set(slab.position.x + Math.sin(yaw) * u, y + 0.17, slab.position.z + Math.cos(yaw) * u); p.scale.set(1, k === 3 ? 1.35 : 1, 1); p.castShadow = true; p.userData.lit = lit; g.add(p); }
-    nest.group.add(g); mark = g; mark.userData.grade = grade;
+    g.userData.bloom = true; nest.group.add(g); mark = g; mark.userData.grade = grade;
   }
   nestMark();
 
@@ -227,12 +227,12 @@ export function createBloom(scene, world, hooks) {
       for (const b of order) if (!b.live) { const L = live.find((x) => !x.bell); if (L) { L.bell = b; b.live = L; } } }
     plan.bells.forEach((b, i) => {
       const x = b.x + b.ox + off.x, y = b.y + b.oy + 0.18 * Math.sin(t * 0.4 + b.ph), z = b.z + b.oz + off.z, beat = Math.max(0, Math.sin(t * TAU * M.beat + b.ph)) ** 2;
-      if (b.live) { const a = b.live.a; a.object.visible = true; a.rig.update(dt, { x, y, z, yaw: leanYaw, tilt: M.lean + 0.1 * Math.sin(t * 0.3 + b.ph), mood: 'pulse', rate: M.beat * (b.touched && t - b.touched < 1.2 ? 1.8 : 1) }); farBody.setMatrixAt(i, m4.compose(v3.set(x, y, z), q, none)); farSkin.setMatrixAt(i, m4); return; }
+      if (b.live) { const a = b.live.a; a.object.visible = true; a.rig.update(dt, { x, y, z, yaw: leanYaw, tilt: M.lean + 0.1 * Math.sin(t * 0.3 + b.ph), mood: 'pulse', rate: M.beat * (b.touched && t - b.touched < 1.2 ? 1.8 : 1) }); far.setMatrixAt(i, m4.compose(v3.set(x, y, z), q, none)); return; }
       q.setFromEuler(e.set(M.lean, leanYaw, 0)); s3.set(b.s * (1 + 0.08 * beat), b.s * (1 - 0.16 * beat), b.s * (1 + 0.08 * beat));
-      m4.compose(v3.set(x, y, z), q, s3); farBody.setMatrixAt(i, m4); farSkin.setMatrixAt(i, m4);
+      far.setMatrixAt(i, m4.compose(v3.set(x, y, z), q, s3));
     });
     for (const L of live) if (!L.bell) L.a.object.visible = false;
-    farBody.instanceMatrix.needsUpdate = farSkin.instanceMatrix.needsUpdate = true;
+    far.instanceMatrix.needsUpdate = true;
 
     // the nettles: each holds its place against the current, drifting a little along the edge; it never comes after anything
     for (const n of nettles) {
@@ -247,6 +247,7 @@ export function createBloom(scene, world, hooks) {
     // moment after the first touch (`look` seconds): a body that crosses it pays one segment, a body lying along it or wrapped through it pays two
     for (const n of nettles) {
       let count = 0, last = -1;
+      if (n.rest > 0) { n.rest -= dt; n.touch = null; continue; }
       if (playing && !hooks.safe()) jt.forEach((p, i) => { if (Math.hypot(p.x - n.pos.x, p.y - n.pos.y, p.z - n.pos.z) < NT.bell) return; if (toSegment(p, n.A, n.B) < NT.reach) { count++; last = i; } });
       if (count && !n.touch) n.touch = { t: 0, most: 0, last };
       if (!n.touch) continue;
@@ -254,7 +255,7 @@ export function createBloom(scene, world, hooks) {
       if (n.touch.t < NT.look) continue;
       const most = n.touch.most, want = most >= NT.more ? NT.cost[1] : NT.cost[0], can = Math.max(0, Math.min(want, hooks.segs() - NT.keep)), j = n.touch.last; n.touch = null;
       if (!most || !playing || hooks.safe()) continue;
-      n.stung = t; state.stung++; plan.stings = (plan.stings || 0) + 1; plan.lastSting = { count: most, cost: can };
+      n.stung = t; n.rest = NT.rest; state.stung++; plan.stings = (plan.stings || 0) + 1; plan.lastSting = { count: most, cost: can };
       if (can > 0) hooks.bite(can, j, n.pos, 'sting'); else hooks.hurt();
       hooks.say('nettle', 'A sea nettle’s trailing threads sting. Its bell does not: pass it on the side the current comes from.');
     }
@@ -292,7 +293,7 @@ export function createBloom(scene, world, hooks) {
     for (const s of squid) {
       // fright: what the fish is doing to it
       const dx = s.pos.x - head.x, dy = s.pos.y - head.y, dz = s.pos.z - head.z, d = Math.hypot(dx, dy, dz); s.was = s.d; s.d = d;
-      const closing = dt > 0 && s.was < 90 ? (s.was - d) / dt : 0;
+      let closing = dt > 0 && s.was < 90 ? (s.was - d) / dt : 0; if (closing > 16) closing = 0; // (faster than a dash is no fish: one put down somewhere new)
       let p = 0;
       if (!state.tame && playing && d < FR.see) p = FR.gain * Math.max(0, closing - FR.calm) * (1 - d / FR.see) + FR.crowd * Math.max(0, FR.close - d);
       const hard = !state.tame && playing && ((rig.dashT > 0 && d < FR.dash) || (d < 7 && rig.wrap(s.pos.x + off.x, s.pos.y, s.pos.z + off.z, 6).angle > Math.PI * 1.15));
@@ -315,7 +316,7 @@ export function createBloom(scene, world, hooks) {
       const homeAt = { x: C.home.x + s.slot.side * cur.z - cur.x * s.slot.back, z: C.home.z - s.slot.side * cur.x - cur.z * s.slot.back };
       if (s.step === 'scatter' || s.step === 'flee') { goal = s.away; sp = S.jet * (s.step === 'flee' ? 0.7 : 1); mood = Math.hypot(s.pos.x - goal.x, s.pos.z - goal.z) > 1.2 ? 'flee' : 'hover'; faceX = head.x; faceZ = head.z;
         if (s.step === 'flee' && mood === 'hover' && s.fright < FR.bluff) s.step = 'calm'; }
-      else if (s.step === 'bluff') { mood = 'bluff'; faceX = head.x; faceZ = head.z; const k = 1 / (d || 1); goal = d < 5 ? { x: s.pos.x + dx * k * 2, z: s.pos.z + dz * k * 2 } : { x: s.pos.x, z: s.pos.z }; sp = 0.9; y = s.pos.y; } // big at it, and giving ground
+      else if (s.step === 'bluff') { mood = 'bluff'; faceX = head.x; faceZ = head.z; const k = 1 / (d || 1); goal = d < 7 ? { x: s.pos.x + dx * k * 2, z: s.pos.z + dz * k * 2 } : { x: s.pos.x, z: s.pos.z }; sp = 0.9; y = s.pos.y; } // big at it, and giving ground
       else if (state.tame) { goal = homeAt; if (d < 9) { faceX = head.x; faceZ = head.z; goal = { x: lerp(homeAt.x, head.x, 0.2), z: lerp(homeAt.z, head.z, 0.2) }; } }
       else if (at) { const a = (s.i / squid.length) * TAU + Math.atan2(L.pos.x - at.x, L.pos.z - at.z) * 0, ring = sc.ball * 2.6 + RA.ring; goal = { x: at.x + Math.sin(a + t * 0.05) * ring, z: at.z + Math.cos(a + t * 0.05) * ring }; y = at.y; faceX = at.x; faceZ = at.z;
         if (s.aimT > 0) { s.aimT -= dt; mood = s.aimT > 0.35 ? 'aim' : 'strike'; goal = { x: s.pos.x, z: s.pos.z }; if (s.aimT <= 0.35 && !s.struck) { s.struck = true; if (takeFish(sc, at.x, at.y, at.z)) { shoal.eaten++; plan.squidTook = (plan.squidTook || 0) + 1; } } } else s.struck = false; }
