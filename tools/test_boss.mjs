@@ -204,7 +204,7 @@ s = await ev(() => { const { g, T, G, S, F, home, ready, lie, until, sh } = wind
     while (t < secs && !lost) { g.sim(1 / 60, T.none()); t += 1 / 60; lost = segs - g.run.segs; if (lost) { const hot = G.shapes(g.sctx).filter((x) => x.role === 'blow' && x.hot); gap = Math.min(...hot.map((x) => Math.min(...G.debug.body().map((c) => sh.gap(x, c.a, c.b, c.r))))); what = hot.map((x) => x.t).join(); } }
     out[name] = { lost, gap: gap === null ? null : +gap.toFixed(2), what }; S.lost = 0; };
   watch('sweep', { o: { last: 'slam' }, place: () => lie(4.3) }, 'sweep');
-  watch('jab', { o: { jabT: 0 }, place: () => lie(3.6, 1.1) }, 'jab');
+  watch('jab', { o: { jabT: 0, stompT: 99 }, place: () => lie(4.0, 1.1) }, 'jab');
   watch('charge', { o: { chargeT: 0 }, place: () => { const r = g.world.rift, a = Math.atan2(r.x - r.nx * 24 - G.pos.x, r.z - r.nz * 24 - G.pos.z); lie(9, a - G.mesh.rotation.y); } }, 'charge');
   watch('rise', { o: { digT: 0, chargeT: 0 }, rage: true, place: () => lie(8.5) }, 'dig', 8);
   return out; });
@@ -214,7 +214,7 @@ check('every blow that takes part of the body was judged by a shape touching the
 s = await ev(() => { const { g, T, G, S, F, home, ready } = window.kk(), out = {};
   const open = (i) => { home(); ready(); G.debug.set('stuck', 4); g.sim(0.05, T.none()); };
   open(); out.met = window.kk().dashLeg.call(window.kk(), 1); S.leg.fill(0); S.hits = 0;
-  open(); out.metHind = window.kk().dashLeg.call(window.kk(), 6); S.leg.fill(0); S.hits = 0;
+  open(); out.metHind = window.kk().dashLeg.call(window.kk(), 6); if (!out.metHind) { S.leg.fill(0); S.hits = 0; open(); out.metHind = window.kk().dashLeg.call(window.kk(), 7) ? 'the next one' : false; } S.leg.fill(0); S.hits = 0; // (a dash at one hind leg can meet the shell first: then the other)
   open(); { const kk = window.kk(), low = kk.legAt(1, 1.7); out.over = kk.dashLeg(1, { h: 1.7, lift: 0 }) && false; } S.leg.fill(0); S.hits = 0; // (placeholder, replaced below)
   open(); { const kk = window.kk(); let top = null; for (const x of G.debug.solids()) if (x.leg === 1) for (const p of [x.a, x.b]) if (!top || p.y > top.y) top = p.clone(); // over its knee by a metre and a half
     const dx = top.x - G.pos.x, dz = top.z - G.pos.z, d = Math.hypot(dx, dz), at = { ...T.none(), dir: { x: -dx / d, y: 0, z: -dz / d } }; T.put(top.x + dx / d * 2.4, top.y + 1.6, top.z + dz / d * 2.4, Math.atan2(-dx, -dz)); g.run.safe = 5; g.run.dashCool = 0; g.run.stamina = 1; const h0 = S.hits; g.sim(1 / 60, { ...at, dashNow: true }); g.sim(0.35, at); out.over = S.hits > h0; out.knee = +(top.y - g.world.height(top.x, top.z)).toFixed(2); } S.leg.fill(0); S.hits = 0;

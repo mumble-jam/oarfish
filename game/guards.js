@@ -30,7 +30,7 @@ export const KEEPER_FIGHT = {
   // shock: where its fingers hit the bed the bed jolts, and silt flies: that round, this high over the bed, takes a body lying low there too.
   slam: { reach: 5.5, step: 4.3, wind: 0.95, aim: 0.6, high: 4.2, shock: 1.3, shockHigh: 1.9, cost: 3, stuck: 2.4 }, // aim: the part of the wind-up it still follows the body for; step: farther than this, it steps toward where it struck first
   sweep: { reach: 5.0, wind: 0.75, time: 0.3, low: -1.2, cost: 2, rest: 1.1, bodies: 4 }, // low: it does not choose to sweep at what is more than this over its own back (the claw goes across at a fish's height off the bed, and passes under what is higher); bodies: how many joints lying in its way make it choose this
-  jab: { reach: 3.8, wind: 0.34, short: 0.3, cost: 1, rest: 0.5, every: 1.7 }, // short: how much of its fingers' span the small claw keeps back of where it is aimed (the rest goes past it)
+  jab: { reach: 4.2, wind: 0.34, short: 0.3, cost: 1, rest: 0.5, every: 1.7 }, // short: how much of its fingers' span the small claw keeps back of where it is aimed (the rest goes past it)
   charge: { from: 7, to: 14, tell: 0.75, speed: 9.5, run: 1.0, slack: 0.2, cost: 2, rest: 1.3, every: 7 }, // running, it takes what its shell or its legs meet (slack: how near counts as meeting)
   dig: { down: 0.8, speed: 5.5, under: [1.3, 2.2], tell: 0.55, burst: 0.6, high: 3.0, cost: 3, rest: 1.8, every: 9 }, // coming up, its shell takes what is over it: within its rim and `burst` more, `high` over the bed
   // A body under it is out of the great claw's reach, which cannot turn back under its own shell. It stomps: a leg lifts high and holds there (the tell; the
