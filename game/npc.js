@@ -16,6 +16,9 @@ import { squidRig } from './squid.js';
 import { jellyRig } from './jelly.js';
 import { hermitRig } from './hermit.js';
 import { trumpetRig } from './trumpet.js';
+import { burrowRig } from './burrow.js';
+import { gardenEelRig } from './gardeneel.js';
+import { pufferRig, circleRig } from './puffer.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -263,9 +266,29 @@ for (const spec of [
     build: (pal) => model.hermit(pal), assemble(a, pal) { hermitRig(a, pal, { shellOf: (kind) => geometry(`shell-${kind}`) }); },
     states: [{ id: 'walk', name: 'Walking', speed: 0.12 }, { id: 'pick', name: 'Picking at the sand', speed: 0 }, { id: 'in', name: 'Drawn in, the big claw for a door', speed: 0 }, { id: 'peer', name: 'Peering out', speed: 0 },
       { id: 'probe', name: 'Feeling an empty shell', speed: 0 }, { id: 'change', name: 'Out of its shell and into the next', speed: 0 }, { id: 'hold', name: 'In a line, holding the shell ahead', speed: 0 }, { id: 'wardrobe', name: 'In each of the shells by turns', speed: 0.1 }] },
-  { ...SAND, id: 'trumpet', name: 'Trumpetfish', length: model.TRUMPET.length, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
-    about: 'A metre of stiff stick: a tube of a snout with a barbel on the chin, a row of short spines along the back that lie flat or stand, and right at the back the two soft fins it swims by, a small round tail behind them. Mottled red-brown with silvery streaks; it has a yellow phase. It hangs head down among tall things, and it lies close along a big harmless body to get near what it hunts.',
+  { ...SAND, id: 'trumpet', name: 'Trumpetfish', length: model.TRUMPET.length * model.TRUMPET.size, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
+    about: 'A stiff stick of a fish, made at 1.4 m where the biggest real ones reach a metre: a tube of a snout with a barbel on the chin, a row of short spines along the back that lie flat or stand, and right at the back the two soft fins it swims by, a small round tail behind them. Mottled red-brown with silvery streaks; it has a yellow phase. It hangs head down among tall things, and it lies close along a big harmless body to get near what it hunts.',
     palette: { back: '#7c3f37', flank: '#b8664b', belly: '#efd2ab', mottle: '#4e2429', streak: '#e9f0f2', fin: '#d6966a', bar: '#24161c', jawLine: '#2b1a20', eye: '#ffd98a', yellow: '#ffcf3a' },
     build: (pal) => model.trumpet(pal), assemble(a, pal) { trumpetRig(a, pal); },
     states: [{ id: 'hang', name: 'Hanging head down', speed: 0 }, { id: 'swim', name: 'Swimming on its back fins', speed: 0.5 }, { id: 'shadow', name: 'Lying along a big body', speed: 1.2 }, { id: 'stalk', name: 'Stalking, snout lowered', speed: 0 }, { id: 'strike', name: 'The strike', speed: 0 }, { id: 'yellow', name: 'Yellow phase', speed: 0 }] },
+  { ...SAND, id: 'burrow', name: 'Goby and pistol shrimp', length: model.GOBY.length, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
+    about: 'A pair at the hole they share in the sand. The goby, yellow with pale blue spots, keeps watch at the mouth propped on its fins; the shrimp, pale and netted brown, all but blind, digs, bulldozing sand out onto the heap with one long red feeler laid on the goby the whole time. A flick of the goby’s tail and the shrimp stops; at real danger the goby goes down the hole head first. The shrimp’s one great claw snaps. Both made four times their size.',
+    palette: { yellow: '#ffd23e', back: '#e2a12c', belly: '#fff2b0', spot: '#8fdcff', fin: '#ffc94a', eye: '#2a2230', shell: '#fff1cc', net: '#c8693f', legBand: '#ffe2c4', clawTip: '#5a2a30', feeler: '#e2403a', sand: '#c8c9a6', sandDark: '#b4b693', sandPale: '#d6d5b1', hole: '#2c2a22' },
+    build: (pal) => model.burrow(pal), assemble(a, pal) { burrowRig(a, pal, { flash: sprite(a, '#ffffff', 0.2) }); },
+    states: [{ id: 'watch', name: 'On watch', speed: 0 }, { id: 'work', name: 'The shrimp at work, its feeler on the goby', speed: 0 }, { id: 'flick', name: 'The goby flicks: a warning', speed: 0 }, { id: 'gone', name: 'Both gone down, the goby head first', speed: 0 }, { id: 'snap', name: 'The shrimp’s snap', speed: 0 }] },
+  { ...SAND, id: 'gardeneel', name: 'Garden eels', length: model.GARDEN.long, material: { flatShading: true }, // (the sand: no light of its own; the eels have their own material)
+    about: 'A colony in a patch of sand, each eel in its own hole: long, thin and round, white with fine black dots, three big black spots and large eyes. They stand up to two thirds out, facing into the current, sway and pick at what drifts by; in a strong current they draw half in and bend with it; when something comes near they sink into their holes, and rise again slowly once it has gone. One light model, drawn twenty at a time. Made three times their size.',
+    palette: { skin: '#f6f3ea', dot: '#2b2730', spot: '#17141c', eye: '#e8e6dc', sand: '#c8c9a6', sandDark: '#b4b693', sandPale: '#d6d5b1', hole: '#2c2a22' },
+    build: (pal) => model.eelField(pal), assemble(a, pal) { gardenEelRig(a, pal); },
+    states: [{ id: 'feed', name: 'Two thirds out, feeding', speed: 0 }, { id: 'current', name: 'A strong current: half in, bent', speed: 0 }, { id: 'heads', name: 'Only their heads out', speed: 0 }, { id: 'down', name: 'All gone down', speed: 0 }, { id: 'wave', name: 'Something passes: they sink, and rise behind it', speed: 0 }] },
+  { ...SAND, id: 'puffer', name: 'White-spotted puffer', length: model.PUFFER.length, material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.07 },
+    about: 'A small round pufferfish, brown above with white spots, the belly silvery white, that swims on fluttering fins. It builds a circle in the sand with its body: belly down, ploughing straight furrows in from the edge with its fins beating, sand flying; stirring the middle to fine sand; setting fragments of shell on the peaks. It can blow itself up into a spined ball. Made two and a half times its size; its circle is its own component.',
+    palette: { back: '#8a6a45', flank: '#b08a5a', belly: '#f3efe6', spot: '#fffaf0', eye: '#ffe08a', beak: '#f2e8d2', fin: '#d6b98a', silt: '#e6dfbd', bitA: '#fff6ea', bitB: '#ffb3a8' },
+    build: (pal) => model.puffer(pal), assemble(a, pal) { pufferRig(a, pal); },
+    states: [{ id: 'swim', name: 'Swimming on its fins', speed: 0.2 }, { id: 'plough', name: 'Ploughing a furrow, belly down', speed: 0.25 }, { id: 'stir', name: 'Stirring the middle', speed: 0 }, { id: 'carry', name: 'Carrying a shell to a peak', speed: 0.1 }, { id: 'puffed', name: 'Puffed up', speed: 0 }] },
+  { ...SAND, id: 'sandcircle', name: 'A puffer’s sand circle', length: 2.9, material: { flatShading: true }, // (no light of its own: it is the bed, and has to be the bed's colour)
+    about: 'The circle the white-spotted puffer builds: twenty-eight radial valleys and ridges round a flat middle of fine sand, with fragments of shell and coral set on the peaks. It can be shown at any stage: the first ring dug, the valleys ploughed rough, the ridges sharpened, finished, and left to flatten after the eggs. Made half as big again as the real one, 2.9 m across.',
+    palette: { sand: '#c8c9a6', sandDark: '#adaf8b', sandPale: '#dcdab6', fine: '#e2dfc2', bitA: '#fff6ea', bitB: '#ffb3a8' },
+    build: (pal) => model.sandCircle(pal), assemble(a, pal) { circleRig(a, pal); },
+    states: [{ id: 'build', name: 'Being built, from nothing', speed: 0 }, { id: 'ring', name: 'The first ring', speed: 0 }, { id: 'valleys', name: 'Valleys ploughed', speed: 0 }, { id: 'ridges', name: 'Ridges sharpened', speed: 0 }, { id: 'done', name: 'Finished, shells on the peaks', speed: 0 }, { id: 'left', name: 'Left, flattening', speed: 0 }] },
 ]) { NPCS.push(spec); NPC[spec.id] = spec; }

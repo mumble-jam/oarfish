@@ -864,7 +864,7 @@ export const HERMIT_WEAR = {
 //   trumpetSpine   one of the separate spines in front of the soft back fin, which lie flat or stand
 //   trumpetFin     a pectoral or a pelvic fin, which flutters; trumpetTail the round tail fin; trumpetJaw the lower lip of the snout, which drops
 //   trumpetBarbel  the barbel on the chin, trailed by strands.js
-export const TRUMPET = { length: 1, neck: 0.16,
+export const TRUMPET = { length: 1, neck: 0.16, size: 1.4, // modelled at a metre, the real one's greatest length; trumpet.js shows it 1.4 times that, to read from the dive's camera
   body: [[0.5, 0.0075, 0.0075, 0.0075, -0.002], [0.47, 0.0085, 0.009, 0.009, -0.002], [0.38, 0.0105, 0.012, 0.012, 0], [0.29, 0.0135, 0.017, 0.016, 0.002], [0.23, 0.018, 0.027, 0.023, 0.004], [0.15, 0.021, 0.034, 0.029, 0.002],
     [0.05, 0.023, 0.039, 0.033, 0], [-0.1, 0.023, 0.041, 0.035, 0], [-0.24, 0.02, 0.037, 0.033, 0], [-0.35, 0.014, 0.025, 0.023, 0], [-0.42, 0.0085, 0.013, 0.013, 0], [-0.445, 0.0075, 0.012, 0.012, 0]],
   spines: Array.from({ length: 10 }, (_, i) => -0.2 + i * 0.031).reverse(), // along the back, head first
@@ -919,3 +919,225 @@ export function trumpetTail(pal) {
 // the lower lip of the snout's end, hinged at its back (the origin) and reaching forward to the mouth
 export function trumpetJaw(pal) { const { belly, jawLine } = pal; return mesher().limb([0, -0.002, 0], [0, -0.002, 0.034], 0.0062, 0.0055, 5, [belly, jawLine]).geometry(); }
 export function trumpetBarbel(pal) { const m = mesher(), { belly, fin } = pal, c = TRUMPET.barbel.cuts; m.skin(c.map((z, i) => { const r = 0.0018 * (1 - i / c.length) + 0.0004; return [[-r, -0.5 * r, z], [0, r, z], [r, -0.5 * r, z]]; }), [belly, fin]); return m.geometry(); }
+
+// ---------------------------------------------------------------- the shrimp goby and the pistol shrimp, at their burrow
+// Two animals and the hole they share, made four times their size (a goby of 10 cm and a shrimp of 5 would not be seen from the dive's camera). In
+// burrow.js's space: the mouth of the hole at the origin, the sand's surface at y = 0, +z the way the goby watches. The pieces:
+//   burrow         the patch of sand round the hole: the hole and its rim, the heap of sand the shrimp has pushed out, the edge sunk below the
+//                  bed so that in the dive only the rim and the heap show; and a short dark shaft under the mouth
+//   goby           the goby's body, head toward +z: it bends on a neck (spine.js), so it can turn its head and flick its tail; the second back fin
+//                  and the fin under it, the disc of its joined belly fins it props itself on, and the eyes high on its head are in it
+//   gobyFin        the tall first back fin, which it raises; a pectoral fin; the round tail fin, which flicks
+//   shrimp         the front half of the shrimp: the shell over it, with the hood that hides its eyes
+//   shrimpSegment  one of the five rings of its tail, and shrimpFan the fan at the end
+//   shrimpClaw     the great snapping claw (arm, hand, the finger that cocks), and the small one
+//   shrimpLeg      a walking leg; shrimpFeeler its feelers, the two long red ones and the short ones, trailed by strands.js
+//   sandLoad       the load of sand it pushes out in front of its claws
+// the hole's mouth is HOLE across; `heap` is the way (radians from +x toward +z) the shrimp pushes its sand out, round the side from where the goby watches
+export const BURROW = { hole: 0.07, heap: -0.5 };
+// the height of the sand round the hole at (x, z), as burrow() lays it (without its small wobble): for whatever stands on it
+const BURROW_RINGS = [[BURROW.hole, 0.02, 0], [BURROW.hole + 0.035, 0.035, 0.03], [0.17, 0.012, 0.07], [0.3, -0.004, 0.06], [0.46, -0.03, 0.025]];
+export const burrowY = (x, z) => { const r = Math.hypot(x, z), h = Math.max(0, Math.cos(Math.atan2(z, x) - BURROW.heap)) ** 3, P = BURROW_RINGS.map(([r0, y, k], j) => [r0 + (j ? h * k * 2.2 : 0), y + h * k]);
+  if (r <= P[0][0]) return P[0][1]; for (let j = 0; j + 1 < P.length; j++) if (r <= P[j + 1][0]) return P[j][1] + (P[j + 1][1] - P[j][1]) * (r - P[j][0]) / (P[j + 1][0] - P[j][0]); return P[P.length - 1][1]; };
+export const GOBY = { length: 0.4, neck: 0.09,
+  body: [[0.205, 0.012, 0.012, 0.01, -0.006], [0.185, 0.028, 0.028, 0.024, -0.002], [0.14, 0.042, 0.042, 0.033, 0.003], [0.08, 0.041, 0.043, 0.034, 0.002], [0.0, 0.036, 0.04, 0.031, 0], [-0.08, 0.029, 0.033, 0.027, 0], [-0.135, 0.019, 0.023, 0.02, 0], [-0.165, 0.013, 0.017, 0.015, 0]],
+  dorsal: [0.055, 0.03], pectoral: [0.04, -0.012, 0.105], tail: -0.165, perch: 0.034, // where the first back fin stands (z, and how far back it reaches); a pectoral's root (and the other's, mirrored); the tail's root; how high the belly sits over what it perches on
+};
+export const SHRIMP = { length: 0.22,
+  segments: [[0.017, 0.022, 0.017], [0.018, 0.021, 0.017], [0.018, 0.019, 0.016], [0.017, 0.016, 0.014], [0.016, 0.013, 0.012]], // each ring of the tail: long, half-wide, high
+  claws: [{ side: -1, big: true, shoulder: [-0.016, -0.012, 0.075], l1: 0.04, l2: 0.075, span: 0.03, stout: 1 }, { side: 1, big: false, shoulder: [0.016, -0.012, 0.075], l1: 0.035, l2: 0.04, span: 0.022, stout: 0.38 }],
+  legs: [1, -1].flatMap((s) => [0, 1, 2].map((i) => ({ side: s, hip: [s * 0.016, -0.016, 0.055 - i * 0.017], ph: i * 2.1 + (s > 0 ? 0 : 1) }))),
+  feelers: [1, -1].flatMap((side) => [sandStrand(side, 0.26, [side * 0.009, 0.002, 0.098], [side * 0.25, 0.25, 1], 8), sandStrand(side, 0.06, [side * 0.004, 0.006, 0.1], [side * 0.3, 0.5, 1], 3)]),
+};
+const gobyAt = (z) => { const B = GOBY.body; let i = 0; while (i < B.length - 2 && B[i + 1][0] > z) i++; const a = B[i], b = B[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return a.map((v, k) => v + (b[k] - v) * t); };
+export function burrow(pal) {
+  const m = mesher(), { sand, sandDark, sandPale, hole } = pal, N = 14, H = BURROW.hole;
+  // the ground from the hole outward: the rim, a dip, and the edge sunk below the bed. On +x the heap of what the shrimp has pushed out
+  const heap = (a) => Math.max(0, Math.cos(a - BURROW.heap)) ** 3, rings = BURROW_RINGS.map(([r, y, k], j) =>
+    Array.from({ length: N }, (_, i) => { const a = (i / N) * Math.PI * 2 + (j % 2) * 0.12, rr = r + (j ? heap(a) * k * 2.2 : 0), wob = j ? 0.008 * Math.sin(i * 2.7 + j) : 0; return [Math.cos(a) * rr, y + heap(a) * k + wob, Math.sin(a) * rr]; }));
+  m.skin(rings, (j, i) => (j === 0 ? sandDark : (i + j) % 3 === 0 ? sandPale : j > 2 ? sand : tint(sand, sandPale, 0.4)));
+  // the mouth, and a dark shaft down from it
+  const lip = rings[0], deep = lip.map(([x, , z]) => [x * 0.8, -0.3, z * 0.8]); m.skin([lip, deep], hole); m.cap(deep, [0, 1, 0], hole);
+  // under it all, so that from the side on the stand it is a piece of the bed: a skirt down from the edge
+  const edge = rings[4], foot = edge.map(([x, , z]) => [x, -0.32, z]); m.skin([edge, foot], sandDark).cap(foot, [0, -1, 0], sandDark);
+  // a few grains and bits of shell in the heap
+  for (let i = 0; i < 7; i++) { const a = BURROW.heap - 0.6 + i * 0.2, r = 0.13 + 0.03 * (i % 3), y = heap(a) * 0.06 + 0.02; m.tri([Math.cos(a) * r, y + 0.006, Math.sin(a) * r], [Math.cos(a) * r + 0.012, y, Math.sin(a) * r - 0.008], [Math.cos(a) * r - 0.006, y, Math.sin(a) * r + 0.01], i % 2 ? '#fff6e6' : sandPale); }
+  return m.geometry();
+}
+export function goby(pal) {
+  const m = mesher(), { yellow, back, belly, spot, fin, eye } = pal, N = 8;
+  m.skin(GOBY.body.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), (i, k) => (k === 0 || k === N - 1 ? back : k === 3 || k === 4 ? belly : i === 2 && (k === 1 || k === 6) ? tint(yellow, belly, 0.3) : yellow));
+  m.cap(ringZ(0.205, 0.012, 0.012, 0.01, -0.006, N), [0, 0, 1], dim(back, 0.8), 0.006);
+  m.quad([-0.012, -0.004, 0.2], [0.012, -0.004, 0.2], [0.02, -0.01, 0.17], [-0.02, -0.01, 0.17], dim(back, 0.6)); // the wide mouth
+  // pale blue spots over the head and flanks
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 18; i++) { const z = 0.17 - 0.3 * rnd(), s = i % 2 ? 1 : -1, [, w, up, , y] = gobyAt(z), v = rnd() * 0.7, x = s * (w * Math.sqrt(1 - v * v) + 0.0012), h = y + up * v, r = 0.0045;
+    m.quad([x, h + r, z], [x, h, z + r], [x, h - r, z], [x, h, z - r], spot); }
+  // the eyes, big and high on the head, looking out to each side and up
+  both((s) => { const [, w, up, , y] = gobyAt(0.15); m.limb([s * w * 0.45, y + up * 0.6, 0.15], [s * w * 0.6, y + up * 1.02, 0.152], 0.016, 0.017, 6, yellow); m.eye([s * w * 0.66, y + up * 1.0, 0.153], [s * 0.7, 0.7, 0.2], 0.012, { iris: eye, pupil: '#15121c', rim: dim(back, 0.7) }); });
+  // the second back fin and the fin under it: long, low, spotted, the edge pale
+  const soft = (from, to, side, h) => { const root = [], tip = [], n = 6; for (let i = 0; i <= n; i++) { const z = from + (to - from) * (i / n), [, , up, dn, y] = gobyAt(z), hh = h * (0.7 + 0.3 * Math.sin(Math.PI * i / n)); root.push([0, y + side * (side > 0 ? up : dn) * 0.92, z]); tip.push([0, y + side * ((side > 0 ? up : dn) + hh), z - 0.015]); }
+    for (let i = 0; i < n; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [fin, fin, tint(fin, '#ffffff', 0.45)]); for (let i = 1; i < n; i += 2) { const p = tip[i], q = root[i], c = [0, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2]; m.quad([0.001, c[1] + 0.004, c[2]], [0.001, c[1], c[2] + 0.004], [0.001, c[1] - 0.004, c[2]], [0.001, c[1], c[2] - 0.004], spot); } };
+  soft(0.015, -0.15, 1, 0.032); soft(-0.03, -0.145, -1, 0.026);
+  // the disc of its joined belly fins, a cup under the chest that it props itself on
+  const cup = ringY(-GOBY.perch, 0.026, 8, { z: 0.1 }), top = ringY(-0.026, 0.014, 8, { z: 0.102 }); m.skin([top, cup], [tint(fin, belly, 0.5), fin]).cap(cup, [0, -1, 0], tint(fin, belly, 0.3), 0.004);
+  return m.geometry();
+}
+// a fin of the goby. kind 'dorsal': the tall first back fin, standing up (+y) from its root line along -z, which it raises and lays down; 'pectoral':
+// a round fan out to +x from its root; 'tail': the round tail, fanned out behind (-z) its root
+export function gobyFin(pal, kind) {
+  const m = mesher(), { fin, spot, yellow } = pal, edge = tint(fin, '#ffffff', 0.5), root = [], tip = [];
+  if (kind === 'dorsal') { for (let i = 0; i <= 5; i++) { const z = -GOBY.dorsal[1] * (i / 5), h = 0.065 * (1 - 0.55 * (i / 5)); root.push([0, 0, z]); tip.push([0, h, z - 0.012 - 0.01 * (i / 5)]); } }
+  else if (kind === 'pectoral') { for (let i = 0; i <= 5; i++) { const a = -0.3 - i * 0.42; root.push([0, -0.004 * i, -0.003 * i]); tip.push([Math.cos(a) * 0.05, -0.012 * (i / 5), Math.sin(a) * 0.045]); } }
+  else { for (let i = 0; i <= 7; i++) { const a = -0.95 + (1.9 * i) / 7; root.push([0, a * 0.01, 0]); tip.push([0, Math.sin(a) * 0.048, -Math.cos(a) * 0.075]); } }
+  for (let i = 0; i + 1 < root.length; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [kind === 'tail' ? yellow : fin, kind === 'tail' ? yellow : fin, edge]);
+  for (let i = 0; i + 1 < root.length; i += 2) { const c = [0, 1, 2].map((k) => root[i][k] * 0.45 + tip[i][k] * 0.55); const d = kind === 'pectoral' ? [0, 0.004, 0] : [0.0015, 0, 0]; m.quad([c[0] + d[0], c[1] + 0.004, c[2]], [c[0] + d[0], c[1], c[2] + 0.004], [c[0] + d[0], c[1] - 0.004, c[2]], [c[0] + d[0], c[1], c[2] - 0.004], spot); m.quad([c[0] - d[0], c[1] - d[1] + 0.004, c[2]], [c[0] - d[0], c[1] - d[1], c[2] - 0.004], [c[0] - d[0], c[1] - d[1] - 0.004, c[2]], [c[0] - d[0], c[1] - d[1], c[2] + 0.004], spot); }
+  return m.geometry();
+}
+// The front of the shrimp, head toward +z: the shell over its front half from z 0.015 to the hood, which comes down over its eyes; the eyes show
+// only as two dark marks under it, as the real one's do.
+export function shrimp(pal) {
+  const m = mesher(), { shell, net, belly, eye, legBand } = pal, N = 7;
+  const secs = [[0.012, 0.022, 0.02, 0.016, 0], [0.04, 0.024, 0.022, 0.017, 0.001], [0.07, 0.022, 0.02, 0.016, 0.001], [0.092, 0.016, 0.017, 0.012, 0.002], [0.104, 0.009, 0.01, 0.007, 0.002]];
+  m.skin(secs.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), (i, k) => (k === 3 || k === 4 ? belly : (i + k) % 2 ? net : shell));
+  m.cap(ringZ(0.012, 0.022, 0.02, 0.016, 0, N), [0, 0, -1], belly, 0.004).cap(ringZ(0.104, 0.009, 0.01, 0.007, 0.002, N), [0, 0, 1], shell, 0.006);
+  both((s) => m.quad([s * 0.012, 0.012, 0.096], [s * 0.016, 0.006, 0.093], [s * 0.012, 0.002, 0.098], [s * 0.008, 0.008, 0.1], eye)); // the eyes, under the hood
+  m.quad([-0.014, 0.0215, 0.02], [0.014, 0.0215, 0.02], [0.012, 0.0205, 0.07], [-0.012, 0.0205, 0.07], [net, net, shell]); // the netted pattern on its back
+  for (const c of SHRIMP.claws) m.limb([c.shoulder[0] * 0.5, c.shoulder[1], c.shoulder[2] - 0.006], c.shoulder, 0.007, 0.006, 4, legBand);
+  return m.geometry();
+}
+// one ring of the tail (i: which, from the front), modelled from its front at the origin back along -z
+export function shrimpSegment(pal, i) {
+  const m = mesher(), { shell, net, belly } = pal, [l, w, h] = SHRIMP.segments[i], next = SHRIMP.segments[i + 1] || [0, w * 0.8, h * 0.8];
+  m.skin([ringZ(0.002, w, h, h * 0.75, 0, 7), ringZ(-l * 0.5, w * 1.04, h * 1.05, h * 0.8, 0, 7), ringZ(-l - 0.002, next[1] * 1.02, next[2] * 1.02, next[2] * 0.78, 0, 7)], (j, k) => (k === 3 || k === 4 ? belly : (k + i) % 2 ? net : shell));
+  both((s) => m.limb([s * w * 0.6, -h * 0.7, -l * 0.5], [s * w * 0.9, -h * 1.3, -l * 0.7], 0.004, 0.001, 3, belly)); // the little swimmerets under it
+  return m.geometry();
+}
+export function shrimpFan(pal) {
+  const m = mesher(), { shell, net, legBand } = pal, edge = tint(shell, '#ffffff', 0.4);
+  m.quad([-0.006, 0.004, 0], [0.006, 0.004, 0], [0.008, 0.002, -0.03], [-0.008, 0.002, -0.03], [shell, shell, edge]); // the middle one
+  both((s) => { m.quad([s * 0.004, 0.003, -0.002], [s * 0.016, 0.002, -0.006], [s * 0.022, 0.001, -0.03], [s * 0.008, 0.002, -0.032], [net, net, edge]); m.quad([s * 0.003, 0.002, -0.002], [s * 0.01, 0.002, -0.004], [s * 0.012, 0.001, -0.026], [s * 0.004, 0.001, -0.028], legBand); });
+  return m.geometry();
+}
+// a claw (c: its entry in SHRIMP.claws): the arm, the hand with its fixed finger, and the finger that moves, hinged at the hand's end. The great
+// one's hand is nearly half as long as the shrimp, swollen, with the knob on its finger that drives the jet; the small one is slender
+export function shrimpClaw(pal, c) {
+  const { shell, net, legBand, clawTip } = pal, w = c.stout, L = c.l2;
+  const arm = mesher().limb([0, 0, -0.004], [0, 0, c.l1], 0.006 * w + 0.002, 0.0055 * w + 0.002, 5, [legBand, net]);
+  const hand = mesher(), H = [[-0.004, 0.009, 0.008], [L * 0.3, 0.017, 0.015], [L * 0.7, 0.019, 0.016], [L, 0.012, 0.01]].map(([z, x, y]) => ringZ(z, x * w + 0.003, y * w + 0.003, y * w + 0.003, 0, 7));
+  hand.skin(H, (i, k) => ((i + k) % 2 ? net : shell)).cap(H[0], [0, 0, -1], legBand, 0.003);
+  hand.limb([0, -0.006 * w, L * 0.95], [0, -0.008 * w, L + c.span], 0.008 * w + 0.002, 0.002, 5, [shell, clawTip]); // the fixed finger
+  const finger = mesher().limb([0, 0, -0.003], [0, 0.002, c.span * 1.02], 0.008 * w + 0.002, 0.002, 5, [net, clawTip]);
+  if (c.big) finger.limb([0, -0.006, 0.004], [0, -0.013, 0.012], 0.005, 0.002, 4, shell); // the plunger
+  return { arm: arm.geometry(), hand: hand.geometry(), finger: finger.geometry(), hinge: [0, 0.006 * w, L] };
+}
+// a walking leg, from its hip down and out (+x, -y), bent once, as one piece (burrow.js turns it at the hip to walk)
+export function shrimpLeg(pal) { const { legBand, net } = pal; return mesher().limb([0, 0, 0], [0.025, -0.006, 0.004], 0.003, 0.0026, 4, [legBand, net]).limb([0.025, -0.006, 0.004], [0.034, -0.03, 0.008], 0.0026, 0.0008, 4, [net, legBand]).geometry(); }
+export function shrimpFeeler(pal, def) {
+  const m = mesher(), { feeler, legBand } = pal, n = def.cuts.length - 1, r0 = def.long > 0.1 ? 0.0024 : 0.002;
+  m.skin(def.cuts.map((z, i) => { const r = i === n ? 0.0004 : r0 * (1 - 0.65 * (i / n)); return [[-r, -0.5 * r, i ? z : -0.004], [0, r, i ? z : -0.004], [r, -0.5 * r, i ? z : -0.004]]; }), (i) => (def.long > 0.1 ? feeler : i % 2 ? legBand : feeler));
+  return m.geometry();
+}
+export function sandLoad(pal) { const { sand, sandPale } = pal; const m = mesher(); m.add(new THREE.IcosahedronGeometry(0.03, 0), new THREE.Matrix4().makeScale(1.3, 0.6, 1), sandPale); m.add(new THREE.IcosahedronGeometry(0.022, 0), new THREE.Matrix4().compose(new THREE.Vector3(0.02, -0.004, -0.01), new THREE.Quaternion(), new THREE.Vector3(1.2, 0.7, 1)), sand); return m.geometry(); }
+
+// ---------------------------------------------------------------- the garden eel
+// One light model, made to be drawn by the dozen as one instanced mesh (gardeneel.js). It is modelled straight up the y axis from the tip of its
+// tail (y = 0) to the top of its head (y = GARDEN.long), the head turned forward (+z) at the top as the real one holds it, a question mark: the
+// shader then pushes it up out of its hole by as much as it is out, and bends what is out. Five sides, a ring every tenth of a metre.
+// White with fine black dots and three big black spots: at the gill opening, mid-body, and round the vent. Three times its real size.
+// eelField is the patch of sand the colony lives in, each hole a little rim with the dark mouth in it, the edge sunk below the bed.
+export const GARDEN = { long: 1.2, thick: 0.021, out: 0.67, // how long, how thick (half), and the most of it that comes out
+  holes: Array.from({ length: 20 }, (_, i) => { const a = i * 2.39996, r = 0.38 * Math.sqrt(i + 0.6); return [Math.sin(a) * r + 0.06 * Math.sin(i * 7.1), Math.cos(a) * r + 0.06 * Math.cos(i * 5.3)]; }), // a loose colony, each a little over half a metre from the next
+};
+export function gardenEel(pal) {
+  const m = mesher(), { skin, dot, spot, eye } = pal, L = GARDEN.long, R = GARDEN.thick, n = 5, top = L - 0.07;
+  const spine = (y) => { const u = Math.min(1, Math.max(0, (y - (top - 0.06)) / 0.13)); return [0, Math.min(y, top - 0.06) + Math.sin(u * 1.3) * 0.1, (1 - Math.cos(u * 1.3)) * 0.1]; }; // up, and over at the head
+  const ys = [0]; for (let y = 0.1; y < top - 0.06; y += 0.1) ys.push(y); ys.push(top - 0.02, top + 0.03, top + 0.07); // ring every tenth, closer at the head
+  const rings = ys.map((y, j) => { const c = spine(y), c2 = spine(y + 0.01), d = new THREE.Vector3(c2[0] - c[0], c2[1] - c[1], c2[2] - c[2]).normalize(), u = new THREE.Vector3(1, 0, 0), v = new THREE.Vector3().crossVectors(d, u).normalize(), r = j === 0 ? 0.002 : R * Math.min(1, y / 0.25) ** 0.5 * (j === ys.length - 1 ? 0.55 : 1);
+    return Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; return [c[0] + u.x * x + v.x * z, c[1] + u.y * x + v.y * z, c[2] + u.z * x + v.z * z]; }); });
+  const big = [L - 0.16, L * 0.6, L * 0.38]; // the three big spots, by height
+  m.skin(rings, (j, k) => { const y = (ys[j] + ys[j + 1]) / 2; if (big.some((b) => Math.abs(y - b) < 0.05) && (k === 0 || k === 1 || k === 4)) return spot; return (j * 7 + k * 3) % 13 === 0 ? dot : skin; });
+  const tip = rings[rings.length - 1], c = spine(top + 0.07); m.cap(tip, [0, 0.3, 1], skin, 0.02); // the snout
+  both((s) => { const e = spine(top + 0.02); m.eye([s * R * 0.92, e[1] + 0.005, e[2]], [s, 0.35, 0.35], 0.0105, { iris: eye, pupil: '#121018', rim: dot }); }); // big eyes
+  m.tri([-0.008, c[1] - 0.012, c[2] + 0.012], [0.008, c[1] - 0.012, c[2] + 0.012], [0, c[1] - 0.022, c[2] - 0.004], dot); // the mouth, under the snout
+  return m.geometry();
+}
+export function eelField(pal) {
+  const m = mesher(), { sand, sandDark, sandPale, hole } = pal, R = 2.3, N = 18;
+  const disc = [[0.0, 0.0], [0.9, 0.004], [1.7, 0.0], [R, -0.035]].map(([r, y], j) => j ? ringY(y, r, N, { turn: j * 0.17 }) : [[0, 0, 0]]);
+  for (let k = 0; k < N; k++) m.out(disc[0][0], disc[1][k], disc[1][(k + 1) % N], [0, -1, 0], k % 3 ? sand : sandPale);
+  m.skin(disc.slice(1), (j, k) => ((j + k) % 3 ? sand : sandPale));
+  const foot = disc[3].map(([x, , z]) => [x, -0.95, z]); m.skin([disc[3], foot], sandDark).cap(foot, [0, -1, 0], sandDark); // the skirt that hides what is down the holes, on the stand
+  for (const [x, z] of GARDEN.holes) { const rim = ringY(0.018, 0.055, 6, { x, z }), out = ringY(0.004, 0.1, 6, { x, z, turn: 0.5 }), lip = ringY(0.012, 0.03, 6, { x, z });
+    m.skin([out, rim, lip], [sandPale, sandDark]).cap(lip, [0, 1, 0], hole, -0.01); }
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the white-spotted pufferfish, and its circle in the sand
+// A small round fish, head toward +z, made two and a half times its size (30 cm). puffer.js puts it together:
+//   puffer       the body, eyes, beak and the spines on its belly. It puffs up in its shader: `flex` on each corner is how far that corner goes when
+//                it is blown up all the way (the body to a ball, the belly's spines standing out of it)
+//   pufferFin    a fin: the back fin and the fin under it, set far back, which it swims and digs by; a pectoral; the tail
+//   shellBit     a fragment of shell or coral, which it carries in its mouth and sets on a peak
+// sandCircle is the circle it builds: radial valleys and ridges round a flat middle of fine sand, with shell fragments on the peaks. Its shape at
+// every stage of building is in its shader, from `cut` on each corner (x: the height there when the ridges are sharp, y: when they are rough, z: how
+// deep the first ring was dug there, w: the stage at which a fragment appears, for the corners of a fragment, or -1 in the fine middle), and the one
+// number `stage`. Its colours come in with the work too: until the sand has been worked there, it is plain sand.
+export const PUFFER = { length: 0.3,
+  body: [[0.13, 0.022, 0.02, 0.018, -0.004], [0.11, 0.045, 0.045, 0.038, 0], [0.06, 0.062, 0.062, 0.055, 0.004], [0.0, 0.06, 0.06, 0.056, 0.004], [-0.06, 0.044, 0.044, 0.04, 0.002], [-0.1, 0.022, 0.024, 0.02, 0], [-0.12, 0.013, 0.015, 0.012, 0]],
+  ball: [0, 0.006, 0.01], puff: 0.1, // the middle of the ball it blows up to, and the ball's radius
+  fins: [{ kind: 'dorsal', at: [0, 0.042, -0.07] }, { kind: 'anal', at: [0, -0.036, -0.075] }, { kind: 'pectoral', side: 1, at: [0.05, 0.002, 0.045] }, { kind: 'pectoral', side: -1, at: [-0.05, 0.002, 0.045] }, { kind: 'tail', at: [0, 0, -0.12] }],
+};
+export const CIRCLE = { R: 1.45, middle: 0.62, ridges: 28 }; // the outer edge, the edge of the flat middle, and how many ridges round it (made half as big again as the real one)
+const pufferAt = (z) => { const B = PUFFER.body; let i = 0; while (i < B.length - 2 && B[i + 1][0] > z) i++; const a = B[i], b = B[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return a.map((v, k) => v + (b[k] - v) * t); };
+export function puffer(pal) {
+  const m = mesher(), { back, flank, belly, spot, eye, beak } = pal, N = 10;
+  m.skin(PUFFER.body.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), (i, k) => (k === 0 || k === N - 1 ? back : k === 4 || k === 5 ? belly : k === 3 || k === 6 ? tint(flank, belly, 0.55) : flank));
+  m.cap(ringZ(0.13, 0.022, 0.02, 0.018, -0.004, N), [0, 0, 1], beak, 0.006).cap(ringZ(-0.12, 0.013, 0.015, 0.012, 0, N), [0, 0, -1], back, 0.004);
+  m.quad([-0.006, -0.004, 0.137], [0.006, -0.004, 0.137], [0.006, 0.001, 0.137], [-0.006, 0.001, 0.137], '#fffdf2'); // the beak's four teeth, as two pale plates
+  // white spots over the back and flanks, and on the belly
+  let seed = 9; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 34; i++) { const z = 0.1 - 0.19 * rnd(), [, w, up, dn, y] = pufferAt(z), a = (rnd() * 2 - 1) * 2.2, x = Math.sin(a) * w * 1.03, h = y + (Math.cos(a) >= 0 ? up : dn) * Math.cos(a) * 1.03, r = 0.0055 + 0.002 * rnd(), n = [Math.sin(a), Math.cos(a), 0];
+    const u = [Math.cos(a), -Math.sin(a), 0]; m.quad([x + u[0] * r, h + u[1] * r, z], [x + n[0] * 0.0005, h, z + r], [x - u[0] * r, h - u[1] * r, z], [x, h, z - r], Math.abs(a) > 1.9 ? '#ffffff' : spot); }
+  both((s) => { const [, w, up, , y] = pufferAt(0.075); m.eye([s * w * 0.78, y + up * 0.5, 0.075], [s, 0.45, 0.15], 0.0105, { iris: eye, pupil: '#151219', rim: dim(back, 0.6) }); });
+  // small spines over the belly, lying flat; they stand when it puffs up
+  const spineFrom = m.triangles;
+  for (let i = 0; i < 16; i++) { const z = 0.08 - 0.13 * ((i * 0.618) % 1), a = Math.PI + (((i * 0.37) % 1) - 0.5) * 2.2, [, w, , dn, y] = pufferAt(z), x = Math.sin(a) * w, h = y + Math.cos(a) * dn; m.tri([x - 0.003, h, z + 0.003], [x + 0.003, h, z + 0.003], [x, h - 0.0012, z - 0.008], [belly, belly, tint(belly, back, 0.4)]); }
+  const g = m.geometry(), P = g.attributes.position, F = new Float32Array(P.count * 4), C = PUFFER.ball, V = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) { V.set(P.getX(i) - C[0], P.getY(i) - C[1], (P.getZ(i) - C[2]) * 0.85); const d = V.length() || 1, k = PUFFER.puff / d, spine = i >= spineFrom * 3 && (i - spineFrom * 3) % 3 === 2 ? 1.4 : 1; // a spine's point stands out of the ball
+    F[i * 4] = (V.x * k * spine - V.x); F[i * 4 + 1] = (V.y * k * spine - V.y); F[i * 4 + 2] = (V.z * k * spine - V.z) / 0.85 * 0.6; }
+  g.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4));
+  return g;
+}
+// a fin: 'dorsal' and 'anal' stand from a root along -z (anal turned under by puffer.js), 'pectoral' fans out to +x, 'tail' fans back
+export function pufferFin(pal, kind) {
+  const m = mesher(), { fin, back } = pal, edge = tint(fin, '#ffffff', 0.45), root = [], tip = [];
+  if (kind === 'dorsal' || kind === 'anal') for (let i = 0; i <= 4; i++) { root.push([0, 0, -0.006 * i]); tip.push([0, 0.032 - 0.004 * i, -0.012 - 0.008 * i]); }
+  else if (kind === 'pectoral') for (let i = 0; i <= 4; i++) { const a = -0.2 - i * 0.4; root.push([0, 0.008 - 0.004 * i, 0]); tip.push([Math.cos(a) * 0.03, 0.012 - 0.008 * i, Math.sin(a) * 0.022]); }
+  else for (let i = 0; i <= 6; i++) { const a = -0.8 + (1.6 * i) / 6; root.push([0, a * 0.009, 0]); tip.push([0, Math.sin(a) * 0.034, -Math.cos(a) * 0.042 + (i % 2 ? 0.004 : 0)]); }
+  for (let i = 0; i + 1 < root.length; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [kind === 'tail' ? tint(fin, back, 0.3) : fin, fin, edge]);
+  return m.geometry();
+}
+export function shellBit(pal) { const { bitA, bitB } = pal; return mesher().tri([0, 0.008, 0.012], [-0.01, 0, -0.006], [0.011, 0.001, -0.005], [bitA, bitA, bitB]).tri([0, 0.008, 0.012], [0.011, 0.001, -0.005], [0, -0.004, 0], bitB).tri([0, 0.008, 0.012], [0, -0.004, 0], [-0.01, 0, -0.006], bitA).geometry(); }
+export function sandCircle(pal) {
+  const m = mesher(), { sand, sandDark, sandPale, fine, bitA, bitB } = pal, { R, middle: rc, ridges: K } = CIRCLE, A = K * 4; // four corners to a ridge round: peak, side, valley, side
+  const radii = [0, 0.2, 0.42, rc - 0.05, rc + 0.08, rc + 0.3, 0.98, 1.2, R - 0.05, R + 0.08, R + 0.32, R + 0.55];
+  const C = [];
+  const cut = (r, a) => { // what the ground does at (r, a): [sharp, rough, first ring, middle]
+    const q = (((a / (Math.PI * 2)) * K) % 1 + 1) % 1, tri = 1 - 4 * Math.abs(q - 0.5), rough = Math.cos(q * Math.PI * 2), env = r < rc ? 0 : r < rc + 0.08 ? (r - rc) / 0.08 * 0.4 : r <= R ? 0.4 + 0.6 * Math.sin(Math.PI * Math.min(1, (r - rc) / (R - rc)) * 0.75) : r < R + 0.1 ? 0.5 : 0;
+    const bank = r > R - 0.1 && r < R + 0.12 ? 0.02 : 0, ring = Math.max(0, 1 - Math.abs(r - (R - 0.08)) / 0.14), mid = r < rc ? 0.006 * Math.sin(r * 40 + a * 7) * Math.sin(a * 11 - r * 23) : 0;
+    return [0.055 * env * tri + bank + mid, 0.035 * env * rough + bank * 0.5, 0.035 * ring, r < rc ? -1 : 0]; }; // (w -1: the fine middle)
+  const P = (r, a) => [Math.cos(a) * r, r > R + 0.3 ? -0.035 * (r - R - 0.3) / 0.25 : 0, Math.sin(a) * r];
+  for (let j = 0; j + 1 < radii.length; j++) for (let i = 0; i < A; i++) { const a0 = (i / A) * Math.PI * 2, a1 = ((i + 1) / A) * Math.PI * 2, r0 = radii[j], r1 = radii[j + 1];
+    const v = [[r0, a0], [r0, a1], [r1, a1], [r1, a0]], q = ((i % 4) + 4) % 4, peak = q === 3 || q === 0, inside = r1 <= rc;
+    const col = inside ? ((i + j) % 3 ? fine : tint(fine, sandPale, 0.5)) : r0 >= R + 0.08 ? sand : peak ? sandPale : q === 2 || q === 1 ? sandDark : sand;
+    const pts = v.map(([r, a]) => P(r, a)), cs = v.map(([r, a]) => cut(r, a));
+    if (j === 0) { m.tri(pts[0], pts[2], pts[3], col); C.push(...cs[0], ...cs[2], ...cs[3]); }
+    else { m.tri(pts[0], pts[2], pts[1], col).tri(pts[0], pts[3], pts[2], col); C.push(...cs[0], ...cs[2], ...cs[1], ...cs[0], ...cs[3], ...cs[2]); } }
+  // the skirt round the edge, which hides what lies under it on the stand
+  const edge = Array.from({ length: 24 }, (_, i) => P(R + 0.55, (i / 24) * Math.PI * 2)), foot = edge.map(([x, , z]) => [x, -0.3, z]), before = m.triangles; m.skin([edge, foot], sandDark).cap(foot, [0, -1, 0], sandDark); for (let i = before; i < m.triangles; i++) C.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  // fragments of shell and coral, one on every other peak in the outer half, set there last
+  for (let i = 0; i < K; i += 2) { const a = ((i + 0.0) / K) * Math.PI * 2, r = 0.92 + 0.42 * ((i * 0.618) % 1), x = Math.cos(a) * r, z = Math.sin(a) * r, [h] = cut(r, a), s = 0.025 + 0.012 * ((i * 0.37) % 1), at = 0.86 + 0.12 * ((i * 0.53) % 1), col = i % 6 === 0 ? bitB : bitA;
+    const t0 = [x - s, 0.002, z - s * 0.4], t1 = [x + s * 0.8, 0.004, z - s * 0.6], t2 = [x + s * 0.2, 0.003, z + s], t3 = [x, s * 0.7, z], c = [h, h * 0.7, 0, at]; for (const [p0, p1, p2] of [[t0, t1, t3], [t1, t2, t3], [t2, t0, t3]]) { m.tri(p0, p1, p2, [col, col, tint(col, '#ffffff', 0.4)]); C.push(...c, ...c, ...c); } }
+  const g = m.geometry(); g.setAttribute('cut', new THREE.Float32BufferAttribute(new Float32Array(C), 4)); return g;
+}

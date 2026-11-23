@@ -23,7 +23,7 @@
 //   (University of Cambridge, on Matchette et al. 2023, Current Biology). So `shadow` is its own pose, made to lie along the oarfish.
 // Modelled from description only: that it swims by the back fins alone (the brief's; the sources say only that it is a poor swimmer and drifts),
 // the shape of the rounded tail, the exact pattern of the blotches and streaks, and how far the snout's floor drops. It is made at a metre, the
-// real one's greatest length, and no bigger.
+// real one's greatest length, and shown 1.4 times that (TRUMPET.size): at a metre it was a hair beside the oarfish from the dive's camera.
 import * as THREE from 'three';
 import { createBundle } from './strands.js';
 import { bendy } from './spine.js';
@@ -119,6 +119,7 @@ export function trumpetRig(a, pal) {
     else if (id === 'stalk') { pitch = 0.12; z = 0.02 * Math.sin(t); }
     update(dt, { x: 0, y: y * sc, z: z * sc, yaw, pitch, roll, mood, curve, phase, treadmill: true, vx: 0, vy: 0, vz: v * sc });
   }
+  group.scale.setScalar(TRUMPET.size); // (npc.js multiplies any size chosen in the library into this)
   a.object = group; a.rig = { update, show, spines, fins, tail, jaw, barbel, pose: p, triangles };
   return a.rig;
 }

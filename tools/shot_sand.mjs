@@ -23,7 +23,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || un
 const ALL = {
   hermit: { far: 1.1, at: [0, -0.02, 0.02], gap: 0.7, n: 3, near: 0.55, nearAt: [0, -0.02, 0.06], yaw: 0.9, pitch: 0.35 },
   trumpet: { far: 2.6, at: [0, 0, 0], gap: 0.5, n: 3, near: 0.9, nearAt: [0, 0, 0.25], yaw: 1.1, pitch: 0.25, nearState: 1 },
-  burrow: { far: 1.4, at: [0, 0.03, 0.05], gap: 0.5, n: 3, near: 0.6, nearAt: [0, 0.04, 0.05], yaw: 0.9, pitch: 0.4 },
+  burrow: { far: 1.2, at: [0, 0.03, 0.03], gap: 1.9, n: 3, near: 0.6, nearAt: [0, 0.04, 0.05], yaw: 0.9, pitch: 0.4 },
   gardeneel: { far: 3.2, at: [0, 0.3, 0], gap: 0.6, n: 3, near: 0.9, nearAt: [0, 0.45, 0], yaw: 0.8, pitch: 0.25 },
   puffer: { far: 1.0, at: [0, 0, 0], gap: 0.4, n: 3, near: 0.55, nearAt: [0, 0, 0.04], yaw: 1.0, pitch: 0.3 },
   sandcircle: { far: 5.2, at: [0, -0.2, 0], gap: 2, n: 1, near: 2.2, nearAt: [0, -0.3, 0], yaw: 0.7, pitch: 0.9 },
@@ -70,18 +70,18 @@ if (want('lib') || want('near')) {
 if (want('dive')) {
   await page.addStyleTag({ content: '#stage > :not(canvas) { display: none !important; }' });
   for (const id of who) {
-    const bring = id === 'sandcircle' ? 'puffer' : id; if (id === 'sandcircle') continue; // the circle comes with its puffer
-    const got = await page.evaluate(async (id) => { const g = window.__game; window.__hold = false; g.setPaused(false);
+  for (const swim of id === 'trumpet' ? [false, true] : [false]) { const bring = id, tag = swim ? '-swim' : ''; // the trumpetfish twice: hanging by a still fish, and lying along a swimming one
+    const got = await page.evaluate(async ([id, swim]) => { const g = window.__game; window.__hold = false; g.setPaused(false);
       g.startRun(4242); g.run.hush = 1e9; g.sim(1.2, { dir: { x: 0.6, y: 0, z: 0.8 }, amount: 1, vertical: 0, sprint: false });
       for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
-      const still = { dir: { x: 0, y: 0, z: 0 }, amount: 0, vertical: 0, sprint: false }; g.bring(id, true); g.sim(6, still); window.__hold = true;
-      const F = g.rig.pos, l = Math.hypot(g.rig.forward.x, g.rig.forward.z) || 1, P = g.pets[id].centre || g.pets[id].list[0].pos; return { F: [F.x, F.y, F.z], f: [g.rig.forward.x / l, g.rig.forward.z / l], P: [P.x, P.y, P.z] }; }, bring);
+      const still = { dir: { x: 0, y: 0, z: 0 }, amount: 0, vertical: 0, sprint: false }; g.bring(id, true); g.sim(6, swim ? { dir: { x: 0.6, y: 0, z: 0.8 }, amount: 0.7, vertical: 0, sprint: false } : still); window.__hold = true;
+      const F = g.rig.pos, l = Math.hypot(g.rig.forward.x, g.rig.forward.z) || 1, P = g.pets[id].centre || g.pets[id].list[0].pos; return { F: [F.x, F.y, F.z], f: [g.rig.forward.x / l, g.rig.forward.z / l], P: [P.x, P.y, P.z] }; }, [bring, swim]);
     const look = (from, to, fov) => page.evaluate(([f, a, v]) => { const g = window.__game; g.camera.fov = v; g.camera.updateProjectionMatrix(); g.camera.position.set(...f); g.camera.lookAt(...a); }, [from, to, fov]);
     const F = got.F, P = got.P, mid = [F[0] * 0.5 + P[0] * 0.5, F[1] * 0.5 + P[1] * 0.5, F[2] * 0.5 + P[2] * 0.5], [fx, fz] = got.f, dx = fx * 0.85 + fz * 0.53, dz = fz * 0.85 - fx * 0.53;
     // the game's own camera: fifteen metres off and 0.56 of a radian up (cam.dist, PLATE_LEVEL in main.js), here from ahead of the fish and to one side
-    await look([mid[0] + dx * 12.7, mid[1] + 8, mid[2] + dz * 12.7], mid, PLAY_FOV); await shot(`${id}-dive-play`);
-    await look([P[0] + dx * 3.2, P[1] + 2.2, P[2] + dz * 3.2], [P[0], P[1] - 0.3, P[2]], 40); await shot(`${id}-dive-near`);
+    await look([mid[0] + dx * 12.7, mid[1] + 8, mid[2] + dz * 12.7], mid, PLAY_FOV); await shot(`${id}-dive${tag}-play`);
+    await look([P[0] + dx * 3.2, P[1] + 2.2, P[2] + dz * 3.2], [P[0], P[1] - 0.3, P[2]], 40); await shot(`${id}-dive${tag}-near`);
     await page.evaluate((id) => { const g = window.__game; g.bring(id, false); window.__hold = false; }, bring);
-  }
+  } }
 }
 await browser.close(); server.close();
