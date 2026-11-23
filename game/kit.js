@@ -164,14 +164,16 @@ export function growing({ sway = 0, glow = 0, double = true, give = 0, shy = 0 }
 ${react ? `    vec3 kroot = instanceMatrix[3].xyz;
     float ktall = length(instanceMatrix[1].xyz);
     float kpull = uNear;
+    float kgive = uNear;
     vec2 kpush = vec2(uNear, 0.0);
     if (distance(kroot.xz, uWakeBound.xy) < uWakeBound.z) {
       for (int i = 0; i < WAKE; i++) {
         vec3 kd = kroot - uWake[i].xyz;
         kd.y = uWake[i].y - clamp(uWake[i].y, kroot.y, kroot.y + ktall); // how far above its top, or below its foot
-        float kw = uWake[i].w * (1.0 - smoothstep(0.7, 2.6, length(kd)));
-        kpull = max(kpull, kw);
-        kpush += kd.xz * (kw / (length(kd.xz) + 0.05));
+        float kw = uWake[i].w * (1.0 - smoothstep(0.7, 2.6, length(kd))); // what shuts, shuts for anything this near
+        float kg = uWake[i].w * (1.0 - smoothstep(0.5, 1.7, length(kd))); // what leans, leans only for what is all but touching it
+        kpull = max(kpull, kw); kgive = max(kgive, kg);
+        kpush += kd.xz * (kg / (length(kd.xz) + 0.05));
       }
     }
     #ifdef TUCK
@@ -179,11 +181,12 @@ ${react ? `    vec3 kroot = instanceMatrix[3].xyz;
     #endif
     kb *= 1.0 - 0.6 * kpull;
     float kl = length(kpush);
+    float kf = min(kl, 1.0) * kgive; // how far it leans, 0 to 1: by how near the nearest part of the body is, however much of the body is about
     if (kl > 0.001 && uGive > 0.0) {
-      vec3 kaway = vec3(kpush.x, 0.0, kpush.y) * (min(kl, 1.0) / kl) * uGive * ktall * position.y * position.y; // in the world, metres
+      vec3 kaway = vec3(kpush.x, 0.0, kpush.y) * (kf / kl) * uGive * ktall * position.y * position.y; // in the world, metres
       transformed.x += dot(instanceMatrix[0].xyz, kaway) / dot(instanceMatrix[0].xyz, instanceMatrix[0].xyz);
       transformed.z += dot(instanceMatrix[2].xyz, kaway) / dot(instanceMatrix[2].xyz, instanceMatrix[2].xyz);
-      transformed.y -= 0.67 * min(kl, 1.0) * min(kl, 1.0) * uGive * uGive * position.y * position.y * position.y; // leaning, not stretching
+      transformed.y -= 0.67 * kf * kf * uGive * uGive * position.y * position.y * position.y; // leaning, not stretching
     }
 ` : ''}    transformed.x += sin(uTime * 1.1 + kph + position.y * 2.4) * 0.17 * kb;
     transformed.z += cos(uTime * 0.9 + kph * 1.7 + position.y * 2.0) * 0.13 * kb;

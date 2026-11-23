@@ -69,7 +69,7 @@ Not creatures, but the first rule holds: look at the real thing. A touched anemo
 
 A thing that grows answers the fish in one of two ways, chosen where it is registered in `world.js`:
 
-- `give`: it leans out of the way, by that part of its own height. Nothing to mark in the model.
+- `give`: it leans out of the way, by that part of its own height at the most. Nothing to mark in the model. Keep it small for what is tall: a lean is a part of the height, so 0.25 on a kelp of six metres is a metre and a half at the tip. It leans only for a body within about a metre and a half, and by how near the nearest part of that body is, not by how much of the body is about. (What shuts, shuts from further off: 2.6 m.)
 - `shy`: it pulls in. In the model, say what pulls in and to where with `m.tuck(home)` before making those parts, and `m.tuck()` after: a tentacle to its root, a plume to a point inside its tube. Only what is marked moves, so the tube stays and the plume goes.
 
 The library shows the answer as a second pose without being asked. None of this may ever matter to the rules: the fish swims through all of it as before.

@@ -274,18 +274,18 @@ function geometries() {
   const answers = (m) => (m.shy ? [{ id: 'still', name: 'As it stands' }, { id: 'near', name: 'Pulled in, the fish going by', near: 1 }] : m.give ? [{ id: 'still', name: 'As it stands' }, { id: 'near', name: 'Leaning, the fish going by', near: 1 }] : undefined);
   const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
-  grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.4 });
-  grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.55 });
+  grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
+  grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
   grows('tablecoral', 'Table coral', 'table', [0, 1, 2, 3, 4], 2.4, 'Tiers of plates on a stalk, with a scalloped, paler rim and dark underneath.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 1 }, { double: false });
   grows('braincoral', 'Brain coral', 'brain', [0, 1], 1.8, 'A dome, its ridges and valleys in two tones. The big ones are solid: the fish goes round.', ['#f6b95f', '#d9a86a', '#9fc59a', '#f28d7d', '#e8c9a0'], { scale: 0.9, n: 1 }, { double: false });
-  grows('seafan', 'Sea fan', 'seaFan', [0, 1, 2], 1.5, 'One flat spray of branches, standing across the current.', ['#b47be0', '#f08a4b', '#e2566b', '#f6d040', '#ff9fb0'], { scale: 1.5, n: 3, spread: 1.3 }, { sway: 0.5, give: 0.22 });
+  grows('seafan', 'Sea fan', 'seaFan', [0, 1, 2], 1.5, 'One flat spray of branches, standing across the current.', ['#b47be0', '#f08a4b', '#e2566b', '#f6d040', '#ff9fb0'], { scale: 1.5, n: 3, spread: 1.3 }, { sway: 0.5, give: 0.15 });
   grows('sponge', 'Tube sponge', 'sponge', [0, 1, 2], 1.1, 'Open chimneys, wider at the lip, dark inside.', ['#f6d040', '#c98fe3', '#f08a4b', '#7fd6c8'], { scale: 1.1, n: 3, spread: 1.2 }, { double: false });
   grows('anemone', 'Anemone', 'anemone', [0, 1, 2], 0.6, 'A short column and a crown of tentacles with pale ends, moving with the water. It shuts when the fish comes by.', ['#f4a4b9', '#9fe0b0', '#fff1d0', '#c98fe3', '#ff9f7a'], { scale: 0.95, n: 5, spread: 1 }, { sway: 0.9, shy: 1 });
   grows('sealily', 'Sea lily', 'lily', [1, 2, 3, 4], 1.3, 'A jointed stalk and a cup of arms that curl in. An animal, for all it looks like a flower: the arms close when the fish comes by.', ['#f6d040', '#f6b95f', '#fff1d0', '#f4a4b9'], { scale: 1.3, n: 3, spread: 1.1 }, { sway: 0.5, shy: 1 });
   grows('glasssponge', 'Glass sponge', 'glass', [2, 3, 4], 1, 'A pale vase of lattice, from the dark bands.', ['#e4f1ff', '#cfe3f2', '#f2faf7'], { scale: 1, n: 3, spread: 1 }, { double: false });
   grows('tubeworms', 'Tube worms', 'worms', [3, 4], 1.1, 'White tubes with red plumes, in a clump by the rocks of the deepest bands. They are coloured in themselves: the tint only warms or cools them. The plumes are gone down the tubes before the fish can touch them.', ['#ffffff'], { scale: 1.1, n: 3, spread: 0.9 }, { double: false, shy: 1 });
-  grows('lantern', 'Lantern flower', 'lantern', [1, 2, 3, 4], 1.2, 'The stalk bows over and the light hangs from it in its sepals. Below the reach of the sun these are most of what there is to see by.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.25, 1.2, 1.25], n: 5, spread: 1 }, { sway: 0.3, glow: 1.15, give: 0.3 });
+  grows('lantern', 'Lantern flower', 'lantern', [1, 2, 3, 4], 1.2, 'The stalk bows over and the light hangs from it in its sepals. Below the reach of the sun these are most of what there is to see by.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.25, 1.2, 1.25], n: 5, spread: 1 }, { sway: 0.3, glow: 1.15, give: 0.2 });
   grows('seapen', 'Sea pen', 'pen', [1, 2, 3, 4], 1.4, 'A quill that makes its own light along its vanes. Come near and it folds and goes down into the bed.', ['#7ff3ff', '#b79bff', '#9dffb4', '#ff9de0'], { scale: [1.5, 1.4, 1.5], n: 3, spread: 0.9 }, { sway: 0.3, glow: 1.15, shy: 1 });
   lies('starfish', 'Starfish', 'star', [0, 1, 2], 0.6, 'Five arms, paler at the tips, lying to the slope of the bed.', ['#f08a4b', '#e2566b', '#f6b95f', '#b47be0', '#f4a4b9'], { scale: 0.3, n: 5, spread: 0.7, flat: true }, { double: false });
   lies('brittlestar', 'Brittle star', 'brittle', [2, 3, 4], 0.9, 'The starfish of the dark bands: a small disc and long thin arms.', ['#e9dfc0', '#d7b9a0', '#f4a4b9', '#cfe3f2'], { scale: 0.45, n: 5, spread: 0.9, flat: true }, { double: false });
@@ -995,7 +995,7 @@ float seaLight(vec2 p, float t) {
   const grownAt = {}; // where the things that answer the fish stand, by kind, for the checks and the pictures
   // ------------------------------------------------------------ kelp, swaying
   if (F.kelp) {
-    const kelpMat = plant({ sway: 1, give: 0.4 });
+    const kelpMat = plant({ sway: 1, give: 0.25 });
     const kelpTones = tonesOf('kelp'), kelp = [];
     for (let c = 0; c < F.kelp; c++) {
       const cx = rand() * T, cz = rand() * T, n = 3 + Math.floor(rand() * 7), tall = rr(3, 7.5);
@@ -1028,7 +1028,7 @@ float seaLight(vec2 p, float t) {
   }
   for (const [x, z] of spots.glowRows || []) lanterns.push({ x, y: height(x, z) - 0.05, z, q: qY(rand() * 6.28), s: S(1.3, rr(1.2, 1.6), 1.3), color: glowTones[0] });
   for (const g of grownBulbs) lanterns.push({ ...g, s: S(g.s.x * 1.1, g.s.y * 1.6 + 0.2, g.s.z * 1.1), color: dpick(glowTones) });
-  scatter(G.lantern, plant({ sway: 0.3, glow: 1.15, give: 0.3 }), lanterns, { cast: false, receive: false });
+  scatter(G.lantern, plant({ sway: 0.3, glow: 1.15, give: 0.2 }), lanterns, { cast: false, receive: false });
   scatter(G.pen, plant({ sway: 0.3, glow: 1.15, shy: 1 }), (grownAt.seapen = pens), { cast: false, receive: false });
 
   // ------------------------------------------------------------ the bed itself: what lives and lies on it, band by band
@@ -1042,7 +1042,7 @@ float seaLight(vec2 p, float t) {
     const still = plant({ double: false }), stillBoth = plant();
     // seagrass in the green patches of the two bands that have light
     { const grass = []; for (let i = 0, n = at([1400, 700]); i < n * 7 && grass.length < n; i++) { const x = drand() * T, z = drand() * T; if (meadow(x, z) > 0.5 && clearOfSites(x, z, 0.5)) grass.push({ x, y: height(x, z) - 0.04, z, q: qY(drand() * 6.28), s: S(dr(1.1, 1.8), dr(0.4, 0.95), dr(1.1, 1.8)), color: dpick(tonesOf('seagrass')) }); }
-      if (grass.length) scatter(G.tuft, plant({ sway: 1.3, give: 0.55 }), (grownAt.seagrass = grass), { cast: false, receive: false, reach: 44 }); }
+      if (grass.length) scatter(G.tuft, plant({ sway: 1.3, give: 0.35 }), (grownAt.seagrass = grass), { cast: false, receive: false, reach: 44 }); }
     // pebbles and broken shell, in drifts
     { const stones = [], tones = tonesOf('pebble');
       for (let c = 0, n = at([170, 170, 190, 210, 200]); c < n; c++) { const p = open(0.5); if (!p) continue; for (let i = 0, k = 3 + Math.floor(drand() * 6); i < k; i++) { const x = p[0] + dr(-1.3, 1.3), z = p[1] + dr(-1.3, 1.3), sz = dr(0.05, 0.2); stones.push({ x, y: height(x, z) - sz * 0.25, z, q: lie(x, z), s: S(sz * dr(0.8, 1.5), sz, sz * dr(0.8, 1.3)), color: dpick(tones) }); } }
@@ -1054,7 +1054,7 @@ float seaLight(vec2 p, float t) {
     { const domes = strew(at([30, 16]), () => byReef(2, 8), rooted(tonesOf('braincoral'), 0.5, 1.25, 0.1));
       for (const d of domes) if (d.s.x > 0.8) colliders.push({ x: d.x, y: d.y, z: d.z, r: d.s.x * 0.8 });
       scatter(G.brain, still, domes); }
-    scatter(G.seaFan, plant({ sway: 0.5, give: 0.22 }), strew(at([34, 30, 16]), () => byReef(1.5, 8), rooted(tonesOf('seafan'), 1.0, 2.0)), { receive: false });
+    scatter(G.seaFan, plant({ sway: 0.5, give: 0.15 }), strew(at([34, 30, 16]), () => byReef(1.5, 8), rooted(tonesOf('seafan'), 1.0, 2.0)), { receive: false });
     scatter(G.sponge, still, strew(at([30, 30, 20]), () => byReef(1.5, 7), rooted(tonesOf('sponge'), 0.7, 1.4)));
     scatter(G.anemone, plant({ sway: 0.9, shy: 1 }), (grownAt.anemone = strew(at([44, 30, 12]), () => byReef(1, 6), rooted(tonesOf('anemone'), 0.6, 1.25, 0.03))), { cast: false });
     scatter(G.lily, plant({ sway: 0.5, shy: 1 }), (grownAt.sealily = strew(at([0, 12, 40, 40, 22]), () => (drand() < 0.6 ? byReef(1, 8) : open()), rooted(tonesOf('sealily'), 0.9, 1.8, 0.02))), { receive: false });
