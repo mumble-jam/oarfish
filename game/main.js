@@ -326,7 +326,7 @@ export async function start(saved = {}) {
     guard?.dispose(); guard = null;
     if (world.hall) sum = createSum(scene, world, { seed: run.seed }, sumGame); // the palace: its wall is the Sum
     else guard = createGuard(scene, world, { seed: run.seed, floor: index }, guardGame); // every rift has its keeper
-    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); } }; // the Sum is solid, and so is the veil over a kept rift
+    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); }, bend(items, r) { guard?.bend?.(items, r); } }; // (bend: the Keeper turns the whole body aside, not only the head) // the Sum is solid, and so is the veil over a kept rift
     Object.assign(end, { kind: null, swap: 0, quake: 0, vista: 0, burst: -9 }); cam.shake = 0;
     goalEl.style.display = ''; fade(false);
     applyLook(world.floor);
@@ -1873,7 +1873,7 @@ export async function start(saved = {}) {
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {
-      Object.assign(sctx, { pos: rig.pos, joints: rig.joints, pieces: foes.pieces, total: bodyMetres() - 0.05, focus, time: world.time.value, playing: run.state === 'play' });
+      Object.assign(sctx, { rig, pos: rig.pos, joints: rig.joints, pieces: foes.pieces, total: bodyMetres() - 0.05, focus, time: world.time.value, playing: run.state === 'play' });
       sum?.update(dt, sctx); guard?.update(dt, sctx);
     }
     if (hitView.on) hitView.draw(guard && guard.shapes ? guard.shapes(sctx) : []); // the testing tool: what the fight believes, drawn over the picture
