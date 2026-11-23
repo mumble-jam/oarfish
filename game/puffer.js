@@ -56,7 +56,7 @@ export function pufferRig(a, pal) {
       if (f.kind === 'dorsal') f.mesh.rotation.set(0, p.amp * 0.7 * w, 0); else if (f.kind === 'anal') f.mesh.rotation.set(0, p.amp * 0.7 * w * (1 + p.rock), Math.PI);
       else if (f.kind === 'pectoral') f.mesh.rotation.set(0, f.side * (0.4 + 0.6 * p.amp * w), 0); else f.mesh.rotation.set(0, p.tail * Math.sin(p.flap * 0.4) * (1 - p.puff) + 0.6 * p.puff * 0, 0);
       f.mesh.scale.set((f.side || 1) * small, small, small); }
-    bit.visible = !!s.carry; if (s.carry) { bit.position.set(0, -0.004, 0.14 + 0.012 * p.puff); bit.rotation.set(0.3, t, 0); }
+    bit.visible = !!s.carry; if (s.carry) { bit.position.set(0, -0.006, 0.15 + 0.012 * p.puff); bit.rotation.set(0.3, 0.4 * Math.sin(t), 0); bit.scale.setScalar(2.2); }
     // ploughing or stirring, it kicks up sand behind and under it
     p.next -= dt; const kicking = mood === 'plough' || mood === 'stir';
     if (kicking && p.next <= 0) { p.next = mood === 'plough' ? 0.06 : 0.12; const q = puffs.reduce((o, x) => (x.age > o.age ? x : o)); q.age = 0; q.at.set((Math.random() - 0.5) * 0.06, -0.04, mood === 'plough' ? -0.08 : (Math.random() - 0.5) * 0.1).applyMatrix4(group.matrix); q.v.set((Math.random() - 0.5) * 0.15, 0.12 + 0.1 * Math.random(), (Math.random() - 0.5) * 0.15); if (s.treadmill) q.v.z -= s.vz || 0; }
