@@ -100,7 +100,9 @@ s = await ev(() => { const g = window.__game, T = window.T; g.run.safe = 0; cons
 check('shedding costs three segments and draws the biters', s.after === s.before - 3 && s.decoys === 1 && (s.biter === 'decoy' || s.biter === 'chew'), JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T; T.idle(9); g.run.safe = 0; g.run.segs = 14; g.buildFish(14); const b = g.foes.biters[2];
   // somewhere with nothing standing within a coil's reach, and well away from the rift
-  const free = (x, z) => { const y = g.world.height(x, z) + 3.5; for (let k = 0; k < 8; k++) { const p = g.rig.pos.clone().set(x + Math.sin(k * 0.785) * 4.5, y, z + Math.cos(k * 0.785) * 4.5), q = p.clone(); g.world.pushOut(q, 1.4); if (q.distanceTo(p) > 1e-6) return false; } return g.world.rift.in(x, z) < -12; };
+  const free = (x, z) => { const y = g.world.height(x, z) + 3.5; for (let k = 0; k < 8; k++) { const p = g.rig.pos.clone().set(x + Math.sin(k * 0.785) * 4.5, y, z + Math.cos(k * 0.785) * 4.5), q = p.clone(); g.world.pushOut(q, 1.4); if (q.distanceTo(p) > 1e-6) return false; }
+    const R = g.world.react, off = (o, d) => Math.hypot((o.cx ?? o.x) - x, (o.cz ?? o.z) - z) > d; // and nothing the wrap keys would rather go round, or that would start something
+    return g.world.rift.in(x, z) < -12 && g.world.schools.every((sc) => sc.left <= 0 || off(sc, 11)) && R.stations.every((o) => off(o, 9)) && R.fragments.every((o) => off(o, 8)) && R.puzzles.every((o) => off(o, 10)); };
   let sx = 30, sz = 30; find: for (let d = 0; d < 44; d += 4) for (let k = 0; k < 8; k++) { const x = 30 + Math.sin(k * 0.785) * d, z = 30 + Math.cos(k * 0.785) * d; if (free(x, z)) { sx = x; sz = z; break find; } }
   const y = g.world.height(sx, sz) + 3.5; T.put(sx, y, sz, 0); T.idle(0.3);
   const r = (g.rig.length + 0.8) / (Math.PI * 2); const cx = sx + r, cz = sz; b.pos.set(cx, y, cz); b.vel.set(0, 0, 0); b.cool = 99; b.state = 'chew'; b.t = 99; b.wander.copy(b.pos); const caught = g.run.caught; T.coil(5); T.idle(1);
@@ -468,10 +470,11 @@ check('body puzzles: a capstan turned by coiling round it, four windows threaded
 s = await ev(() => { const g = window.__game, T = window.T, out = { bands: [] };
   for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const F = g.world.react.fragments, G = g.world.goal; out.bands.push(F.length + (F.every((x) => Math.hypot(x.x - G.x, x.z - G.z) >= 24) ? '' : '!')); }
   try { localStorage.removeItem('oarfish.nest'); } catch {} g.nest.fragments = 0;
-  g.startRun(4242); g.run.safe = 1e9; const F = g.world.react.fragments, f = F[0], r = g.world.rift, bed = (x, z) => g.world.height(x, z);
+  g.startRun(4242); g.run.safe = 1e9; const F = g.world.react.fragments, f = F[0], r = g.world.rift, bed = (x, z) => g.world.height(x, z), lay = { x: f.x, z: f.z };
   const take = () => { T.put(f.x + 2.6, bed(f.x, f.z) + 1.6, f.z + 0.9, 1.1); T.idle(0.3); let t = 0; while (!g.run.haul && t < 14) { T.coil(0.1); t += 0.1; } return +t.toFixed(1); };
   const t1 = take(), held = g.run.haul === f && f.held; g.sim(2.5, { ...T.none(), dir: { x: 1, y: 0, z: 0 } }); const tempo = +g.rig.tempo.toFixed(2), under = +g.rig.joints.reduce((m, j) => Math.min(m, Math.hypot(j.x - f.x, j.z - f.z)), 9).toFixed(2), off = +(f.y - bed(f.x, f.z)).toFixed(1);
   const sw = T.swarm('s'), n0 = sw.left; T.put(sw.x + 2.6, sw.hy, sw.z + 0.9, 1.1); T.idle(0.6); T.coil(5); const tied = sw.left === n0 && g.run.haul === f; // it cannot wrap with a load
+  T.put(lay.x + 1, bed(lay.x, lay.z) + 2, lay.z, 1.1); T.idle(0.6); // back to the open ground it lay on, so that what follows is not done up against a pen
   const segs = g.run.segs; g.shed(); T.idle(0.3); const dropped = !g.run.haul && !f.held && g.run.segs === segs, rest = +(f.y - bed(f.x, f.z)).toFixed(2);
   take(); const had = g.run.haul === f, pre = g.run.segs; g.run.safe = 0; const bit = g.bite(1, 5, g.rig.pos); g.run.safe = 1e9; T.coil(0.8); const shaken = had && bit && !g.run.haul && !f.held, lost = pre - g.run.segs;
   const t3 = take(), again = g.run.haul === f; T.put(r.x, r.y + 1.5, r.z, 0); T.idle(0.5); const given = { t3, again, haul: !g.run.haul, gone: f.gone, hauled: g.run.hauled, kept: g.nest.fragments, stored: JSON.parse(localStorage.getItem('oarfish.nest') || '{}').fragments };
@@ -506,6 +509,29 @@ check('swarms have tempers, the same in every dive: one bolts straight up when c
   s.kinds.join() === '......b..,...b.t..,.gbtg.t.,.gbtg..,.btg..' && s.bolt.rose > 5 && !s.bolt.capped && s.bolt.left > 0 && s.bolt.told && Math.abs(s.bolt.sunk) < 0.3 && s.bolt.held && s.bolt.taken
   && s.twin.whole.tier === 'm' && s.twin.whole.halfLeft === 0 && s.twin.split && s.twin.n === '9,9' && s.twin.tier === 'ss' && s.twin.apart > 3 && s.twin.can && s.twin.one && s.twin.two && s.twin.fed === 18 && s.twin.mend
   && s.glow.length === 2 && s.glow.every((o) => o.dark && o.loose < 0.3 && o.ran > 1 && o.lit && o.bunched && o.taken), JSON.stringify(s));
+
+// ---- a cleaning station: hold still over it while the hunters go round, and a segment grows back
+s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
+  out.bands = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const S = g.world.react.stations; out.bands.push(S.length + (S.every((x) => g.foes.biters.filter((b) => Math.hypot(b.pos.x - x.x, b.pos.z - x.z) < C.call).length >= 2) ? '' : '!')); }
+  g.startRun(4242); g.enterFloor(1, false); g.run.safe = 0; g.sim(0.1, T.none());
+  const st = g.world.react.stations[0], segs = g.run.segs, over = () => { T.put(st.x, st.top + 1.2, st.z - 1.0, 0); }, round = () => g.foes.biters.filter((b) => b.state === 'circle'), far = () => round().map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz));
+  // broken off: a start, the hunters come, then the head leaves and nothing is given
+  over(); g.sim(2.5, still); const k1 = +st.k.toFixed(2), came = round().length; T.put(st.x + 30, st.top + 1.2, st.z, 0); g.sim(2, still); out.broke = { k1, came, k: st.k, segs: g.run.segs - segs, uses: st.uses, truce: round().length };
+  // held to the end
+  over(); g.foes.biters.forEach((b) => { b.cool = 0; }); let t = 0, most = 0, ring0 = 0; const news = [];
+  while (st.uses === C.uses && t < 12) { g.sim(0.1, still); t += 0.1; most = Math.max(most, round().length); if (Math.abs(t - 1.5) < 0.05) ring0 = Math.min(...far()); }
+  out.held = { t: +t.toFixed(1), most, ring0: +ring0.toFixed(1), ring1: +Math.min(...g.foes.biters.map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz))).toFixed(1), segs: g.run.segs - segs, cleaned: g.run.cleaned, uses: st.uses, resting: st.rest > 20 };
+  // the truce is over: for a moment they wait, then they hunt; a head that goes at once gets away with what it was given
+  g.sim(0.3, still); const back = g.foes.biters.filter((b) => b.state === 'flee').length; g.sim(0.3, still); const waiting = g.foes.biters.every((b) => b.state !== 'hunt'); let hunted = 0; for (let i = 0; i < 12; i++) { g.sim(0.25, { ...T.none(), dir: { x: 0, y: 0, z: 1 }, sprint: true }); hunted = Math.max(hunted, g.foes.biters.filter((b) => b.state === 'hunt').length); }
+  out.after = { back, waiting, hunted, kept: g.run.segs - segs };
+  // resting, it gives nothing; after its second time it is spent, and its cleaners have gone in
+  g.foes.biters.forEach((b) => { b.alive = false; }); over(); g.sim(3, still); const rested = st.k; st.rest = 0; g.sim(0.2, still); t = 0; while (st.uses > 0 && t < 12) { g.sim(0.1, still); t += 0.1; } g.sim(2, still);
+  out.spent = { rested, uses: st.uses, segs: g.run.segs - segs, away: +st.away.toFixed(2), ring: st.ring.visible };
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('a cleaning station in every band that has tail-biters, with two of them living near it: a head held still over it is worked on while the hunters come and go round, closing in, and nothing bites; at the end a segment has grown back, the hunters start back and wait a moment and then hunt, and a head that leaves at once keeps it; broken off it gives nothing; it rests between its two times and then is spent',
+  s.bands.join() === '0,1,1,1,1' && s.broke.k1 > 0.3 && s.broke.came >= 2 && s.broke.k === 0 && s.broke.segs === 0 && s.broke.uses === 2 && s.broke.truce === 0
+  && s.held.t > 5.6 && s.held.t < 7.6 && s.held.most >= 2 && s.held.ring1 < s.held.ring0 - 1 && s.held.ring1 < 4.2 && s.held.segs === 1 && s.held.cleaned === 1 && s.held.uses === 1 && s.held.resting
+  && s.after.back >= 2 && s.after.waiting && s.after.hunted >= 1 && s.after.kept === 1 && s.spent.rested === 0 && s.spent.uses === 0 && s.spent.segs === 2 && s.spent.away > 0.9 && !s.spent.ring, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake

@@ -5,7 +5,7 @@ import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
 import { resolve } from './npc.js';
-import { createWorld, SPAWN, FLOORS, SWARMS, wrapD, wrapRule, canWrap } from './world.js';
+import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
@@ -255,7 +255,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, cleaned: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -345,9 +345,10 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, cleaned: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
+    motes.length = 0; // a catch still on its way to the mouth belongs to the dive that made it
     $('end').classList.remove('on'); $('fade').classList.remove('on');
     buildFish(run.segs);
     enterFloor(0, false);
@@ -1716,6 +1717,8 @@ export async function start(saved = {}) {
       }
     }
     ctx.joints = rig.joints; ctx.time = world.time.value; ctx.dash = rig.dashT > 0; ctx.coil = rig.coiling;
+    { const st = run.state === 'play' ? world.react?.stations.find((x) => x.k > 0.02) : null; // a cleaning station at work: the hunters come round, closer as it goes, and do not bite
+      ctx.truce = st ? { x: st.cx, y: st.top + 0.9, z: st.cz, r: lerp(CLEAN.ring[0], CLEAN.ring[1], st.k), call: CLEAN.call, most: CLEAN.most, grace: CLEAN.grace } : null; }
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
     foes.update(dt, ctx);
     field?.update(dt, focus, world.time.value);
@@ -1750,6 +1753,21 @@ export async function start(saved = {}) {
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
     if (world.react) for (const c of world.react.opened.splice(0)) openCache(c);
+    // a cleaning station (world.js, CLEAN): a note for each step of the work, and at the end of it a segment grown back
+    if (world.react) for (const c of world.react.cleaned.splice(0)) {
+      if (run.state !== 'play') continue;
+      if (c.what === 'near') say('clean', 'A cleaning station. Hold still over the coral head and its cleaners will grow a segment back.', 8);
+      else if (c.what === 'start') { moment('loop'); say('truce', 'Nothing bites while the cleaners work. But the hunters gather, and when it is done they are close.', 8); }
+      else if (c.what === 'tick') { music.gulp(c.i, 7, 0.6); buzz(0, 0.14, 45); }
+      else if (c.what === 'broke') moment('flit');
+      else if (c.what === 'done') {
+        run.cleaned++;
+        if (run.segs < MAX_SEGS) { run.segs++; buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); growPulse(1, false); }
+        else run.charge = Math.min(1, run.charge + 0.34); // full grown: it goes to the crest
+        music.gulp(6, 7, 0.8); pulse('grow'); moment('grow', 0.7);
+        foes.startle(rig.snout, CLEAN.ring[1] + 4, CLEAN.start); // the body flares as it grows, and the hunters that had closed in start back from it: that is the moment to go
+      }
+    }
     // a swarm with a temper has just shown it (world.js, TEMPER): the band marks it, and the first time each is seen there is a line about what it wants
     if (world.react) for (const c of world.react.swarms.splice(0)) {
       if (run.state !== 'play') continue;
@@ -1806,7 +1824,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, nest, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

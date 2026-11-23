@@ -22,6 +22,11 @@ export const SWARMS = { s: { n: 8, r: 0.42 }, m: { n: 18, r: 0.76 }, l: { n: 36,
 // The loop that takes them is the same loop; what differs is how the swarm is brought to hold still for it.
 export { TEMPER };
 const KIND = { b: 'bolt', t: 'twin', g: 'glow' }, LOWER = { m: 's', l: 'm' };
+// A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. A head held still over it (within `reach`, slower
+// than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
+// work nothing bites, but up to `most` of the tail-biters within `call` metres come and go round, closing from the first of `ring` to the second; when
+// the work is done they start back from the body for `start` seconds; done or broken off, it is `grace` seconds before any of them hunts again.
+export const CLEAN = { reach: 3.2, still: 0.9, time: 7, uses: 2, rest: 25, call: 32, ring: [7.5, 3.4], most: 3, grace: 1.6, start: 0.9, fish: 6 };
 // What counts as ringing something. `assist` (0..1) is the one feel setting: with more of it the body
 // need not go quite all the way round, and the ball packs a little tighter to fit inside.
 export const wrapRule = (assist) => ({ sweep: Math.PI * 2 * lerp(0.93, 0.8, assist), squeeze: lerp(0.96, 0.84, assist) });
@@ -874,6 +879,16 @@ float seaLight(vec2 p, float t) {
     if (!clearNow(x, z, 2.5) || !farFrom(x, z, goal.x, goal.z, 24) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 16)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 7))) continue;
     sites.push([x, z, 2.2, 'puzzle']); i++;
     fragments.push({ x, y: height(x, z) + LIE, z, yaw: xr(0, 6.28), tilt: xr(1.2, 1.36), held: false, gone: false, sink: 0, mesh: null, ring: { x, z, left: 1, can: true, threat: 1, orbit: 1.5 } }); }
+  // A cleaning station (CLEAN), near where tail-biters live if they have a place of their own in this band, else off the way to the rift.
+  const stations = [];
+  if (F.biters > 0) for (let t = 0; t < 300 && !stations.length; t++) {
+    const from = t < 200 && spots.biters.length ? spots.biters[Math.floor(xrand() * spots.biters.length)] : null, a = xr(0, 6.28), d = xr(9, 15);
+    const [x, z] = from ? [from[0] + Math.sin(a) * d, from[1] + Math.cos(a) * d] : along(xr(14, Math.max(goalDist - 20, 18)), (xrand() < 0.5 ? -1 : 1) * xr(8, 20));
+    if (!clearNow(x, z, 4.5) || !farFrom(x, z, goal.x, goal.z, 20) || (hall && !farFrom(x, z, hall.x, hall.z, hall.R + 6)) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 7)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8))) continue;
+    const y = height(x, z), col = { x, z, r: 1.25, top: y + 1.15 }; colliders.push(col); sites.push([x, z, 4, 'puzzle']);
+    stations.push({ x, y, z, top: y + 1.3, yaw: xr(0, 6.28), k: 0, uses: CLEAN.uses, rest: 0, on: false, near: false, live: false, cx: x, cz: z, away: 0, ring: null, arc: null,
+      fish: Array.from({ length: CLEAN.fish }, (_, i) => ({ p: new THREE.Vector3(x, y + 1.9, z), v: new THREE.Vector3(), ph: xr(0, 6.28), slot: 0.08 + 0.84 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, yaw: xr(0, 6.28), pitch: 0, size: 1 })) });
+  }
   const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad) && riftClear(x, z, pad + 0.6);
 
   // ------------------------------------------------------------ swarms of small fish: the food, in four sizes
@@ -1067,6 +1082,17 @@ float seaLight(vec2 p, float t) {
   for (const f of fragments) { const g = add(new THREE.Group()), stone = mat(new THREE.MeshLambertMaterial({ color: stoneTones[0], vertexColors: true })), cushion = new THREE.Mesh(G.echinus, stone), neck = new THREE.Mesh(G.stump, stone),
       slab = new THREE.Mesh(G.block, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: district, emissiveIntensity: 0.2 })));
     slab.scale.set(1.5, 0.18, 1.5); slab.position.y = 0.2; neck.rotation.x = Math.PI; cushion.castShadow = slab.castShadow = neck.castShadow = true; g.add(neck, cushion, slab); g.scale.setScalar(0.8); g.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh = g; f.slab = slab; single.push(f); }
+  // A cleaning station: a coral head on a mound with a sponge or two at its foot, its cleaners over it, and a pale ring that fills as they work.
+  const cleanKit = stations.length ? swarmKit('cleaner', { glow: Math.max(F.fishGlow, 0.2) }) : null, cleanMat = cleanKit && mat(cleanKit.material), cleanSize = new THREE.Vector3();
+  const cleanMesh = cleanKit && add(new THREE.InstancedMesh(cleanKit.geometry, cleanMat, stations.length * CLEAN.fish));
+  if (cleanMesh) { cleanMesh.frustumCulled = false; cleanMesh.castShadow = true; owned.push({ dispose: () => cleanKit.dispose() }); }
+  for (const st of stations) { const g = add(new THREE.Group()), coral = tonesOf('braincoral'), tube = tonesOf('sponge'), lit = 0.1 + 0.25 * F.fishGlow;
+    const part = (geo, color, x, y, z, sx, sy = sx, sz = sx) => { const m = new THREE.Mesh(geo, mat(new THREE.MeshLambertMaterial({ color, vertexColors: true, emissive: color, emissiveIntensity: geo === G.rock ? 0 : lit }))); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+    part(G.rock, stoneTones[0], 0, 0.1, 0, 1.55, 0.8, 1.45); part(G.brain, coral[floor % coral.length], 0.1, 0.62, -0.05, 0.78); part(G.brain, coral[(floor + 3) % coral.length], -0.95, 0.3, 0.6, 0.42);
+    part(G.sponge, tube[floor % tube.length], 1.05, 0.2, 0.55, 0.8); part(G.sponge, tube[(floor + 1) % tube.length], 0.75, 0.15, -1.0, 0.6);
+    g.rotation.y = st.yaw; st.mesh = g; single.push(st);
+    st.ring = add(new THREE.Line(ringGeo, ringYes)); st.arc = add(new THREE.Line(ringGeo.clone(), arcYes)); owned.push({ dispose: () => st.arc.geometry.dispose() });
+    for (const o of [st.ring, st.arc]) { o.frustumCulled = false; o.visible = false; } }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
   const breakUrn = (u) => { if (u.broken) return false; u.broken = true; u.col.off = true; u.mesh.geometry = G.jarBroken; return true; };
 
@@ -1232,6 +1258,44 @@ float seaLight(vec2 p, float t) {
   const opened = []; // caches opened since this was last read: { kind, x, y, z, food, shell }. main.js feeds the fish from them
   function unseal(p) { p.done = true; p.k = 1; p.cache.open = 1e-3; opened.push({ kind: p.kind, x: p.cache.x, y: p.cache.y + 0.5, z: p.cache.z, food: PUZZLE.food[floor], shell: !!p.cache.shell });
     for (let i = 0; i < 10; i++) { const a = i * 0.63; puffAt(p.cache.x + Math.sin(a) * 0.6, p.cache.y + 0.2, p.cache.z + Math.cos(a) * 0.6, Math.sin(a) * 1.4, 1.2 + 0.5 * Math.random(), Math.cos(a) * 1.4, 0.26, 1.5); } }
+  // ---- the cleaning stations (CLEAN). What happens at one is told through `cleanNews`: { what: 'near' | 'start' | 'tick' | 'done' | 'broke', i, x, y, z, left }.
+  const cleanNews = [], tq = new THREE.Quaternion(), te = new THREE.Euler(0, 0, 0, 'YXZ'), tm = new THREE.Matrix4(), tv = new THREE.Vector3(), tw = new THREE.Vector3();
+  function tend(dt, focus, body) {
+    const J = body ? body.joints : null, N = J ? J.length - 1 : 0, head = body ? body.snout : null, t = time.value; let swum = 0;
+    stations.forEach((st, si) => {
+      const cx = st.x + T * Math.round((focus.x - st.x) / T), cz = st.z + T * Math.round((focus.z - st.z) / T); st.cx = cx; st.cz = cz;
+      st.rest = Math.max(0, st.rest - dt);
+      const open = st.uses > 0 && st.rest <= 0, d = head ? Math.hypot(head.x - cx, head.z - cz) : 99;
+      const over = open && d < CLEAN.reach && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && stirred.speed < CLEAN.still, was = st.k;
+      if (open && d < 9 && !st.near) cleanNews.push({ what: 'near', x: cx, y: st.top, z: cz });
+      st.near = open && d < 12; st.on = still;
+      if (still) { st.k = Math.min(1, st.k + dt / CLEAN.time); if (!st.live && st.k > 0.1) { st.live = true; cleanNews.push({ what: 'start', x: cx, y: st.top, z: cz }); } }
+      else { st.k = Math.max(0, st.k - dt / (over ? 3.5 : 1.2)); if (st.live && st.k <= 0) { st.live = false; cleanNews.push({ what: 'broke', x: cx, y: st.top, z: cz }); } } // a head that stirs loses ground slowly; one that leaves, fast
+      const step = (k) => Math.floor(k * 6); if (still && step(st.k) > step(was) && st.k < 1) cleanNews.push({ what: 'tick', i: step(st.k), x: cx, y: st.top, z: cz });
+      if (st.k >= 1) { st.k = 0; st.live = false; st.on = false; st.uses--; st.rest = CLEAN.rest; cleanNews.push({ what: 'done', x: cx, y: st.top, z: cz, left: st.uses }); }
+      if (cleanNews.length > 16) cleanNews.shift();
+      // the ring over it: there while the station has something to give and the fish is about, filling as the work goes
+      const show = st.near; st.ring.visible = show; st.arc.visible = show && st.k > 0.01;
+      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(CLEAN.reach); st.arc.position.set(cx, st.top + 0.51, cz); st.arc.scale.setScalar(CLEAN.reach); st.arc.geometry.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
+      // its cleaners: turning over the coral head; along the body while they work; gone into the coral while the station rests or is spent
+      st.away += ((open ? 0 : 1) - st.away) * (1 - Math.exp(-2.5 * dt));
+      st.fish.forEach((f, i) => {
+        let tx, ty, tz, top;
+        if (st.k > 0.03 && J && open) { const along = (f.slot + 0.22 * Math.sin(t * 0.7 + f.ph)) * N, j = clamp(Math.round(along), 1, N - 1), c = J[j];
+          tv.subVectors(J[j - 1], J[j + 1]); tv.y = 0; if (tv.lengthSq() < 1e-6) tv.set(0, 0, 1); tv.normalize();
+          const out = 0.2 + 0.06 * Math.sin(t * 3.1 + f.ph); tx = c.x + tv.z * f.side * out; tz = c.z - tv.x * f.side * out; ty = c.y + 0.1 * Math.sin(t * 2.3 + f.ph * 2); top = 3.6; }
+        else { const r = 0.55 + 0.45 * Math.sin(t * 0.37 + f.ph * 3) ** 2, a = t * 0.9 * f.side + f.ph; tx = cx + Math.sin(a) * r; tz = cz + Math.cos(a) * r; ty = st.top + 0.45 + 0.3 * Math.sin(t * 1.3 + f.ph) - 0.9 * st.away; top = 1.6; }
+        if (f.p.distanceToSquared(tv.set(tx, ty, tz)) > 900) f.p.set(tx, ty, tz); // the world came round
+        tw.set(tx - f.p.x, ty - f.p.y, tz - f.p.z); const dd = tw.length(); if (dd > 1e-4) tw.multiplyScalar(Math.min(top, dd * 4) / dd);
+        f.v.lerp(tw, 1 - Math.exp(-6 * dt)); f.p.addScaledVector(f.v, dt);
+        const sp = f.v.length(); swum += sp; let yaw = f.yaw, pitch = 0;
+        if (sp > 0.15) { yaw = Math.atan2(f.v.x, f.v.z); pitch = -Math.asin(clamp(f.v.y / sp, -0.6, 0.6)); }
+        const k = dt > 0 ? 1 - Math.exp(-9 * dt) : 1; f.yaw += Math.atan2(Math.sin(yaw - f.yaw), Math.cos(yaw - f.yaw)) * k; f.pitch += (pitch - f.pitch) * k;
+        cleanMesh.setMatrixAt(si * CLEAN.fish + i, tm.compose(f.p, tq.setFromEuler(te.set(f.pitch, f.yaw, 0)), cleanSize.setScalar(cleanKit.scale * (1 - st.away))));
+      });
+    });
+    if (cleanMesh) { cleanMesh.instanceMatrix.needsUpdate = true; cleanMat.userData.swim.value += dt * (cleanKit.spec.beat[0] + cleanKit.spec.beat[1] * (swum / (stations.length * CLEAN.fish))); }
+  }
   function solve(dt, focus, body) {
     const J = body && body.joints.length > 2 ? body.joints : null, t = time.value, turnA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
     for (const p of puzzles) {
@@ -1441,6 +1505,7 @@ float seaLight(vec2 p, float t) {
     }
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
     solve(dt, focus, body);
+    tend(dt, focus, body);
     stir(dt, focus, body);
     for (const f of fragments) { // a loose one glows a little, slowly; one given to the rift goes down into the cloud; one being carried is placed by whoever carries it
       const ox = T * Math.round((focus.x - f.x) / T), oz = T * Math.round((focus.z - f.z) / T);
@@ -1628,7 +1693,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, swarms: swarmNews, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

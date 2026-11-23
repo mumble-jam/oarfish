@@ -30,12 +30,13 @@ export function createFoes(scene, world, { seed = 1 } = {}, game) {
   const sprite = (color, size) => { const s = new THREE.Sprite(mat(new THREE.SpriteMaterial({ map: G.glow, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }))); s.scale.setScalar(size); return s; };
   const near = (p, focus) => { p.x += T * Math.round((focus.x - p.x) / T); p.z += T * Math.round((focus.z - p.z) / T); };
   const v = new THREE.Vector3(), v2 = new THREE.Vector3();
-  const state = { danger: 0, stalked: 0, flared: 0, lured: 0, leeched: 0, mineNear: false };
+  const state = { danger: 0, stalked: 0, flared: 0, lured: 0, leeched: 0, circling: 0, mineNear: false };
 
   // ------------------------------------------------------------ tail-biters
   const biters = [];
   for (let i = 0; i < F.biters; i++) {
-    const [x, z] = world.spots.biters[i] || world.openSpot(26); // in the shearing stalls, where there are any
+    let [x, z] = world.spots.biters[i] || world.openSpot(26); // in the shearing stalls, where there are any
+    const st = world.react?.stations?.[0]; if (st && i >= F.biters - 2) { const a = st.yaw + (i - F.biters) * 2.4; x = st.x + Math.sin(a) * 15; z = st.z + Math.cos(a) * 15; } // and two of them keep near the cleaning station, where things hold still
     const actor = cast('biter'), mesh = actor.object;
     const pos = new THREE.Vector3(x, world.height(x, z) + 2.6, z);
     const mark = sprite('#ff9db8', 0.9); mark.position.y = 0.45; mark.visible = false; mesh.add(mark); // lit while a bait has it
@@ -65,6 +66,13 @@ export function createFoes(scene, world, { seed = 1 } = {}, game) {
     } else if (decoy) {
       b.state = 'decoy'; b.lured = decoy; aim.copy(decoy.pos); speed = 4.2;
       if (b.pos.distanceTo(decoy.pos) < 0.5) { b.state = 'chew'; b.t = decoy.life + 1.5; b.wander.copy(decoy.pos); decoy.fed++; game.baited?.(decoy, b, 'biter'); }
+    } else if (ctx.truce && Math.hypot(b.pos.x - ctx.truce.x, b.pos.z - ctx.truce.z) < ctx.truce.call) {
+      // a cleaning station at work (world.js, CLEAN): nothing bites there. The first few come and go round, as near as the work is far along, and
+      // wait; any more keep to their own water. `cool` is held at the grace they will give when the truce ends, so that none strikes on the instant.
+      const tr = ctx.truce, dx = b.pos.x - tr.x, dz = b.pos.z - tr.z, d = Math.hypot(dx, dz) || 1, a = Math.atan2(dx, dz) + clamp(2.2 / Math.max(d, 1), 0.2, 0.7);
+      b.cool = tr.grace;
+      if (state.circling < tr.most) { b.state = 'circle'; state.circling++; state.stalked++; aim.set(tr.x + Math.sin(a) * tr.r, tr.y + 0.5 * Math.sin(b.wig * 0.15), tr.z + Math.cos(a) * tr.r); speed = d > tr.r + 2.5 ? 4.4 : 2.8; }
+      else { if (b.state !== 'roam' || b.t <= 0) { b.state = 'roam'; b.t = rr(3, 5); b.wander.set(b.home.x + rr(-16, 16), b.home.y + rr(-1, 2), b.home.z + rr(-16, 16)); } aim.copy(b.wander); }
     } else {
       // the nearest point on the back half of the body
       let best = -1, bd = Infinity;
@@ -277,9 +285,9 @@ export function createFoes(scene, world, { seed = 1 } = {}, game) {
     if (p.life <= 0) { scene.remove(p.mesh); if (p.ring) { scene.remove(p.ring); scene.remove(p.ping); } p.dead = true; }
   }
 
-  // ctx: { joints, snout, focus, time, fear }  (fear: how close to the head a biter dares to come)
+  // ctx: { joints, snout, focus, time, fear, truce }  (fear: how close to the head a biter dares to come; truce: a cleaning station at work, { x, y, z, r, call, most, grace }, or null)
   function update(dt, ctx) {
-    state.stalked = 0; state.flared = 0; state.leeched = 0; state.mineNear = false;
+    state.stalked = 0; state.flared = 0; state.leeched = 0; state.circling = 0; state.mineNear = false;
     for (const m of mines) if (m.alive) updateMine(m, dt, ctx);
     for (const l of leeches) if (l.alive) updateLeech(l, dt, ctx);
     for (const b of biters) if (b.alive) updateBiter(b, dt, ctx);
@@ -342,5 +350,7 @@ export function createFoes(scene, world, { seed = 1 } = {}, game) {
     for (const m of materials) m.dispose();
   }
 
-  return { update, catchWith, ram, stun, blast, kill, spawnPiece, dispose, state, biters, anglers, hooks, pieces, mines, leeches };
+  // something has made the tail-biters near `pos` start back: for `seconds` they make off from the head
+  function startle(pos, radius, seconds) { let n = 0; for (const b of biters) if (b.alive && b.state !== 'stun' && b.state !== 'chew' && b.pos.distanceTo(pos) < radius) { b.state = 'flee'; b.t = seconds; n++; } return n; }
+  return { update, catchWith, ram, stun, startle, blast, kill, spawnPiece, dispose, state, biters, anglers, hooks, pieces, mines, leeches };
 }

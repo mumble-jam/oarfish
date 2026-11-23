@@ -33,6 +33,20 @@ export function swarmFish(kind, pal) {
   return m.geometry();
 }
 
+// ---------------------------------------------------------------- the cleaner wrasse, which keeps a cleaning station
+// The real one (Labroides dimidiatus) is a finger long, pale blue going to yellow at the head, with one black stripe from the eye that widens
+// all the way to the tail. Here the stripe is what is seen from across the reef, and the pale back is lit a little for the dark bands.
+export function cleaner(pal) {
+  const m = mesher(), { front, rear, stripe, belly, fin, tip } = pal;
+  hull(m, [[0.12, 0.004, 0.006, 0.006], [0.098, 0.013, 0.018, 0.016], [0.066, 0.019, 0.026, 0.024], [0.03, 0.021, 0.03, 0.028], [-0.01, 0.02, 0.029, 0.027], [-0.05, 0.016, 0.023, 0.022], [-0.082, 0.009, 0.014, 0.014], [-0.1, 0.005, 0.011, 0.011]],
+    (i, k, n) => (k === 2 || k === 3 ? belly : k === 0 || k === n - 1 ? (i < 3 ? front : rear) : stripe));
+  m.tri([0, 0.011, -0.098], [0, 0.04, -0.15], [0, 0, -0.135], [stripe, tip, stripe], true).tri([0, -0.011, -0.098], [0, 0, -0.135], [0, -0.04, -0.15], [stripe, stripe, tip], true); // the tail: a blunt fan, the stripe running out to its edge
+  m.tri([0, 0.028, 0.03], [0, 0.044, -0.04], [0, 0.022, -0.08], [rear, fin, fin], true); // the back fin, long and low
+  both((s) => { m.tri([s * 0.02, -0.006, 0.06], [s * 0.046, -0.02, 0.03], [s * 0.021, -0.016, 0.04], fin);
+    m.tri([s * 0.013, 0.01, 0.094], [s * 0.017, 0.019, 0.083], [s * 0.017, 0.004, 0.082], '#14121c'); }); // the eye
+  return m.geometry();
+}
+
 // ---------------------------------------------------------------- the pilot fish, which keeps the oarfish company
 // The real one (Naucrates ductor) is bluish with six or seven broad dark bars and white tips to the lobes of its tail, and
 // goes about beside sharks. Here the tips are lit, so that in the dark bands it is two small lights at the fish's side.

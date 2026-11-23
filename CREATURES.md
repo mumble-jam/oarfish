@@ -87,3 +87,4 @@ The library shows the answer as a second pose without being asked. None of this 
 | Angler, Hook, Spined drifter, Leech | | | To do |
 | Sprat, Lanternfish, Ghost fish | | | To do: as swarms, not one by one |
 | Pilot fish | *Naucrates ductor*, which goes about beside sharks | dark bars, and lit white tips to the tail | Done as company: waits, rides the wake, is left behind. One model, five to a band |
+| Cleaner wrasse | *Labroides dimidiatus*, which keeps cleaning stations on reefs | one black stripe from the eye to the tail, widening | Done as company: turns over its coral head, goes along the body while it works, goes in when the station rests. One model, six to a station |
