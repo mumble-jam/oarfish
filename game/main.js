@@ -33,6 +33,7 @@ const SHIPPED_FEEL = { assist: 60, mode: 'point', look: 50, rumble: 70 }; // hel
 // adventure camera: nearer and wider, free to drop below the fish, and the mouse (or the right stick) turns it.
 const VIEW = { point: { fov: 30, k: 1, low: 0.16 }, look: { fov: 40, k: 0.66, low: -0.3 } };
 const LOOK_LEVEL = 0.34; // the tilt the adventure camera settles at behind the fish; with the view here, forward is level
+const PLATE_LEVEL = 0.56; // and the tilt the plate is seen at; with both mouse buttons held, that is where forward is level
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Everything a key or a controller button can be set to do, in the order the binding menu lists it.
 // A key action takes up to two keys. Movement on a controller is always the left stick, and looking the right.
@@ -213,7 +214,7 @@ export async function start(saved = {}) {
   // how the dive ends, once the Sum is dealt with: 'open' (its head ringed) or 'close' (its gap filled)
   const end = { kind: null, swap: 0, quake: 0, vista: 0, turn: 0, burst: -9 };
   const cine = () => run.state === 'opening' || run.state === 'rise' || run.state === 'surface' || run.state === 'closing';
-  const cam = { yaw: 0.62, pitch: 0.56, zoom: 1, dist: 15, fit: 1, fov: VIEW.point.fov, k: 1, pull: 1, ease: null };
+  const cam = { yaw: 0.62, pitch: PLATE_LEVEL, zoom: 1, dist: 15, fit: 1, fov: VIEW.point.fov, k: 1, pull: 1, ease: null };
   const feel = { assist: SHIPPED_FEEL.assist / 100, mode: 'point', look: SHIPPED_FEEL.look / 100, rumble: SHIPPED_FEEL.rumble / 100 };
   const focus = new THREE.Vector3();
   const game = {
@@ -287,7 +288,7 @@ export async function start(saved = {}) {
     if (index === FLOORS.length - 1) say('palace', 'The palace gate is near. Swim through it.', 9);
   }
   function startRun(seed = (Math.random() * 1e6) | 0) {
-    if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
+    if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : PLATE_LEVEL; cam.ease = null; } // an ending leaves the camera somewhere odd
     Object.assign(run, { seed, segs: START_SEGS, food: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
@@ -647,7 +648,7 @@ export async function start(saved = {}) {
   const held = { rise: false, dive: false, dash: false };
   let wasSprint = false;
   const pointers = new Map(); // pointerId → { x, y, button }
-  let steerId = null, gesture = null;
+  let steerId = null, mouseId = null, gesture = null;
   // The mouse as a camera, in the adventure controls. `locked` is the browser's pointer lock. `free` is the
   // stand-in when the page is not allowed to lock: the view follows the pointer while it moves over the water.
   const look = { locked: false, free: false, ever: false, mine: false, over: false, mx: 0, buttons: 0 };
@@ -673,7 +674,7 @@ export async function start(saved = {}) {
     if (touch) return '<li class="note">Hold and drag: the fish swims to your finger. Hold on a swarm to wrap it. Pinch to zoom, drag with two fingers to look around.</li>';
     return row(K(kb('up'), kb('left'), kb('down'), kb('right')), 'steer', K(kb('sprint')), 'dash, hold to sprint') + row(K(kb('wrapL'), kb('wrapR')), 'wrap, or coil', K(kb('sprint')), 'tight') + row(K(kb('rise')), 'rise', K(kb('dive')), 'dive') + row(K(kb('shed')), 'shed tail as bait') + row(K(kb('pause')), 'pause', K(kb('full')), 'full screen', K(kb('hide')), 'hide this')
       + (feel.mode === 'look' ? `<li class="note">The mouse turns the view${look.locked || look.free ? '' : ': click the water to take it'}. Tilt the view up or down and the fish swims that way. Left button wraps, right button dashes and sprints, scroll zooms. On a trackpad a click with two fingers down is the right button; ${kb('wrapL')} and ${kb('wrapR')} wrap from the keys. ${kb('view')} goes back to pointing.</li>`
-        : `<li class="note">Or hold the mouse button and the fish swims to the pointer. Right-drag looks around, scroll zooms. ${kb('view')} switches to the adventure camera.</li>`);
+        : `<li class="note">Mouse: drag with the left button to look around. Hold both buttons to swim where you look, up and down too. Hold the right one to swim to the pointer. Scroll zooms. ${kb('view')} switches to the adventure camera.</li>`);
   }
   function renderLegend() { const h = legend(); $('keys').innerHTML = h; $('pause-keys').innerHTML = h; }
   function setDev(d) {
@@ -685,7 +686,7 @@ export async function start(saved = {}) {
   // --- the two sets of controls
   function showMode() {
     $('mode-point').setAttribute('aria-pressed', String(feel.mode === 'point')); $('mode-look').setAttribute('aria-pressed', String(feel.mode === 'look'));
-    $('mode-note').textContent = feel.mode === 'point' ? 'Hold the mouse button and the fish swims to the pointer. Right-drag looks around. The view stays high, as on the plate.'
+    $('mode-note').textContent = feel.mode === 'point' ? 'Drag with the left mouse button to look around. Hold both buttons and the fish swims where you look; hold the right one alone and it swims to the pointer. The view stays high, as on the plate.'
       : look.free ? 'The keys swim and the mouse turns the view. This page was not allowed to capture the mouse, so the view follows it while it moves over the water, and keeps turning while it rests at the left or right edge. Tilt the view up or down and the fish swims that way.'
         : 'The keys swim and the mouse turns the view, with no button held. Tilt the view up or down and the fish swims that way. Click the water to hand the mouse to the game. Esc takes it back and pauses.';
   }
@@ -701,7 +702,7 @@ export async function start(saved = {}) {
       cam.ease = { yaw: cam.yaw, pitch: cam.plate ?? 0.56, t: 1 }; // back up to the angle the plate view was left at
     }
     showMode(); renderLegend();
-    if (changed && !quiet && !paused) tell(m === 'point' ? 'Point and swim: hold the mouse button and the fish follows the pointer.' : look.free ? 'Adventure camera: the mouse turns the view.' : 'Adventure camera: click the water and the mouse turns the view.', 5);
+    if (changed && !quiet && !paused) tell(m === 'point' ? 'Point and swim: drag to look around, hold both mouse buttons to swim where you look.' : look.free ? 'Adventure camera: the mouse turns the view.' : 'Adventure camera: click the water and the mouse turns the view.', 5);
   }
   // ask the browser to hand the mouse to the game. Browsers only allow it from a real click
   function grab(fromClick) {
@@ -896,8 +897,12 @@ export async function start(saved = {}) {
     setDev('keys');
     if (lookMouse(e)) { look.buttons = e.buttons; return; } // the buttons are wrap and sprint here, read in readInput
     try { canvas.setPointerCapture?.(e.pointerId); } catch { /* not while the pointer is locked */ }
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
-    if (pointers.size === 1 && e.button === 0) steerId = e.pointerId;
+    // On the plate the mouse's left button turns the view, its right button has the fish swim to the pointer, and the two together swim it
+    // where the view points while the mouse steers (readInput). A mouse is one pointer however many of its buttons are down, and says which
+    // in `buttons`; a finger is a pointer each, and the fish swims to the first of them.
+    const mouse = e.pointerType !== 'touch';
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, mouse, buttons: e.buttons });
+    if (pointers.size === 1 && !mouse && e.button === 0) steerId = e.pointerId;
     if (pointers.size === 2) { steerId = null; gesture = null; }
   });
   canvas.addEventListener('pointermove', (e) => {
@@ -912,7 +917,7 @@ export async function start(saved = {}) {
     if (!p) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
-    if (pointers.size === 1 && p.button === 2) turnView(dx, dy, 0.006); // right-drag: look around
+    if (p.mouse) { p.buttons = e.buttons; if (e.buttons & 1) turnView(dx, dy, 0.006); } // the left button, alone or with the right: the view turns with the mouse. (A second button going down or coming up arrives here too, as a move.)
     else if (pointers.size === 2) { // two fingers: pinch to zoom, drag to look around
       const [a, b] = [...pointers.values()];
       const g = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
@@ -1171,6 +1176,10 @@ export async function start(saved = {}) {
     input.coilR = (bodyMetres() - 0.05) / (wrapRule(feel.assist).sweep + 0.35); // a plain coil is just tight enough to count as a wrap
     input.vertical = clamp((kd('rise') || held.rise || pd('rise') ? 1 : 0) - (kd('dive') || held.dive || pd('dive') ? 1 : 0), -1, 1);
     if (!ix && !iy && (P.lx || P.ly)) { ix = P.lx; iy = -P.ly; amount = Math.min(1, Math.hypot(ix, iy)); } // the stick also says how fast
+    // the mouse on the plate: which of its buttons are down. Both together is forward, and forward is where the view points.
+    let btns = 0; if (feel.mode === 'point') for (const [id, p] of pointers) if (p.mouse) { btns = p.buttons & 3; mouseId = id; }
+    const both = btns === 3;
+    if (both && !ix && !iy) iy = 1;
     if (ix || iy) {
       // relative to the camera: up on the keyboard is away from the viewer
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
@@ -1178,13 +1187,13 @@ export async function start(saved = {}) {
       input.amount = amount;
       // the adventure camera also aims the fish up and down: forward goes where the view points, back goes the other way.
       // A little either side of level changes nothing, so the fish holds its depth until the view is tilted on purpose.
-      if (feel.mode === 'look') {
-        const tilt = LOOK_LEVEL - cam.pitch, past = Math.abs(tilt) - 0.1;
+      if (feel.mode === 'look' || both) { // and so does the plate's view while both mouse buttons are held
+        const tilt = (feel.mode === 'look' ? LOOK_LEVEL : PLATE_LEVEL) - cam.pitch, past = Math.abs(tilt) - (feel.mode === 'look' ? 0.1 : 0.15); // a held mouse wanders more than a locked one: the plate forgives a little more
         if (past > 0) input.vertical = clamp(input.vertical + Math.sign(tilt) * Math.min(1, past / 0.5) * (iy / Math.hypot(ix, iy)) * amount, -1, 1);
       }
-    } else if (steerId !== null && pointers.has(steerId)) {
-      // swim to the point under the pointer, at the fish's own depth
-      const p = pointers.get(steerId), r = canvas.getBoundingClientRect();
+    } else if ((steerId !== null && pointers.has(steerId)) || btns === 2) {
+      // swim to the point under the pointer, at the fish's own depth: a finger, or the mouse with its right button down
+      const p = pointers.get(btns === 2 ? mouseId : steerId), r = canvas.getBoundingClientRect();
       ndc.set(((p.x - r.left) / r.width) * 2 - 1, -((p.y - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       plane.set(THREE.Object3D.DEFAULT_UP, -rig.pos.y);
@@ -1489,7 +1498,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
