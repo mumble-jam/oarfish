@@ -23,7 +23,7 @@ Pick the one thing that makes it this animal and make everything else quieter th
 Nothing slides and nothing hovers. Whatever carries the body has to be seen carrying it.
 
 - **Walkers** stand on their feet. `legs.js` (`createWalker`) plants each foot, steps it when the body has left it behind, and sets the body's height and tilt from where the feet are. Feet land on `world.footing()`; the body is kept out of columns with `world.steer()`.
-- **Swimmers** bend. `spine.js` (`bendy`) gives one model a neck that turns and nods, and a body that lies along its turn. The rig banks it into a turn and points its nose the way it is going, from how it really moved since the last frame, not from what the behaviour meant it to do.
+- **Swimmers** bend. `spine.js` (`bendy`) gives one model a neck that turns and nods, and a body that lies along its turn. The rig banks it into a turn and points its nose the way it is going, from how it really moved since the last frame, not from what the behaviour meant it to do. A rigid piece carried on a body that bends (the Shearer's saw) is placed by the rig doing the shader's sum again; a tail can be a strand hung on the end of the trunk, on a mount that looks backward (`sawfish.js`).
 - **Soft limbs** trail. `strands.js` (`createStrand`) hangs an arm or a tentacle on a body as a piece of its own. The rig says what shape it would hold in still water; the strand goes after that shape through the water, late and loose toward the tip. So it streams behind a body that moves and curls by one that is still. When there are many fine ones, `createBundle` draws them as one piece and still moves each by itself.
 - **Bells** beat. `jelly.js` (`jellyRig`) squeezes a bell and lets it fill, the rim last, and keeps what hangs from the rim on the rim. It says how hard each stroke pushes and leaves the moving to whoever owns the animal, so the body goes forward on the squeeze and loses way as it fills.
 - Reuse these. A new way of moving goes in a file of its own, knowing nothing about the animal, so the next creature can have it too.
@@ -33,7 +33,7 @@ Nothing slides and nothing hovers. Whatever carries the body has to be seen carr
 List what the behaviour can be doing, and give each one a pose that differs in silhouette, not only in a number.
 
 - **A tell before every blow**, at least 0.6 s, that says which blow is coming and where. (Saw cocked to one side: a slash. Nose down overhead: a stoop.)
-- **A spent state after every blow**, which is when it can be hurt, and which looks like it. (Teeth dark and saw drooping. Or saw stuck in the bed, tail in the air.)
+- **A spent state after every blow**, which is when it can be hurt, and which looks like it. (Teeth dark and saw drooping. Or saw stuck in the bed, tail in the air.) It has to read from the dive's high camera, fifteen metres off, and in the band's own light, not only close up: the Shearer pants, and its breathing holes are on top of its head and lit.
 - **Noticing** is its own pose, before the tell. (The sweep stops; the saw swings to you; the teeth tingle.)
 - Being hit, and being beaten, are poses too. Beaten should show something not seen before. (The crab's legs curl. The sawfish goes belly up, and its face is underneath.)
 - Idle is never still: a sweep, a fidget, a small claw picking at the ground.
@@ -63,7 +63,7 @@ Flat-shaded triangles with a colour at each corner, no textures, no imported mod
 
 ## 8. Budget
 
-One material a creature. The Keeper is about 700 triangles in 21 pieces; the Shearer is one piece. A keeper may cost that much; something there are twenty of may not: a swarm fish stays a single instanced model, and gets its character from how the swarm moves.
+One material a creature where it can be done (the Shearer has three: one that bends, one that does not, one for what has come off it). The Keeper was about 700 triangles in 21 pieces and the Shearer 370 in one; redone at the squid's level the Shearer is about 1550 in 37. A keeper, of which there is one, may cost up to about 2500; something there are twenty of may not: a swarm fish stays a single instanced model, and gets its character from how the swarm moves.
 
 ## 9. What grows, and what only answers
 
@@ -81,7 +81,7 @@ The library shows the answer as a second pose without being asked. None of this 
 | Creature | Real animal | Trait | State |
 |---|---|---|---|
 | The Keeper | a crab | one great claw | Done: walks, leans, fights (four blows and a dig, legs that come off), fifteen poses |
-| The Shearer | a sawfish | the saw, with lit teeth | Done: bends, fights (line, cut, swipes, teeth that go, a saw that snaps), fifteen poses |
+| The Shearer | a sawfish, of the family Pristidae (its count of teeth and its tail are the largetooth's, *Pristis pristis*) | the saw, with lit teeth | Done, and redone at the squid's level: bends, fights (line, cut, swipes, teeth that go, a saw that snaps). A rigid saw of thirty-two separate teeth that fly off and lie on the bed; a tail that is a strand; wings that ripple and fold; gills that heave and breathing holes that light when it is spent, which is the tell. Fourteen poses in the library. Only seen in stills |
 | The Lamplighter | an anglerfish | to be found | To do |
 | The Warden | a moray | to be found | To do |
 | The Sum | made of oarfish tails | to be found | To do |

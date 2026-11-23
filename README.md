@@ -33,7 +33,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/legs.js` | Legs that walk by themselves: feet that plant and step in two groups, and a body that rides on them and leans with the ground. Not tied to any one animal. |
 | `game/crab.js` | The Keeper put together: its shell, eight legs and two claws, and the poses that say what it is about to do. |
 | `game/spine.js` | A swimming body that bends: a neck that turns and nods, a body that lies along its turn. Not tied to any one animal. |
-| `game/sawfish.js` | The Shearer in motion: how it holds its saw for each thing it does. |
+| `game/sawfish.js` | The Shearer put together and in motion: its saw and every tooth hung on its head, its tail trailing by itself, its wings, gills and eyes, and how it holds itself for each thing it does. |
 | `game/strands.js` | Limbs with no bones in them: an arm or a tentacle that hangs on a body and trails through the water after it. Not tied to any one animal. |
 | `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed and reaching. Not in the dive yet. |
 | `game/jelly.js` | The four jellyfish in motion: a bell that squeezes and fills, part clear over what is inside it, and every arm and tentacle trailing by itself. Not in the dive yet. |

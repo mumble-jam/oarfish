@@ -403,6 +403,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     } else if (rig) { // the Shearer bends its own body (sawfish.js): it is told where it is, how it is moving and what it is about
       const k = dt > 1e-5 && pos.distanceTo(was) < 5 ? 1 / dt : 0, mood = S.done ? 'down' : S.stun > 0 ? 'stun' : S.state === 'tired' ? (S.stuck === 'stone' ? 'jammed' : S.stuck ? 'stuck' : 'tired') : S.state === 'idle' ? 'search' : S.state === 'wheel' ? 'sense' : S.state === 'cock' ? 'aim' : S.state;
       rig.update(dt, { x: pos.x, y: pos.y, z: pos.z, yaw, speed: Math.hypot(pos.x - was.x, pos.z - was.z) * k, climb: (pos.y - was.y) * k, mood, mode: S.state === 'cock' ? 'slash' : S.mode, side: S.side, k: S.T > 0 ? 1 - S.t / S.T : 0, look: fish, time: ctx.time });
+      rig.settle(dt, (p) => { p.x += T * Math.round((ctx.focus.x - p.x) / T); p.z += T * Math.round((ctx.focus.z - p.z) / T); return world.height(p.x, p.z); }); // the teeth it has lost, and the end of its saw, sink to the bed and lie there
       was.copy(pos);
     } else {
       mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());
