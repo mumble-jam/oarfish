@@ -185,7 +185,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     W.set(well.x + T * Math.round((ctx.focus.x - well.x) / T), Y0, well.z + T * Math.round((ctx.focus.z - well.z) / T)); // where it lives, on the nearest copy of the world
     pos.x += T * Math.round((ctx.focus.x - pos.x) / T); pos.z += T * Math.round((ctx.focus.z - pos.z) / T);
     for (const s of slabs) { s.p.x += T * Math.round((ctx.focus.x - s.p.x) / T); s.p.z += T * Math.round((ctx.focus.z - s.p.z) / T); }
-    S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
+    fadeStrikes(dt); S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
     const fish = ctx.pos, far = Math.hypot(fish.x - W.x, fish.z - W.z), awake = ctx.playing && far < 26;
     let warnSize = 0;
     if (mark) mark.visible = false;
@@ -223,6 +223,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         if (k >= F.slam.aim) markAt(aim, F.slam.hit * 2);
         if (S.t <= 0) { // down it comes, with a step forward if it needs one
           v.subVectors(aim, pos).setY(0); const far = v.length(); if (far > 3.3) { pos.addScaledVector(v, Math.min(far - 3.3, 1.4) / far); hold(); }
+          struckShow({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.slam.hit, y0: aim.y, h: 3.2, role: 'blow' });
           const j = struckAt(ctx, (p) => Math.hypot(p.x - aim.x, p.z - aim.z) < F.slam.hit && p.y - aim.y < 3.2);
           if (j >= 0) { aim.y = ctx.joints[j].y - 0.2; if (game.bite(F.slam.cost, j, pos)) S.bites++; } // it closes on the body if the body is there; if not, it goes into the bed
           game.event('slam', aim); silt(aim, 8); set('stuck', F.slam.stuck * (raging ? 0.85 : 1)); vel.set(0, 0, 0);
@@ -238,7 +239,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       }
       else if (S.state === 'jab') { // the small claw, cocked: quick, and it does not take much
         warnSize = 1.5; S.danger = 0.5; if (k < 0.5 && nd < F.jab.reach + 0.5) aim.copy(P); turnTo(dt, bearing, 1.5); vel.multiplyScalar(Math.exp(-6 * dt)); move(dt);
-        if (S.t <= 0) { const j = struckAt(ctx, (p) => Math.hypot(p.x - aim.x, p.z - aim.z) < F.jab.hit && Math.abs(p.y - aim.y) < 2); if (j >= 0 && game.bite(F.jab.cost, j, pos)) S.bites++; S.jabbed = 0.2; set('rest', F.jab.rest * q); }
+        if (S.t <= 0) { struckShow({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.jab.hit, y0: aim.y - 2, h: 4, role: 'blow' }); const j = struckAt(ctx, (p) => Math.hypot(p.x - aim.x, p.z - aim.z) < F.jab.hit && Math.abs(p.y - aim.y) < 2); if (j >= 0 && game.bite(F.jab.cost, j, pos)) S.bites++; S.jabbed = 0.2; set('rest', F.jab.rest * q); }
       }
       else if (S.state === 'charge') { // it turns side on to the body and draws itself in: crabs run sideways
         warnSize = 3; S.danger = 0.7; turnTo(dt, bearing - S.side * Math.PI / 2, 6); aim.copy(P); vel.multiplyScalar(Math.exp(-6 * dt)); move(dt);
@@ -264,7 +265,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       }
       else if (S.state === 'rise') { // the sand heaves where it is coming up
         S.sink = 1; warnSize = 3.2; S.danger = 0.9; markAt(pos, F.dig.hit * 2); if ((S.puffT -= dt) <= 0) { S.puffT = 0.05; silt(pos, 2, 2.6); }
-        if (S.t <= 0) { world.steer(pos, 1.2); hold(); const j = struckAt(ctx, (p) => Math.hypot(p.x - pos.x, p.z - pos.z) < F.dig.hit && p.y < pos.y + F.dig.high); if (j >= 0 && game.bite(F.dig.cost, j, pos)) S.bites++;
+        if (S.t <= 0) { world.steer(pos, 1.2); hold(); struckShow({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.dig.hit, y0: world.height(pos.x, pos.z), h: pos.y + F.dig.high - world.height(pos.x, pos.z), role: 'blow' }); const j = struckAt(ctx, (p) => Math.hypot(p.x - pos.x, p.z - pos.z) < F.dig.hit && p.y < pos.y + F.dig.high); if (j >= 0 && game.bite(F.dig.cost, j, pos)) S.bites++;
           game.event('slam', pos); silt(pos, 10, 3); yaw = bearing; set('rest', F.dig.rest * q); }
       }
       else { // nobody near: its round
@@ -434,5 +435,26 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
   const wrapped = () => { if (kind === 'shearer') { S.snapped = true; target.progress = 0; game.event('snap', pos); return tooth(Z.snap, 2.6); } // the saw goes, and two rows with it
     if (kind !== 'keeper') return fall(); if (S.wrapLeg >= 0 && S.leg[S.wrapLeg] === 1) tear(S.wrapLeg, true); target.progress = 0; }; // round the Keeper's numb leg, it comes off; round any of the others, they are held
-  return { update, ram, pushOut, dispose, wrapped, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legNear, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
+  // What the fight believes, as shapes (shapes.js), for the testing tool that draws them over the picture: the fish, what is solid, each leg and whether
+  // it can be hurt now, and the blow on its way (or, for a moment after, the one that has just landed). The fish here is as the fight saw it: its joints, points.
+  const SHOWN = [], strikes = [], pt = (p, r, role) => ({ t: 'cap', a: p.clone(), b: p.clone(), r, role });
+  const struckShow = (shape) => { strikes.push({ ...shape, hot: true, life: 0.45 }); };
+  function shapes(ctx) {
+    SHOWN.length = 0; if (kind !== 'keeper' || !ctx || !ctx.joints) return SHOWN;
+    for (const j of ctx.joints) SHOWN.push(pt(j, 0.06, 'fish'));
+    if (S.done) return SHOWN;
+    const bed = world.height(pos.x, pos.z), st = S.state, k = S.T > 0 ? clamp(1 - S.t / S.T, 0, 1) : 0;
+    SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: 2.1, y0: bed, h: pos.y + 2.6 - bed, role: 'solid' }); // what a ram meets as shell: anything within 2.1 m of its middle, at any height
+    if (S.sink < 0.5) rig.walker.legs.forEach((l, i) => { if (S.leg[i] === 2) return; hip.copy(l.hip).applyMatrix4(mesh.matrix); const a = hip.clone().lerp(l.foot, 0.3); // a leg: within 1.1 m of the line from a third of the way down it to its foot, seen from above
+      SHOWN.push({ t: 'prism', a, b: l.foot.clone(), r: F.leg.reach, y0: Math.min(a.y, l.foot.y), h: pos.y + 2.6 - Math.min(a.y, l.foot.y), role: 'leg', live: S.open }); });
+    if (st === 'slam') SHOWN.push({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.slam.hit, y0: aim.y, h: 3.2, role: 'blow' });
+    else if (st === 'jab') SHOWN.push({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.jab.hit, y0: aim.y - 2, h: 4, role: 'blow' });
+    else if (st === 'sweep' || st === 'sweeping') SHOWN.push({ t: 'fan', c: pos.clone(), r0: 0.9, r1: F.sweep.reach, a0: (st === 'sweep' ? yaw : S.dir) - 1.9, a1: (st === 'sweep' ? yaw : S.dir) + (st === 'sweep' ? 2.1 : lerp(-1.8, 1.8, k) + 0.3), y0: bed, h: pos.y + F.sweep.low - bed, role: 'blow', hot: st === 'sweeping' });
+    else if (st === 'charge' || st === 'run') SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.charge.hit, y0: bed, h: pos.y + 1.8 - bed, role: 'blow', hot: st === 'run' });
+    else if (st === 'rise' || st === 'under') SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.dig.hit, y0: bed, h: pos.y + F.dig.high - bed, role: 'blow' });
+    for (let i = strikes.length - 1; i >= 0; i--) { SHOWN.push(strikes[i]); }
+    return SHOWN;
+  }
+  const fadeStrikes = (dt) => { for (let i = strikes.length - 1; i >= 0; i--) if ((strikes[i].life -= dt) <= 0) strikes.splice(i, 1); };
+  return { update, ram, pushOut, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legNear, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
 }
