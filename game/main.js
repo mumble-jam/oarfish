@@ -892,6 +892,35 @@ export async function start(saved = {}) {
   const stir = () => { touchedAt = performance.now(); drawUntil = touchedAt + QUIET.after * 1000; owed = 3; }; // a few frames at the least, however long the thing that was pressed takes
   for (const type of ['pointermove', 'wheel']) window.addEventListener(type, touched, { capture: true, passive: true });
   for (const type of ['pointerdown', 'pointerup', 'keydown', 'keyup', 'click', 'input', 'change']) window.addEventListener(type, stir, { capture: true, passive: true });
+  // a lighter picture, for a machine that runs hot: off unless it is asked for. One pixel to a point of the screen and not two, a shadow map of half the size,
+  // and no more than about sixty frames a second on a screen that would show more
+  const light = { on: false, gap: 12.5 };
+  function setLight(on, keep = true) {
+    light.on = on; renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, on ? 1 : 2));
+    const size = on ? 1024 : 2048; if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.set(size, size); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+    if (keep) { fp.light = on; store.set('oarfish.feel', fp); }
+    stir();
+  }
+  // Left alone in the middle of a dive, the fish does not hang there to be eaten: after QUIET.away seconds it swims figures by itself, about the place it was left,
+  // and nothing bites it. Any touch gives it back. (Not while the page is being driven by a test, unless the test asks.)
+  const adrift = { on: false, allow: navigator.webdriver !== true, t: 0, at: new THREE.Vector3(), turn: 0, inp: { dir: { x: 0, y: 0, z: 1 }, amount: 1, vertical: 0, sprint: false, gentle: true, coil: 0, tight: false, bite: false, aim: null } };
+  const FIGURES = [['eight', 15], ['rise', 8], ['coil', 4.5], ['wave', 8]], FIGURE_TIME = FIGURES.reduce((a, f) => a + f[1], 0);
+  function figures(dt) {
+    const p = rig.pos, o = adrift.inp; adrift.t += dt;
+    let t = adrift.t % FIGURE_TIME, kind = ''; for (const [name, secs] of FIGURES) { if (t < secs) { kind = name; break; } t -= secs; }
+    let rate = 0; o.vertical = 0; o.coil = 0;
+    if (kind === 'eight') rate = (t < 7.5 ? 1 : -1) * 0.84; // one ring to the left, one to the right
+    else if (kind === 'rise') { rate = 0.9; o.vertical = Math.sin(t / 8 * Math.PI * 2) * 0.8; } // a ring that climbs and comes down again
+    else if (kind === 'coil') { rate = 0.5; o.coil = t > 0.4 && t < 3.6 ? 1 : 0; } // drawn up into itself, and let go
+    else rate = 1.3 * Math.sin(t * 2.1); // a long wave
+    adrift.turn += rate * dt;
+    const dx = wrapD(adrift.at.x - p.x), dz = wrapD(adrift.at.z - p.z), far = Math.hypot(dx, dz);
+    if (far > 7) adrift.turn += clamp(Math.atan2(Math.sin(Math.atan2(dx, dz) - adrift.turn), Math.cos(Math.atan2(dx, dz) - adrift.turn)), -1, 1) * 1.6 * dt; // it does not wander off
+    if (!o.vertical) o.vertical = clamp((adrift.at.y - p.y) * 0.5, -0.6, 0.6);
+    o.dir.x = Math.sin(adrift.turn); o.dir.z = Math.cos(adrift.turn);
+    run.safe = Math.max(run.safe, 0.6);
+    return o;
+  }
   const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
   const lookK = () => Math.pow(4, feel.look - 0.5); // the Look speed slider: half speed to double
   function turnView(dx, dy, kx, ky = kx * 0.85) {
@@ -1310,6 +1339,8 @@ export async function start(saved = {}) {
     ls.addEventListener('input', setLook);
     feel.look = +ls.value / 100;
     $('f-teach').checked = teach.on;
+    $('f-light').checked = !!fp.light; if (fp.light) setLight(true, false);
+    $('f-light').addEventListener('change', (e) => setLight(e.target.checked));
     $('f-teach').addEventListener('change', (e) => setTeach(e.target.checked));
     $('btn-skip').addEventListener('click', (e) => { setTeach(false); if (e.detail > 0) e.currentTarget.blur(); });
     const rs = $('f-rumble');
@@ -1620,7 +1651,7 @@ export async function start(saved = {}) {
   const sctx = {};
   const body = { joints: rig.joints, snout: rig.snout, total: 3.5, assist: feel.assist };
   function step(dt, forced) {
-    let inp = forced || readInput();
+    let inp = forced || (adrift.on ? figures(dt) : readInput());
     if (run.state === 'play' && run.haul && (inp.coil || inp.tight)) inp = { ...inp, coil: 0, tight: false }; // a body with a load in it cannot coil
     if (run.state === 'play') { effort(dt, inp); inp = assist(inp); }
     run.stateT += dt;
@@ -1839,6 +1870,9 @@ export async function start(saved = {}) {
   // one frame: the devices are read even while the dive is held, since the controller also works the menus
   function tick(dt) {
     devices(dt);
+    if (keys.size || pointers.size || look.buttons) touchedAt = performance.now(); // something held down is a hand on it, however long it is held
+    { const was = adrift.on; adrift.on = adrift.allow && !paused && !lib.isOpen && run.state === 'play' && !cine() && performance.now() - touchedAt > QUIET.away * 1000;
+      if (adrift.on && !was) { adrift.t = 0; adrift.at.copy(rig.pos); adrift.turn = rig.yaw; } else if (was && !adrift.on) run.safe = Math.max(run.safe, 1.2); } // given back, it has a moment before anything can bite
     haptics(dt);
     if (run.freeze > 0 && !paused) { run.freeze -= dt; return; } // a ram lands: the world holds still for an instant
     if (!paused) return step(dt);
@@ -1861,6 +1895,7 @@ export async function start(saved = {}) {
   $('btn-library').addEventListener('click', () => openLibrary());
   if (/^#library/.test(location.hash)) openLibrary(location.hash.split('/')[1]);
   renderer.setAnimationLoop((now) => {
+    if (light.on && now - last < light.gap) return; // a lighter picture: on a fast screen, every other frame
     const dt = Math.min((now - last) / 1000, 0.05);
     if (!paused && !lib.isOpen && run.state === 'play' && !window.__hold) { session.played += dt; session.frames++; session.clock += Math.min((now - last) / 1000, 0.5); }
     last = now;
@@ -1876,7 +1911,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

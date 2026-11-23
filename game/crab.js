@@ -49,7 +49,7 @@ export function crabRig(a, pal) {
     pose.pitch = damp(pose.pitch, limp ? 0.25 : id === 'slam' ? -0.27 * Math.min(1, k * 2.5) : id === 'stuck' ? 0.15 + 0.035 * Math.sin(s.time * 17) : id === 'spent' ? 0.07 : id === 'feed' ? 0.1 : -0.05 * pose.wary, hard ? 26 : 8, dt); // it rears, and comes down with the claw
     pose.roll = damp(pose.roll, limp ? 2.2 : id === 'sweep' ? -0.17 * Math.min(1, k * 2) : id === 'sweeping' ? 0.12 : 0, limp ? 2.6 : 9, dt); // it leans back onto the claw's side, and then through
     walker.update(dt, { ...s, crouch: pose.crouch, tuck: pose.tuck, limp: pose.limp > 0.97 ? 1 : pose.limp, raise: pose.raise, pitch: pose.pitch, roll: pose.roll + (s.stun && !limp ? 0.17 * Math.sin(s.time * 16) : 0) });
-    numbMat.emissiveIntensity = 0.5 + 0.3 * Math.sin(s.time * 11);
+    numbMat.emissiveIntensity = 1.0 + 0.45 * Math.sin(s.time * 11);
     for (const l of walker.legs) { const m = l.lame ? numbMat : mat; if (l.upper.material !== m) l.upper.material = l.lower.material = m; }
     // the claws. Everything from here is in the body's own space: +z is ahead of it, +x its left
     if (s.look) face.copy(s.look).applyMatrix4(walker.inv).setY(0).normalize(); else face.set(0, 0, 1);

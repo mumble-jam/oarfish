@@ -742,6 +742,24 @@ s = await ev(async () => { const g = window.__game, wait = (ms) => new Promise((
   return { idle, ticks, woke, live, left, back, state: g.run.state }; });
 check('a paused dive is not drawn again and again (about one frame a second, while the page goes on running), a key pressed has it drawn, and resumed it runs; an end card left alone goes quiet too, until it is touched', s.idle <= 5 && s.ticks >= s.idle * 2 && s.woke >= 1 && s.live >= 3 && s.state === 'dead' && s.left <= 5 && s.back >= 2, JSON.stringify(s));
 
+// a lighter picture is there to be asked for, and is not given unasked; and a dive left alone does not sit still to be eaten
+s = await ev(async () => { const g = window.__game, box = document.getElementById('f-light'), wait = (ms) => new Promise((r) => setTimeout(r, ms)), kept = () => JSON.parse(localStorage.getItem('oarfish.feel') || '{}').light;
+  const first = { box: box.checked, on: g.light.on, map: g.sun.shadow.mapSize.x };
+  box.click(); const on = { on: g.light.on, map: g.sun.shadow.mapSize.x, ratio: g.renderer.getPixelRatio(), kept: kept() };
+  box.click(); const off = { on: g.light.on, map: g.sun.shadow.mapSize.x, kept: kept() };
+  g.startRun(4242); g.sim(0.5); g.run.safe = 0; for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
+  window.__hold = false; const away = g.QUIET.away; g.QUIET.away = 0.5; g.adrift.allow = true; // (a page a test is driving is never left to itself, unless the test asks)
+  for (let i = 0; i < 40 && !g.adrift.on; i++) await wait(100);
+  const began = g.adrift.on, p0 = g.rig.pos.clone(), segs = g.run.segs; let turned = 0, last = g.rig.yaw, far = 0;
+  for (let i = 0; i < 90; i++) { g.sim(0.1); const d = Math.atan2(Math.sin(g.rig.yaw - last), Math.cos(g.rig.yaw - last)); turned += Math.abs(d); last = g.rig.yaw; far = Math.max(far, Math.hypot(g.rig.pos.x - p0.x, g.rig.pos.z - p0.z)); }
+  const bitten = g.bite(2, g.rig.spine.length, g.rig.pos, 'biter');
+  g.QUIET.away = away; window.dispatchEvent(new PointerEvent('pointerdown')); for (let i = 0; i < 40 && g.adrift.on; i++) await wait(100); const back = g.adrift.on;
+  g.adrift.allow = false; window.__hold = true;
+  return { first, on, off, began, turned: +turned.toFixed(1), far: +far.toFixed(1), bitten, lost: segs - g.run.segs, back, state: g.run.state }; });
+check('the lighter picture is off until it is asked for, and is kept when it is (one pixel to a point, a shadow map of half the size); a dive nobody touches has the fish swim figures about where it was left, bitten by nothing, until it is touched',
+  s.first.box === false && s.first.on === false && s.first.map === 2048 && s.on.on === true && s.on.map === 1024 && s.on.ratio === 1 && s.on.kept === true && s.off.on === false && s.off.map === 2048 && s.off.kept === false
+  && s.began && s.turned > 6 && s.far < 16 && s.bitten === false && s.lost === 0 && s.back === false && s.state === 'play', JSON.stringify(s));
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }
