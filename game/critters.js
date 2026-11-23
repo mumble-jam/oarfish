@@ -294,3 +294,72 @@ export function sumSegment() {
   return m.geometry();
 }
 
+
+// ================================================================ not yet in the dive
+// ---------------------------------------------------------------- the squid
+// Its shape is the bigfin reef squid's (Sepioteuthis lessoniana), whose fins run down nearly the whole mantle, so that from above the
+// back end of it is a kite coming to a point. Arms and head toward +z, the point of the mantle toward -z: jetting, it goes point first.
+// The mantle, fins, head, eyes and funnel are one model (squid). Its eight arms and two long tentacles are each a piece of their own
+// (squidArm), modelled straight along +z from where it hangs on the head, the pale face with the suckers toward -y: squid.js hangs them
+// on and strands.js trails each one through the water. The arms are not all one length: the pair on the back is the shortest and the
+// third pair the longest, as in the real one. A tentacle is a thin stalk ending in a flat club.
+const SQUID_MANTLE = [[0.03, 0.125, 0.115, 0.105], [-0.08, 0.16, 0.148, 0.132], [-0.3, 0.166, 0.152, 0.138], [-0.54, 0.138, 0.126, 0.112], [-0.76, 0.09, 0.082, 0.072], [-0.92, 0.04, 0.038, 0.034], [-1.0, 0.004, 0.004, 0.004]];
+const SQUID_FIN = [[-0.1, 0.02], [-0.22, 0.1], [-0.36, 0.17], [-0.5, 0.22], [-0.63, 0.25], [-0.76, 0.225], [-0.88, 0.135], [-0.995, 0]]; // z, and how far the fin stands out from the mantle's side there
+const squidLimb = (side, pair, deg, long, thick, club) => { const a = (deg * Math.PI) / 180, n = club ? 9 : 8, q = club ? 0.92 : 0.9, k = club ? 0.5 : 1, first = (long * (1 - q)) / (1 - q ** n), cuts = [0];
+  for (let i = 0; i < n; i++) cuts.push(cuts[i] + first * q ** i); // its joints, closer together toward the tip, where it curls
+  return { side, pair, club, long, thick, cuts, out: [side * Math.sin(a), Math.cos(a)], root: [side * Math.sin(a) * 0.058 * k, -0.005 + Math.cos(a) * 0.05 * k, 0.24] }; };
+export const SQUID = { mantle: 1, length: 2.4,
+  // down each side from the back to the belly: the pair, where round the mouth it hangs (degrees from the top), how long, how thick at the root. Pair 0 is the tentacle
+  arms: [1, -1].flatMap((s) => [[1, 24, 0.86, 0.03], [2, 68, 1.02, 0.034], [3, 112, 1.18, 0.038], [0, 134, 1.5, 0.016], [4, 156, 1.04, 0.034]].map(([pair, deg, long, thick]) => squidLimb(s, pair, deg, long, thick, pair === 0))) };
+export function squid(pal) {
+  const m = mesher(), { back, flank, belly, fin, finUnder, fleck, eye, pupil } = pal, low = tint(flank, belly, 0.45);
+  const paint = (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : k === 1 || k === n - 2 ? flank : low);
+  const at = (z) => { let i = 0; while (i < SQUID_MANTLE.length - 2 && SQUID_MANTLE[i + 1][0] > z) i++; const a = SQUID_MANTLE[i], b = SQUID_MANTLE[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }; // the mantle's half-width and height at z
+  hull(m, SQUID_MANTLE, paint, 8);
+  // the fins: a wedge down each side, thick where it joins and thin at the edge, pink on top and lilac underneath
+  const finFrom = m.triangles;
+  both((s) => { const top = [], bot = [], edge = [];
+    for (const [z, d] of SQUID_FIN) { const [w] = at(z), th = 0.024 * Math.min(1, w / 0.1) * (d > 0 ? 1 : 0.2); top.push([s * w * 0.8, 0.012 + th, z]); bot.push([s * w * 0.8, 0.012 - th, z]); edge.push([s * (w + d), -0.05 * d, z]); }
+    for (let k = 0; k + 1 < edge.length; k++) { const c = k % 2 ? fin : tint(fin, back, 0.5);
+      m.tri(top[k], top[k + 1], edge[k + 1], [flank, flank, c]).tri(top[k], edge[k + 1], edge[k], [flank, c, c]).quad(bot[k], bot[k + 1], edge[k + 1], edge[k], k % 2 ? finUnder : dim(finUnder, 0.94)); } });
+  const finTo = m.triangles;
+  // flecks: small pale faces scattered over the back
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 18; i++) { const z = -0.05 - 0.66 * rnd(), u = 0.12 + 0.76 * rnd(), s = i % 2 ? 1 : -1, l = 0.012 + 0.012 * rnd(), [w, up] = at(z), x = s * 0.707 * w * u, y = up * (1 - 0.293 * u) + 0.007;
+    m.tri([x, y, z + l], [x, y, z - l], [x + s * 0.011, y - 0.0046, z - l * 0.3], fleck); }
+  const fleckTo = m.triangles;
+  // the head, narrow where it goes into the mantle, and the web the arms hang round
+  const HEAD = [[-0.08, 0.08, 0.075, 0.07, -0.005], [0, 0.092, 0.082, 0.076, -0.005], [0.085, 0.12, 0.1, 0.09, -0.005], [0.17, 0.108, 0.09, 0.082, -0.005], [0.245, 0.076, 0.068, 0.064, -0.005]];
+  hull(m, HEAD, paint, 8); m.cap(ringZ(0.245, 0.076, 0.068, 0.064, -0.005, 8), [0, 0, 1], belly, 0.03);
+  for (const [x, z] of [[0.03, 0.12], [-0.045, 0.06], [0.01, 0.19]]) m.tri([x, 0.093, z + 0.014], [x, 0.093, z - 0.014], [x + 0.011, 0.091, z], fleck);
+  // the eyes: big, on a stalk of their own so they stand out from the head. A pale ring, a dark pupil, a highlight
+  const disc = (c, q, r, colour, glow, seg = 8) => m.add(new THREE.CircleGeometry(r, seg), new THREE.Matrix4().compose(new THREE.Vector3(...c), q, new THREE.Vector3(1, 1, 1)), colour, glow);
+  both((s) => { const n = new THREE.Vector3(s, 0.14, 0.12).normalize(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n), c = [s * 0.136, 0.014, 0.094], on = (lift, dy = 0, dz = 0) => [c[0] + n.x * lift, c[1] + n.y * lift + dy, c[2] + n.z * lift + dz];
+    m.limb([s * 0.09, 0.008, 0.088], c, 0.092, 0.083, 6, [flank, back]);
+    disc(on(0.001), q, 0.082, eye, false, 10); disc(on(0.008), q, 0.056, pupil, true); disc(on(0.014, 0.024, 0.02), q, 0.013, '#ffffff', true, 5); }); // (the pupil is marked as lit, though it gives off next to nothing, so that it stays dark when the skin goes pale)
+  // the funnel it jets through, under the head
+  m.limb([0, -0.068, -0.05], [0, -0.118, 0.15], 0.05, 0.03, 5, [belly, finUnder]).cap(m.last, [0, -0.25, 1], dim(finUnder, 0.45), -0.03);
+  const g = m.geometry(), P = g.attributes.position, F = new Float32Array(P.count * 4);
+  // What squid.js needs to move it, for each corner: how far the corner goes (x, y) when the mantle swells by all of its own width; and, on a fin, how far
+  // out from the mantle's side it is (to the animal's left, or minus that to its right), which is how much it ripples and folds
+  const swell = (z) => (0.5 + 0.5 * Math.min(1, (0.03 - z) / 0.25)) * Math.min(1, (z + 1) / 0.5);
+  for (let i = 0; i < fleckTo * 3; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), k = swell(z), isFin = i >= finFrom * 3 && i < finTo * 3, [w] = at(z), s = Math.sign(x);
+    if (isFin && Math.abs(x) > w * 0.9) { F[i * 4] = s * w * k; F[i * 4 + 2] = s * Math.max(0.0001, Math.abs(x) - w); } else { F[i * 4] = x * k; F[i * 4 + 1] = y * k; } }
+  g.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4));
+  return g;
+}
+// one arm, or one tentacle (def: its entry in SQUID.arms)
+export function squidArm(pal, def) {
+  const m = mesher(), { arm, armUnder: under, sucker } = pal, { long, thick: r0, cuts, club } = def, n = cuts.length - 1, shade = dim(arm, 0.88), from = cuts[n - 2];
+  // how wide and how deep it is at z. An arm thins all the way to a point; a tentacle is a stalk, and then the club
+  const size = (z) => { const s = Math.min(1, Math.max(0, z / long)); if (!club) { const r = r0 * (1 - 0.5 * s) * Math.min(1, (1 - s) / 0.25) ** 0.8 + 0.0025; return [r, r]; } // it keeps its width most of the way, and thins to its tip over the last quarter
+    if (z <= from) return [r0 * (1 - 0.2 * s), r0 * (1 - 0.2 * s)]; const u = (z - from) / (long - from); return [r0 * 0.8 + 0.03 * Math.sin(Math.PI * u ** 0.75) + 0.001, r0 * 0.8 * (1 - u) + 0.003]; };
+  const ring = (z) => { const [w, h] = size(z); return [[-w, -0.5 * h, z], [0, h, z], [w, -0.5 * h, z]]; };
+  const zs = [-0.04]; for (let i = 0; i < n; i++) zs.push((cuts[i] + cuts[i + 1]) / 2, cuts[i + 1]); // a section at every joint and half way between
+  m.skin(zs.map(ring), (i, k) => (k === 2 ? (club && zs[i] < from ? dim(arm, 0.94) : under) : k ? shade : arm)); // (a tentacle is pale only under its club)
+  // suckers down the pale face: on an arm a few, to one side and the other by turns; on a club, two rows
+  const dot = (z, x, r) => { const [, h] = size(z), y = -0.5 * h - 0.004; m.quad([x, y, z - r * 1.3], [x + r, y, z], [x, y, z + r * 1.3], [x - r, y, z], sucker); };
+  if (club) for (const u of [0.25, 0.5, 0.75]) { const z = from + (long - from) * u, [w] = size(z); dot(z, w * 0.42, w * 0.3); dot(z + 0.012, -w * 0.42, w * 0.3); }
+  else for (let i = 1; i < n - 2; i++) { const z = (cuts[i] + cuts[i + 1]) / 2, [w] = size(z); dot(z, (i % 2 ? 0.3 : -0.3) * w, w * 0.42); }
+  return m.geometry();
+}

@@ -149,7 +149,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     const seg = (name, items, cur) => `<div class="seg" data-set="${name}">${items.map(([val, label, title, mark]) => `<button type="button" data-v="${val}" aria-pressed="${String(val) === String(cur)}"${title ? ` title="${esc(title)}"` : ''}${mark ? ' class="home"' : ''}>${esc(label)}</button>`).join('')}</div>`;
     if (all) {
       $('#lib-name').textContent = spec.name; $('#lib-role').textContent = spec.role; $('#lib-about').textContent = spec.about;
-      $('#lib-where').textContent = `${spec.bands.map((b) => BANDS[b]).join(', ')} · ${spec.swarm ? `${spec.length} m each` : spec.run ? `${spec.length} m to a length` : `${spec.length} m long`}`;
+      $('#lib-where').textContent = `${spec.bands.length ? spec.bands.map((b) => BANDS[b]).join(', ') : 'In no band yet'} · ${spec.swarm ? `${spec.length} m each` : spec.run ? `${spec.length} m to a length` : `${spec.length} m long`}`;
       { const hear = $('#lib-hear'), voice = CAST[spec.id]; hear.hidden = !voice; hear.textContent = voice ? `In the band: ${voice.name}. Hear it` : ''; } // its instrument, where it has one
       $('#lib-play').innerHTML = `<label>Light of</label>${seg('band', BANDS.map((b, i) => [i, i + 1, b, spec.bands.includes(i)]), S.band)}`
         + (spec.states.length > 1 ? `<label>State</label>${seg('state', spec.states.map((s, i) => [i, s.name]), S.state)}` : '')
@@ -169,7 +169,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     $('#lib-copy').disabled = !n; $('#lib-all').disabled = !n;
     $('#lib-note').textContent = n ? `${n === 1 ? 'One component is' : `${n} components are`} changed in this browser. The game uses them from the next band or dive. To make them the game’s own for everyone, copy them and paste them to Claude.` : 'Colours and size can be tried here. They are kept in this browser and used by the game too.';
   }
-  function pick(id) { if (!NPC[id]) return; $('#lib-text').hidden = true; S.id = id; S.state = NPC[id].kind === 'fish' ? 1 : 0; S.tone = 0; S.dirty = false; const spec = NPC[id]; if (spec.kind === 'thing' || spec.kind === 'shell') S.dist = clamp(Math.max(spec.length, (spec.show?.spread || 0) * 2.4) * 2.2 + 2, 2.4, 22); if (!spec.bands.includes(S.band)) S.band = spec.bands[0]; if (spec.kind !== 'thing' && spec.kind !== 'shell') S.dist = clamp(spec.length * 2.4 + 2.2, 2.6, 26); if (spec.run) S.dist = 16; if (spec.id === 'warden') S.dist = 17; if (spec.swarm) S.dist = SWARMS[S.tier].r * 9 + 3; S.yaw = 0.85; S.pitch = 0.2; light(); mount(); list(); panel(); try { history.replaceState(null, '', `#library/${id}`); } catch { /* not allowed here */ } }
+  function pick(id) { if (!NPC[id]) return; $('#lib-text').hidden = true; S.id = id; S.state = NPC[id].kind === 'fish' ? 1 : 0; S.tone = 0; S.dirty = false; const spec = NPC[id]; if (spec.kind === 'thing' || spec.kind === 'shell') S.dist = clamp(Math.max(spec.length, (spec.show?.spread || 0) * 2.4) * 2.2 + 2, 2.4, 22); if (spec.bands.length && !spec.bands.includes(S.band)) S.band = spec.bands[0]; if (spec.kind !== 'thing' && spec.kind !== 'shell') S.dist = clamp(spec.length * 2.4 + 2.2, 2.6, 26); if (spec.run) S.dist = 16; if (spec.id === 'warden') S.dist = 17; if (spec.swarm) S.dist = SWARMS[S.tier].r * 9 + 3; S.yaw = 0.85; S.pitch = 0.2; light(); mount(); list(); panel(); try { history.replaceState(null, '', `#library/${id}`); } catch { /* not allowed here */ } }
 
   $('#lib-hear').addEventListener('click', () => onHear?.(S.id));
   root.addEventListener('click', (e) => {
