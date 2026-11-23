@@ -163,9 +163,13 @@ export function tailPiece(pal) { // pal: the oarfish's own palette
 const grey = (k) => dim('#ffffff', k);
 
 // ---------------------------------------------------------------- the Keeper: a great crab under a dome of plates
-// The shell, with its face, is one model. Its eight legs and two claws are separate pieces, each a rigid length modelled along
-// +z from the joint it hangs on, and KEEPER says where they join and how long they are: crab.js hangs them on and legs.js walks them.
+// The shell, with its face, is one model. Everything that works is a piece of its own, and KEEPER says where each joins: eight legs and two claws,
+// each a rigid length modelled along +z from the joint it hangs on (crab.js hangs them on and legs.js walks them); two eyes on stalks, which turn
+// to what it is looking at; the two doors of its mouth; four feelers, which trail (strands.js); and a crack in the shell for each leg, shown when
+// that leg has been torn off.
 const side4 = (fn) => [1, -1].flatMap((s) => [0, 1, 2, 3].map((i) => fn(s, i)));
+const KEEPER_DOME = [[0.12, 1.5], [0.26, 1.66], [0.62, 1.52], [0.95, 1.24], [1.22, 0.86], [1.42, 0.44]], KEEPER_N = 12, KEEPER_SQUASH = 0.92; // the dome in rings, from its lip up: height, radius
+const feeler = (side, long, root, way, n) => ({ side, long, root, way, cuts: Array.from({ length: n + 1 }, (_, i) => (long * i) / n) });
 export const KEEPER = {
   ride: 0.44, // how far the shell's origin is carried over the ground its feet are on
   // front to back down each side. hip: where the leg leaves the shell; rest: where its foot stands, on the ground, as the body sees it
@@ -179,79 +183,245 @@ export const KEEPER = {
     { side: -1, big: true, shoulder: [-1.02, 0.32, 1.02], l1: 1.05, l2: 0.95, hinge: [0, 0.16, 0.9], span: 0.95, stout: 1.5 },
     { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 0.78, l2: 0.62, hinge: [0, 0.07, 0.6], span: 0.6, stout: 0.72 },
   ],
+  eyes: [1, -1].map((side) => ({ side, socket: [side * 0.37, 0.4, 1.47] })), stalk: 0.56, // where each stalk stands in its socket, and how far up it the eye is
+  jaws: [1, -1].map((side) => ({ side, hinge: [side * 0.33, 0.21, 1.645] })), // the two doors of its mouth, each hinged at its outer edge
+  // its feelers: a long one outside each eye, and a short one between them that flicks. way: which way each points when nothing moves it
+  feelers: [1, -1].flatMap((side) => [feeler(side, 1.0, [side * 0.6, 0.36, 1.5], [side * 0.5, 0.42, 0.76], 5), feeler(side, 0.4, [side * 0.13, 0.4, 1.6], [side * 0.14, 0.72, 0.68], 3)]),
 };
+const domeAt = (phi, y) => { let i = 0; while (i < KEEPER_DOME.length - 2 && KEEPER_DOME[i + 1][0] < y) i++; const a = KEEPER_DOME[i], b = KEEPER_DOME[i + 1], r = a[1] + (b[1] - a[1]) * Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0]))); return [Math.sin(phi) * r, y, Math.cos(phi) * r * KEEPER_SQUASH]; };
 export function keeper(pal) {
-  const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8);
-  const rings = [[0.2, 1.62], [0.62, 1.5], [1.1, 1.05], [1.42, 0.45]].map(([y, r]) => ringY(y, r, 10, { squash: 0.92 }));
-  m.skin(rings, (i, k) => (i === 0 ? pale : (k + i) % 2 ? tone : shade)).cap(rings[3], [0, 1, 0], [pale, shade, shade], 0.14).cap(rings[0], [0, -1, 0], deep);
-  for (let i = 0; i < 10; i += 2) { const p = rings[2][i]; m.limb([p[0] * 0.95, p[1] - 0.05, p[2] * 0.95], [p[0] * 1.28, p[1] + 0.3, p[2] * 1.28], 0.13, 0.01, 4, [shade, pale]); } // knobs where the plates meet
-  m.limb([0, 1.5, 0], [0, 2.25, -0.2], 0.24, 0.02, 5, [tone, pale]);
-  m.add(new THREE.BoxGeometry(1.3, 0.34, 0.5), new THREE.Matrix4().makeTranslation(0, 0.2, 1.38), deep); // the face under the shell's lip
+  const m = mesher(), { tone, pale, dark, deep } = pal, shade = dim(tone, 0.8), N = KEEPER_N, rings = KEEPER_DOME.map(([y, r]) => ringY(y, r, N, { squash: KEEPER_SQUASH }));
+  // the dome: a lip turned under, a pale band, and then plates, each raised a little in its middle, light and dark by turns
+  m.skin([rings[0], rings[1], rings[2]], (i, k) => (i === 0 ? tint(pale, deep, 0.35) : k % 2 ? pale : tint(pale, tone, 0.2)));
+  for (let i = 2; i < 4; i++) for (let k = 0; k < N; k++) { const a = rings[i][k], b = rings[i][(k + 1) % N], c = rings[i + 1][(k + 1) % N], d = rings[i + 1][k], mid = [0, 1, 2].map((j) => (a[j] + b[j] + c[j] + d[j]) / 4), l = Math.hypot(mid[0], mid[1] - 0.3, mid[2]);
+    const boss = [mid[0] + (mid[0] / l) * 0.07, mid[1] + ((mid[1] - 0.3) / l) * 0.07, mid[2] + (mid[2] / l) * 0.07], col = (k + i) % 2 ? tone : shade, lit = tint(col, '#ffffff', 0.22), from = [0, 0.3, 0];
+    m.out(a, b, boss, from, [col, col, lit]).out(b, c, boss, from, [col, col, lit]).out(c, d, boss, from, [col, col, lit]).out(d, a, boss, from, [col, col, lit]); }
+  m.skin([rings[4], rings[5]], (i, k) => (k % 2 ? tone : shade)).cap(rings[5], [0, 1, 0], [pale, shade, shade], 0.14);
+  for (let k = 0; k < N; k += 2) { const p = rings[3][k]; m.limb([p[0] * 0.95, p[1] - 0.05, p[2] * 0.95], [p[0] * 1.3, p[1] + 0.32, p[2] * 1.3], 0.14, 0.01, 4, [shade, pale]); } // a spine where four plates meet,
+  for (let k = 1; k < N; k += 2) { const p = rings[2][k]; m.limb([p[0] * 0.97, p[1], p[2] * 0.97], [p[0] * 1.1, p[1] + 0.13, p[2] * 1.1], 0.09, 0.012, 4, [shade, pale]); } // a stud between them lower down,
+  m.limb([0, 1.5, 0], [0, 1.66, -0.03], 0.3, 0.24, 6, [shade, tone]).limb([0, 1.6, -0.02], [0, 2.25, -0.2], 0.24, 0.02, 5, [tone, pale]); // and the horn on top, in its collar
+  for (const s of [1, -1]) { for (const deg of [22, 38, 54, 70]) { const a = (s * deg * Math.PI) / 180, p = domeAt(a, 0.26); m.limb([p[0] * 0.97, p[1], p[2] * 0.97], [p[0] * 1.09, p[1] + 0.04, p[2] * 1.1], 0.075, 0.008, 3, [pale, CREAM]); } // teeth along the front of the lip, each side
+    for (const x of [0.07, 0.2]) m.limb([s * x, 0.3, 1.5], [s * x * 1.1, 0.33, 1.62], 0.05, 0.006, 3, [pale, CREAM]); } // and two small ones each side between the eyes
+  // underneath: the breastplate, and the tail folded forward under it (which is all the tail a crab has)
+  const under = ringY(-0.02, 1.2, N, { squash: KEEPER_SQUASH }); m.skin([rings[0], under], deep).cap(under, [0, -1, 0], [tint(pale, deep, 0.3), deep, deep], 0.06);
+  for (let j = 0; j < 4; j++) { const z0 = -1.02 + j * 0.38, z1 = z0 + 0.38, w0 = 0.44 - j * 0.09, w1 = 0.44 - (j + 1) * 0.09, y = -0.1; m.quad([-w0, y, z0], [w0, y, z0], [w1, y, z1], [-w1, y, z1], j % 2 ? [pale, pale, tint(pale, deep, 0.3)] : [tint(pale, tone, 0.35), tint(pale, tone, 0.35), tint(pale, deep, 0.4)]); }
+  // the face under the shell's lip: the dark of it, the socket each eye stands in, and the red of the mouth behind its doors
+  m.add(new THREE.BoxGeometry(1.3, 0.34, 0.5), new THREE.Matrix4().makeTranslation(0, 0.2, 1.38), deep);
+  m.quad([-0.3, 0.05, 1.635], [0.3, 0.05, 1.635], [0.26, 0.34, 1.635], [-0.26, 0.34, 1.635], ['#7a2f45', '#7a2f45', '#3d1830']);
   both((s) => {
-    m.limb([s * 0.32, 0.33, 1.45], [s * 0.44, 0.74, 1.74], 0.08, 0.06, 4, dark).eye([s * 0.44, 0.8, 1.78], [s * 0.35, 0.3, 1], 0.14, { iris: pal.eye, glow: true });
-    for (let i = 0; i < 2; i++) m.limb([s * 0.14, 0.12, 1.6], [s * (0.2 + i * 0.16), -0.05, 1.95 - i * 0.1], 0.05, 0.02, 3, pale); // mouth parts
-    for (const leg of KEEPER.legs) if (leg.side === s) m.limb([leg.hip[0] * 0.8, 0.3, leg.hip[2] * 0.9], leg.hip, 0.2, 0.16, 4, deep); // and one for each leg
+    const e = KEEPER.eyes[s > 0 ? 0 : 1].socket; m.limb([e[0] * 0.9, e[1] - 0.12, e[2] - 0.14], [e[0], e[1] + 0.02, e[2]], 0.13, 0.15, 6, [deep, dark]);
+    for (const leg of KEEPER.legs) if (leg.side === s) m.limb([leg.hip[0] * 0.8, 0.3, leg.hip[2] * 0.9], leg.hip, 0.2, 0.17, 5, deep); // and a socket for each leg
   });
   for (const c of KEEPER.claws) m.limb([c.shoulder[0] * 0.76, c.shoulder[1], c.shoulder[2] - 0.1], c.shoulder, 0.24 * c.stout, 0.2 * c.stout, 5, deep); // the socket each claw turns in
   return m.geometry();
 }
-// the two lengths of a walking leg: from the shell up to the knee, and from the knee down to a point
+// The two lengths of a walking leg. The upper is the thigh, from the joint at the shell to the knee, with a crest of small spines; the lower is the three
+// short lengths a crab's leg ends in, made as one: a wrist, a shin, and after a pale joint the last, which comes to a point.
 export function keeperLeg(pal) {
   const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.legs[0];
-  const upper = mesher().limb([0, 0, 0], [0, 0, l1], 0.2, 0.15, 4, [dark, deep]), knee = upper.last;
+  const upper = mesher().limb([0, 0, -0.1], [0, 0, 0.2], 0.21, 0.2, 5, deep).limb([0, 0.01, 0.16], [0, 0.015, l1 - 0.1], 0.185, 0.15, 5, [dark, deep]).limb([0, 0.015, l1 - 0.14], [0, 0, l1], 0.165, 0.17, 5, [deep, dark]), knee = upper.last;
   upper.cap(knee, [0, 0, 1], pale, 0.16); // the knuckle of the knee
-  const lower = mesher().limb([0, 0, -0.05], [0, 0, l2 * 0.6], 0.165, 0.11, 4, [deep, dark]).limb([0, 0, l2 * 0.6], [0, 0, l2], 0.11, 0.015, 4, [dark, pale]);
+  for (const z of [0.42, 0.72, 1.0]) upper.limb([0, 0.14, z], [0, 0.29, z + 0.1], 0.05, 0.005, 3, [dark, pale]);
+  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3], [0, 0.05, 1.0], 0.14, 0.1, 5, [dark, deep])
+    .limb([0, 0.05, 0.95], [0, 0.05, 1.07], 0.118, 0.11, 5, pale).limb([0, 0.05, 1.04], [0, 0, l2], 0.095, 0.014, 5, [dark, pale]);
   return { upper: upper.geometry(), lower: lower.geometry() };
 }
-// the three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge
+// The three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge, whose pin
+// shows on both sides of the hand. The crusher's fingers carry blunt knobs, big toward the hinge; the cutter's a row of fine sharp teeth. Both are tipped dark.
 export function keeperClaw(pal, c) {
-  const { pale, dark, deep } = pal, { l1, l2, span: f, stout: w } = c;
-  const arm = mesher().limb([0, 0, 0], [0, 0, l1], 0.2 * w, 0.18 * w, 5, [dark, deep]);
-  const hand = mesher().limb([0, 0, -0.05], [0, 0, l2], 0.2 * w, 0.31 * w, 5, [deep, dark]);
+  const { pale, dark, deep } = pal, { l1, l2, span: f, stout: w, hinge } = c;
+  const arm = mesher().limb([0, 0, -0.08], [0, 0, 0.18], 0.23 * w, 0.215 * w, 5, deep).limb([0, 0, 0.14], [0, 0, l1 - 0.08], 0.2 * w, 0.175 * w, 5, [dark, deep]).limb([0, 0, l1 - 0.12], [0, 0, l1], 0.19 * w, 0.2 * w, 5, [deep, dark]);
+  arm.cap(arm.last, [0, 0, 1], pale, 0.1 * w); for (const z of [0.4, 0.7]) arm.limb([0, 0.16 * w, z * l1], [0, 0.3 * w, z * l1 + 0.08], 0.05 * w, 0.005, 3, [dark, pale]);
+  const hand = mesher().limb([0, 0, -0.05], [0, 0.01, l2 * 0.3], 0.2 * w, 0.215 * w, 5, [deep, dark]).limb([0, 0.01, l2 * 0.26], [0, 0, l2], 0.215 * w, 0.31 * w, 6, [dark, deep]);
   const low = [[0, -0.1 * w, l2 - 0.06], [0, -0.3 * w, l2 + f * 0.92]], up = [[0, 0, -0.05], [0, 0.07 * w, f]]; // the lower finger, in the hand's space; the upper, in its own
-  hand.cap(hand.last, [0, 0, 1], dark, 0.1 * w).limb(low[0], low[1], 0.21 * w, 0.03, 5, [dark, pale]);
-  const top = mesher().limb(up[0], up[1], 0.27 * w, 0.035, 5, [dark, pale]);
-  if (c.big) for (const t of [0.3, 0.5, 0.7]) { // the crusher's teeth: blunt knobs down the inside of both fingers
-    const on = (m, [p, q], r0, r1, sign) => { const y = p[1] + (q[1] - p[1]) * t, z = p[2] + (q[2] - p[2]) * t, r = r0 + (r1 - r0) * t; m.limb([0, y + sign * r * 0.55, z], [0, y + sign * (r + 0.1), z + 0.02], 0.1, 0.045, 4, pale); };
-    on(hand, low, 0.21 * w, 0.03, 1); on(top, up, 0.27 * w, 0.035, -1);
-  }
+  const at = ([p, q], t) => [0, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t], finger = (m, line, r0, r1) => { const r = r0 + (r1 - r0) * 0.78; m.limb(line[0], at(line, 0.78), r0, r, 5, [dark, pale]).limb(at(line, 0.78), line[1], r, r1, 5, [pale, deep]); };
+  hand.cap(hand.last, [0, 0, 1], dark, 0.1 * w); finger(hand, low, 0.21 * w, 0.03);
+  hand.limb([-0.33 * w, hinge[1], hinge[2]], [0.33 * w, hinge[1], hinge[2]], 0.085 * w, 0.085 * w, 5, pale); // the hinge pin
+  for (const z of [0.5, 0.72]) hand.limb([0, 0.27 * w, z * l2], [0, 0.4 * w, z * l2 + 0.05], 0.07 * w, 0.01, 4, [dark, pale]); // knuckles along the top of the hand
+  const top = mesher(); finger(top, up, 0.27 * w, 0.035);
+  const teeth = c.big ? [[0.22, 0.13, 0.12], [0.4, 0.11, 0.1], [0.57, 0.09, 0.09], [0.72, 0.07, 0.07]] : [[0.2, 0.03, 0.05], [0.34, 0.03, 0.05], [0.48, 0.028, 0.045], [0.62, 0.025, 0.04], [0.76, 0.02, 0.035]]; // how far along, how thick, how long
+  for (const [t, r, l] of teeth) { const on = (m, line, r0, r1, sign) => { const p = at(line, t), rad = r0 + (r1 - r0) * t; m.limb([0, p[1] + sign * rad * 0.55, p[2]], [0, p[1] + sign * (rad + l), p[2] + 0.02], r, c.big ? r * 0.45 : 0.004, c.big ? 4 : 3, pale); };
+    on(hand, low, 0.21 * w, 0.03, 1); on(top, up, 0.27 * w, 0.035, -1); }
   return { arm: arm.geometry(), hand: hand.geometry(), finger: top.geometry() };
+}
+// An eye, in two pieces. The stalk stands up (+y) from its socket. The eye itself sits on the stalk's top and turns there: it is modelled about its own middle,
+// looking along +z, with the lit ring of it set high on its front, so that from above it is seen which way it looks.
+export function keeperEye(pal) {
+  const { pale, dark, deep } = pal, L = KEEPER.stalk, top = tint(dark, pale, 0.3);
+  const stalk = mesher().limb([0, -0.08, 0], [0, L - 0.16, 0], 0.085, 0.06, 5, [deep, dark]).limb([0, L - 0.2, 0], [0, L - 0.1, 0], 0.085, 0.115, 5, pale);
+  const m = mesher(), ball = [[-0.19, 0.06], [-0.1, 0.17], [0.03, 0.205], [0.13, 0.16]].map(([z, r]) => ringZ(z, r, r, r, 0, 8));
+  m.skin(ball, shaded(top, dark, deep)).cap(ball[0], [0, 0, -1], dark, 0.03).cap(ball[3], [0, 0, 1], deep, 0.04);
+  const n = new THREE.Vector3(0, 0.56, 0.83).normalize(); m.eye([n.x * 0.165, n.y * 0.165, n.z * 0.165], [n.x, n.y, n.z], 0.14, { iris: pal.eye, glow: true });
+  return { stalk: stalk.geometry(), ball: m.geometry() };
+}
+// One door of the mouth (the third maxilliped of a real crab, which shuts over the rest like a door): hinged about y at its outer edge, the plate toward -x, with the
+// small feeler such a door carries. The door on the other side is this one turned over (scale.x = -1).
+export function keeperJaw(pal) {
+  const m = mesher(), { pale, tone, dark } = pal, edge = tint(pale, tone, 0.35), a = [0, 0.16, 0], b = [0, -0.16, 0], c = [-0.31, -0.19, 0.015], d = [-0.31, 0.11, 0.015], mid = [-0.16, -0.02, 0.075];
+  for (const [p, q] of [[a, b], [b, c], [c, d], [d, a]]) m.out(p, q, mid, [-0.15, 0, -0.5], [edge, edge, pale]);
+  m.quad(a, b, [c[0], c[1], -0.02], [d[0], d[1], -0.02], dark).limb([-0.27, 0.1, 0.03], [-0.2, 0.3, 0.1], 0.04, 0.012, 3, [pale, dark]);
+  return m.geometry();
+}
+// a feeler (def: its entry in KEEPER.feelers): straight along +z, three-sided, thinning to nothing, ringed light and dark
+export function keeperFeeler(pal, def) {
+  const m = mesher(), { pale, dark } = pal, n = def.cuts.length - 1, r0 = def.long > 0.6 ? 0.04 : 0.034;
+  const ring = (z, i) => { const r = i === n ? 0.003 : r0 * (1 - 0.72 * (i / n)); return [[-r, -0.5 * r, z], [0, r, z], [r, -0.5 * r, z]]; };
+  m.skin(def.cuts.map((z, i) => ring(i === 0 ? -0.04 : z, i)), (i) => (i % 2 ? pale : tint(dark, pale, 0.25)));
+  return m.geometry();
+}
+// What shows when leg i has been torn off: the stump in its socket, and a crack that runs from there up the seams between the plates, lit in its depth.
+// It lies along the edges the plates meet at, which are the only lines on the dome that are not raised.
+export function keeperCrack(pal, i) {
+  const m = mesher(), { tone, pale, deep } = pal, leg = KEEPER.legs[i], hot = pal.crack || '#ff4f7b', N = KEEPER_N, step = (Math.PI * 2) / N, s = leg.side, turn = s * (i % 2 ? -1 : 1);
+  const k0 = Math.round(Math.atan2(leg.hip[0], leg.hip[2]) / step), node = (ring, k) => domeAt(k * step, KEEPER_DOME[ring][0]);
+  const corners = [domeAt(k0 * step, 0.16), node(1, k0), node(2, k0), node(2, k0 + turn), node(3, k0 + turn), node(3, k0 + (i % 2 ? 2 * turn : 0)), node(4, k0 + (i % 2 ? 2 * turn : 0))];
+  // from corner to corner along the seams, but not straight: each run is broken twice, to one side and the other
+  const out = (p, lift) => { const l = Math.hypot(p[0], p[1] - 0.3, p[2]) || 1; return [p[0] + (p[0] / l) * lift, p[1] + ((p[1] - 0.3) / l) * lift, p[2] + (p[2] / l) * lift]; };
+  const across = (a, b) => new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).cross(new THREE.Vector3(a[0], a[1] - 0.3, a[2]).normalize()).normalize();
+  const path = [corners[0]]; for (let j = 0; j + 1 < corners.length; j++) { const a = corners[j], b = corners[j + 1], sd = across(a, b); for (const [t, o] of [[0.36, 0.07], [0.68, -0.06], [1, 0]]) { const q = [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * t); path.push([q[0] + sd.x * o, q[1] + sd.y * o, q[2] + sd.z * o]); } }
+  const n = path.length - 1, wide = (j) => 0.19 * (1 - 0.78 * (j / n)) * (j === 0 ? 0.7 : 1); // (wide enough to be seen from the dive's camera, fifteen metres off)
+  const strip = (k, lift, colour, glow) => { for (let j = 0; j < n; j++) { const a = out(path[j], lift), b = out(path[j + 1], lift), sd = across(a, b), q = (p, w, t) => [p[0] + sd.x * w * t, p[1] + sd.y * w * t, p[2] + sd.z * w * t], w0 = wide(j) * k, w1 = wide(j + 1) * k;
+    m.tri(q(a, w0, 1), q(a, w0, -1), q(b, w1, -1), colour, glow).tri(q(a, w0, 1), q(b, w1, -1), q(b, w1, 1), colour, glow); } };
+  strip(1, 0.022, deep, false); strip(0.5, 0.034, [hot, hot, tint(hot, '#ffffff', 0.35)], true);
+  { const a = path[5], b = node(2, k0 - turn), sd = across(a, b), q = [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * 0.55), o = out(a, 0.024), e = out(q, 0.024); m.tri([o[0] + sd.x * 0.05, o[1] + sd.y * 0.05, o[2] + sd.z * 0.05], [o[0] - sd.x * 0.05, o[1] - sd.y * 0.05, o[2] - sd.z * 0.05], e, [deep, deep, hot]); } // a short one branching off it
+  // the stump: pale where it tore, dark in the middle, with a splinter or two
+  const h = leg.hip, d = new THREE.Vector3(h[0] * 0.2, 0, h[2] * 0.1).normalize(), tipOf = (l) => [h[0] + d.x * l, h[1] + d.y * l, h[2] + d.z * l];
+  m.limb(tipOf(-0.02), tipOf(0.12), 0.17, 0.13, 5, [pale, tint(pale, tone, 0.5)]).cap(m.last, [d.x, d.y, d.z], [deep, hot, hot], -0.05, true);
+  m.limb(tipOf(0.08), [h[0] + d.x * 0.3, h[1] + 0.1, h[2] + d.z * 0.3 + 0.05], 0.04, 0.004, 3, [pale, deep]).limb(tipOf(0.08), [h[0] + d.x * 0.26, h[1] - 0.08, h[2] + d.z * 0.26 - 0.06], 0.035, 0.004, 3, [pale, deep]);
+  return m.geometry();
 }
 
 // ---------------------------------------------------------------- the Shearer: a sawfish, the saw toothed in the district's colour
-// A ray in front and a shark behind, as sawfish are: a flat wide head with the wings grown onto it, eyes on top, the mouth and gills
-// underneath, and from the tail-root back a shark's two fins and uneven tail. The saw is a quarter of its length. Its teeth are lit
-// from within and take the district's colour: sawfish.js brightens them when it feels a fish. One model; it bends in its shader.
-export const SHEARER = { neck: 1.5, nose: 3.75, length: 6.9, teeth: 12 }; // neck: where the head turns on the body (z); nose: the saw's tip
-// wear: how the saw has fared in its fight. lost: rows of teeth knocked out, 0 to 4 (every fourth tooth is a row, so the saw goes gap-toothed, and a stump is left
-// where each was); snapped: the blade broken off short, ragged and dark at the break
-export function shearer(pal, { lost = 0, snapped = false } = {}) {
-  const m = mesher(), { tone, back, flank, belly, saw: pale } = pal, shade = dim(tone, 0.8), dark = '#241833', mottle = '#4a375e';
-  const secs = [[1.95, 0.3, 0.1, 0.08, -0.18], [1.55, 0.58, 0.26, 0.14, -0.12], [1.05, 0.8, 0.4, 0.17, -0.05], [0.35, 0.74, 0.5, 0.2, 0], [-0.45, 0.5, 0.46, 0.2, 0], [-1.25, 0.3, 0.33, 0.17, 0.02], [-1.95, 0.15, 0.2, 0.11, 0.04], [-2.45, 0.07, 0.11, 0.07, 0.06]];
-  hull(m, secs, (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 3 === 0 ? mottle : flank), 8);
-  // the height of the underside at (x, z), for what is drawn on it
-  const under = (x, z) => { let i = 0; while (i < secs.length - 2 && secs[i + 1][0] > z) i++; const [z0, w0, , d0, y0] = secs[i], [z1, w1, , d1, y1] = secs[i + 1], t = (z0 - z) / (z0 - z1), w = w0 + (w1 - w0) * t, d = d0 + (d1 - d0) * t;
-    return y0 + (y1 - y0) * t - d + d * 0.293 * Math.min(1, Math.abs(x) / (0.707 * w)) - 0.012; };
-  const mark = (x0, z0, x1, z1, wide, colour) => { const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, nx = (-dz / l) * wide, nz = (dx / l) * wide; m.quad([x0 - nx, under(x0 - nx, z0 - nz), z0 - nz], [x0 + nx, under(x0 + nx, z0 + nz), z0 + nz], [x1 + nx, under(x1 + nx, z1 + nz), z1 + nz], [x1 - nx, under(x1 - nx, z1 - nz), z1 - nz], colour); };
-  // the saw: a flat blade, and a row of teeth down each edge
-  const end = snapped ? 2.82 : SHEARER.nose, endW = snapped ? 0.215 : 0.14;
-  const base = ringZ(1.9, 0.29, 0.07, 0.07, -0.18, 4), tip = ringZ(end, endW, snapped ? 0.05 : 0.03, snapped ? 0.05 : 0.03, -0.18, 4);
-  m.skin([base, tip], [pale, CREAM]).cap(tip, [0, 0, 1], snapped ? dark : pale);
-  if (snapped) for (const [x, l] of [[-0.14, 0.2], [0.02, 0.11], [0.13, 0.26]]) m.limb([x, -0.18, end - 0.02], [x * 0.8, -0.18, end + l], 0.05, 0.004, 3, [pale, dark], true); // splinters, where it broke
-  both((s) => {
-    for (let i = 0; i < SHEARER.teeth; i++) { const t = (i + 0.5) / SHEARER.teeth, z = 2.02 + t * (SHEARER.nose - 2.1), w = 0.285 - t * 0.14, gone = (i + (s > 0 ? 0 : 2)) % 4 < lost; if (z > end - 0.05) continue; // (the two edges lose different teeth)
-      if (gone) m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.05), -0.18, z + 0.01], 0.04, 0.02, 3, [shade, dark], true); else m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.24 - t * 0.05), -0.18, z + 0.035], 0.045, 0.002, 3, [tone, shade], true); }
-    m.fin([[s * 0.55, -0.1, 1.55], [s * 0.8, -0.1, 0.75], [s * 0.62, -0.1, -0.25]], [[s * 1.15, -0.14, 1.1], [s * 1.95, -0.24, 0.2], [s * 1.0, -0.16, -0.55]], [flank, back]); // the wings, grown onto the head
-    m.fin([[s * 0.42, -0.18, -0.75], [s * 0.32, -0.16, -1.2]], [[s * 0.85, -0.28, -1.15], [s * 0.42, -0.2, -1.45]], flank);
-    m.eye([s * 0.56, 0.3, 1.22], [s * 0.7, 0.7, 0.2], 0.12, { iris: pal.eye, glow: true, slit: true });
-    m.tri([s * 0.5, 0.36, 0.98], [s * 0.63, 0.31, 0.9], [s * 0.47, 0.34, 0.8], dark); // the spiracle behind each eye
-    mark(s * 0.17, 1.66, s * 0.27, 1.56, 0.035, dark); // underneath: a nostril,
-    for (let i = 0; i < 5; i++) mark(s * (0.3 + i * 0.012), 1.0 - i * 0.15, s * (0.5 + i * 0.012), 0.94 - i * 0.15, 0.022, dark); // five gill slits,
-    mark(s * 0.02, 1.3, s * 0.2, 1.33, 0.028, dark); mark(s * 0.2, 1.33, s * 0.3, 1.4, 0.028, dark); // and half of the mouth, turned up at the corner
+// A ray in front and a shark behind, as sawfish are: a flat wide head with the wings grown onto it, eyes on top with a breathing hole behind each, the
+// mouth, the nostrils and five gill slits a side underneath, two tall back fins, and a shark's uneven tail. The saw is a quarter of its length. Its teeth
+// are lit from within and take the district's colour: sawfish.js brightens them when it feels a fish.
+// It is made of pieces, and sawfish.js puts them together:
+//   shearer       the head, the wings, the trunk as far as the tail root, the first back fin. It bends in its shader (spine.js), and its wings ripple, its
+//                 gills heave, its breathing holes gape and its eyelids come down there too, by the marks this puts on each corner (`flex`, `swell`)
+//   shearerSaw    the blade as far as where it would break, the end beyond that, the break itself, and one tooth. All rigid, and hung on the head
+//   shearerTail   everything behind the hind fins, with the second back fin: modelled straight along +z from where it joins, and trailed by strands.js
+// SHEARER says where they join. neck: where the head turns on the body (z); nose: the saw's tip; snap: where the saw breaks; all: every tooth (which edge,
+// which of the four rows it goes with, where on the edge, how long, and whether it is on the end that breaks off). Every fourth tooth is a row, and the
+// two edges lose different teeth. swim: the wave the trunk swims with, which starts behind the wings; tail: where the tail joins, and its joints.
+export const SHEARER = (() => {
+  const neck = 1.5, nose = 3.75, snap = 2.82, each = 16, sawY = -0.18;
+  const wide = (z) => 0.3 - (z - 1.9) * 0.0865, thick = (z) => 0.076 - (z - 1.9) * 0.0225; // half the blade's width, and half its thickness, at z
+  const all = [1, -1].flatMap((side) => Array.from({ length: each }, (_, i) => { const t = (i + 0.5) / each, z = 2.02 + t * (nose - 2.1); return { side, i, row: (i + (side > 0 ? 0 : 2)) % 4, z, x: side * (wide(z) - 0.035), long: 0.27 - 0.07 * t, end: z > snap }; }));
+  return { neck, nose, length: 6.9, teeth: each, snap, sawY, wide, thick, all, swim: { amp: 0.2, waves: 2.2, nose: 1.3, length: 4.6 }, tail: { root: -1.25, cuts: [0, 0.42, 0.84, 1.24, 1.62, 2.05] }, holes: [[0.45, 0.34, 0.93], [-0.45, 0.34, 0.93]] }; // holes: where the two breathing holes are
+})();
+// the trunk in sections: z, half its width, how far the back stands over its middle and the belly under it, and the height of its middle
+const SAW_BODY = [[1.95, 0.3, 0.1, 0.08, -0.18], [1.75, 0.45, 0.18, 0.11, -0.15], [1.5, 0.62, 0.27, 0.14, -0.12], [1.25, 0.76, 0.35, 0.16, -0.085], [1.0, 0.83, 0.42, 0.175, -0.05], [0.7, 0.84, 0.47, 0.19, -0.02], [0.35, 0.78, 0.5, 0.2, 0], [0, 0.66, 0.5, 0.2, 0], [-0.4, 0.52, 0.46, 0.2, 0], [-0.8, 0.4, 0.4, 0.19, 0.01], [-1.25, 0.3, 0.33, 0.17, 0.02]];
+const SAW_WING = [[1.74, 0], [1.5, 0.2], [1.25, 0.42], [1.0, 0.63], [0.75, 0.83], [0.5, 1.02], [0.25, 1.17], [0.08, 1.22], [-0.12, 0.98], [-0.3, 0.6], [-0.45, 0.28], [-0.56, 0]]; // z, and how far the wing stands out from the body's side there
+const SAW_HIND = [[-0.7, 0], [-0.86, 0.3], [-1.02, 0.44], [-1.14, 0.26], [-1.21, 0]]; // the same for a hind fin
+const sawAt = (z) => { let i = 0; while (i < SAW_BODY.length - 2 && SAW_BODY[i + 1][0] > z) i++; const a = SAW_BODY[i], b = SAW_BODY[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return [1, 2, 3, 4].map((k) => a[k] + (b[k] - a[k]) * t); };
+// the height of its back, and of its underside, at (x, z): a section is ten-sided
+const sawSkin = (x, z, top) => { const [w, up, dn, y] = sawAt(z), u = Math.min(0.951, Math.abs(x) / w), h = u <= 0.588 ? 1 - 0.191 * u / 0.588 : 0.809 - 0.5 * (u - 0.588) / 0.363; return top ? y + up * h : y - dn * h; };
+// a fin that stands on the back: thick where it grows and a blade at its edge, both faces made. roots, tips: [y, z] down its length
+const sail = (m, roots, tips, half, colours) => { for (const s of [1, -1]) for (let k = 0; k + 1 < roots.length; k++) { const c = colours[k % colours.length];
+  m.quad([s * half, roots[k][0], roots[k][1]], [s * half, roots[k + 1][0], roots[k + 1][1]], [0, tips[k + 1][0], tips[k + 1][1]], [0, tips[k][0], tips[k][1]], [c[0], c[0], c[1]]); }
+  const n = roots.length - 1; m.tri([half, roots[0][0], roots[0][1]], [-half, roots[0][0], roots[0][1]], [0, tips[0][0], tips[0][1]], colours[0][0]).tri([half, roots[n][0], roots[n][1]], [-half, roots[n][0], roots[n][1]], [0, tips[n][0], tips[n][1]], colours[0][0]); };
+export function shearer(pal) {
+  const m = mesher(), { tone, back, flank, belly, eye } = pal, gill = pal.gill || '#ff8fb0', shade = dim(tone, 0.8), dark = '#241833', mottle = '#4a375e', low = tint(flank, belly, 0.3), under = tint(belly, flank, 0.14), rim = tint(flank, tone, 0.55);
+  const top = (x, z) => sawSkin(x, z, true), bot = (x, z) => sawSkin(x, z, false), N = 10;
+  const moved = [], move = (p, d, kind) => { moved.push([p, d, kind]); return p; }; // corners that go somewhere of their own: 1 with the breath (a breathing hole, a gill slit, the mouth), 2 an eyelid, 3 the back fin's lean
+  hull(m, SAW_BODY, (i, k) => (k === 0 || k === N - 1 ? back : k === 1 || k === N - 2 ? ((i * 2 + k) % 3 === 0 ? mottle : flank) : k === 2 || k === N - 3 ? low : k === 4 || k === 5 ? belly : under), N);
+  m.cap(ringZ(-1.25, 0.3, 0.33, 0.17, 0.02, N), [0, 0, -1], flank, 0.24); // rounded, where the tail turns on it
+  // the wings, grown onto the head: thick where they join and thin at the edge, dark above and pale below, the rim in the district's colour
+  const wingFrom = m.triangles;
+  const wing = (outline, lift, fall) => both((s) => { const up = [], dn = [], mid = [], edge = [];
+    for (const [z, d] of outline) { const [w, u, v, y] = sawAt(z), k = d > 0 ? 1 : 0.2, r = [s * w * 0.86, y + u * 0.3 * k, z], e = [s * (w * 0.95 + d), y + lift - 0.06 - fall * d, z];
+      up.push(r); dn.push([s * w * 0.86, y - v * 0.3 * k + lift, z]); edge.push(e); mid.push([r[0] + (e[0] - r[0]) * 0.8, r[1] + (e[1] - r[1]) * 0.8 + 0.035 * d, z]); } // (a little arched, and thin for its last fifth)
+    for (let k = 0; k + 1 < edge.length; k++) { const c = k % 2 ? flank : tint(flank, back, 0.55), c2 = tint(c, back, 0.35), e = k % 2 ? rim : tint(rim, back, 0.3);
+      m.tri(up[k], up[k + 1], mid[k + 1], [c, c, c2]).tri(up[k], mid[k + 1], mid[k], [c, c2, c2]).tri(mid[k], mid[k + 1], edge[k + 1], [c2, c2, e]).tri(mid[k], edge[k + 1], edge[k], [c2, e, e]).quad(dn[k], dn[k + 1], edge[k + 1], edge[k], k % 2 ? belly : under); } });
+  wing(SAW_WING, 0, 0.07); wing(SAW_HIND, -0.05, 0.12);
+  const wingTo = m.triangles;
+  // the first back fin
+  sail(m, [[0.5, 0.16], [0.5, -0.1], [0.47, -0.38], [0.42, -0.63]].map(([, z]) => [top(0, z) - 0.03, z]), [[0.8, -0.02], [1.3, -0.42], [1.0, -0.74], [0.56, -0.92]], 0.075, [[shade, tone], [tone, tint(tone, '#ffffff', 0.2)], [shade, tone]]);
+  // the eyes, each on a low brow, looking up and out, with a lid that comes down over it
+  const spots = [];
+  both((s) => { const c = [s * 0.5, top(0.5, 1.26) - 0.03, 1.26], n = new THREE.Vector3(s * 0.667, 0.733, 0.133).normalize(), e = [c[0] + n.x * 0.15, c[1] + n.y * 0.15, c[2] + n.z * 0.15], r = 0.115;
+    m.limb(c, e, 0.165, 0.14, 6, [back, mottle]).eye([e[0] + n.x * 0.004, e[1] + n.y * 0.004, e[2] + n.z * 0.004], [n.x, n.y, n.z], r, { iris: eye, glow: true, slit: true });
+    // the lid: strips from the upper rim, which are nothing while the eye is open and are drawn down across it as it shuts
+    const U = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y).normalize(), V = new THREE.Vector3().crossVectors(n, U), on = (a, b) => [e[0] + n.x * 0.045 + U.x * a + V.x * b, e[1] + n.y * 0.045 + U.y * a + V.y * b, e[2] + n.z * 0.045 + U.z * a + V.z * b], R = r * 1.36;
+    const arc = [-1, -0.5, 0, 0.5, 1].map((t) => [R * Math.sqrt(1 - t * t * 0.96), R * t]);
+    for (let k = 0; k + 1 < arc.length; k++) { const [a0, b0] = arc[k], [a1, b1] = arc[k + 1], p0 = on(a0, b0), p1 = on(a1, b1), q0 = on(a0, b0 + 1e-3), q1 = on(a1, b1 + 1e-3), d0 = on(-a0, b0), d1 = on(-a1, b1);
+      move(q0, [d0[0] - p0[0], d0[1] - p0[1], d0[2] - p0[2]], 2); move(q1, [d1[0] - p1[0], d1[1] - p1[1], d1[2] - p1[2]], 2); m.quad(p0, p1, q1, q0, [back, back, mottle]); }
+    // the breathing hole behind it (a spiracle): a rim, and a mouth that is a slit when shut and gapes with each breath, lit inside
+    const sx = s * 0.45, sz = 0.93, A = 0.2, B = 0.125, ring = (ka, kb, lift) => Array.from({ length: 6 }, (_, j) => { const t = (j / 6) * Math.PI * 2, x = sx + B * kb * Math.cos(t), z = sz + A * ka * Math.sin(t) - 0.03 * Math.cos(t) * s; return [x, top(x, z) + lift, z]; });
+    const lip = ring(1, 1, 0.04), shut = ring(0.8, 0.05, 0.045), open = ring(0.8, 0.8, 0.0), pit = [sx, top(sx, sz) - 0.03, sz], from = [sx, top(sx, sz) - 0.6, sz];
+    shut.forEach((q, j) => move(q, [open[j][0] - q[0], open[j][1] - q[1], open[j][2] - q[2]], 1));
+    const outer = ring(1.3, 1.36, 0.004); for (let j = 0; j < 6; j++) m.out(outer[j], outer[(j + 1) % 6], lip[(j + 1) % 6], from, [back, back, mottle]).out(outer[j], lip[(j + 1) % 6], lip[j], from, [back, mottle, mottle]);
+    for (let j = 0; j < 6; j++) m.out(lip[j], lip[(j + 1) % 6], shut[(j + 1) % 6], from, [mottle, mottle, dark]).out(lip[j], shut[(j + 1) % 6], shut[j], from, [mottle, dark, dark]);
+    const g0 = m.triangles; for (let j = 0; j < 6; j++) m.out(shut[j], shut[(j + 1) % 6], pit, from, [gill, gill, tint(gill, '#ffffff', 0.4)]); spots.push([g0, m.triangles]);
   });
-  m.fin([[0, 0.48, 0.25], [0, 0.48, -0.2], [0, 0.44, -0.6]], [[0, 1.25, -0.3], [0, 1.08, -0.7], [0, 0.5, -0.85]], [tone, shade]);
-  m.fin([[0, 0.3, -1.2], [0, 0.27, -1.55]], [[0, 0.72, -1.55], [0, 0.3, -1.8]], tone);
-  m.fin([[0, 0.14, -2.42], [0, 0.02, -2.48], [0, -0.08, -2.42]], [[0, 1.15, -3.3], [0, 0.1, -2.85], [0, -0.5, -3.0]], [tone, shade]);
+  // underneath: the nostrils, the mouth, and five gill slits a side, which open with each breath and show the gills
+  const mark = (x0, z0, x1, z1, wide, colour, open = 0) => { const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, nx = (-dz / l) * wide, nz = (dx / l) * wide, at = (x, z) => [x, bot(x, z) - 0.014, z];
+    const a = at(x0 - nx, z0 - nz), b = at(x0 + nx, z0 + nz), c = at(x1 + nx, z1 + nz), d = at(x1 - nx, z1 - nz), back2 = nz > 0 ? [a, d] : [b, c]; // the two corners toward the tail are the ones that go
+    if (open) for (const q of back2) move(q, [0, -0.012, -open], 1);
+    m.out(a, b, c, [0, 0.2, 0.5], Array.isArray(colour) ? [nz > 0 ? colour[1] : colour[0], nz > 0 ? colour[0] : colour[1], nz > 0 ? colour[0] : colour[1]] : colour).out(a, c, d, [0, 0.2, 0.5], Array.isArray(colour) ? [nz > 0 ? colour[1] : colour[0], nz > 0 ? colour[0] : colour[1], nz > 0 ? colour[1] : colour[0]] : colour); };
+  both((s) => {
+    mark(s * 0.16, 1.67, s * 0.27, 1.57, 0.036, dark); m.out([s * 0.16, bot(0.16, 1.6) - 0.016, 1.6], [s * 0.25, bot(0.25, 1.53) - 0.016, 1.53], [s * 0.2, bot(0.2, 1.6) - 0.02, 1.6], [0, 0.2, 0.5], under); // a nostril, and its flap
+    const g0 = m.triangles;
+    for (let i = 0; i < 5; i++) mark(s * (0.29 + i * 0.012), 1.02 - i * 0.15, s * (0.52 + i * 0.012), 0.95 - i * 0.15, 0.02, [dark, gill], 0.07);
+    mark(s * 0.0, 1.31, s * 0.19, 1.335, 0.026, [dark, dim(gill, 0.75)], 0.035); mark(s * 0.19, 1.335, s * 0.3, 1.41, 0.026, [dark, dim(gill, 0.75)], 0.02); // half of the mouth, turned up at the corner
+    spots.push([g0, m.triangles]);
+  });
+  // small marks: the pores it feels with, over the snout; and paler flecks down the back
+  let seed = 23; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 14; i++) { const z = 1.42 + 0.46 * rnd(), s = i % 2 ? 1 : -1, x = s * (0.05 + 0.4 * rnd()) * sawAt(z)[0], y = top(x, z) + 0.012, l = 0.02 + 0.012 * rnd(); m.tri([x, y, z + l], [x - l * 0.8, y, z - l * 0.6], [x + l * 0.8, y, z - l * 0.6], dark); }
+  for (let i = 0; i < 16; i++) { const z = 0.9 - 2.0 * rnd(), s = i % 2 ? 1 : -1, x = s * (0.1 + 0.42 * rnd()) * sawAt(z)[0], l = 0.035 + 0.03 * rnd(); m.tri([x, top(x, z + l) + 0.012, z + l], [x - l * 0.7, top(x - l * 0.7, z - l) + 0.012, z - l], [x + l * 0.7, top(x + l * 0.7, z - l) + 0.012, z - l], mottle); }
+  const g = m.geometry(), P = g.attributes.position, C = g.attributes.color, F = new Float32Array(P.count * 4), S = new Float32Array(P.count * 4);
+  // What sawfish.js needs to move it. swell: how far a corner goes (x, y, z) when the gills fill, and, on a wing, how far out from the body's side it is (to the
+  // animal's left, or minus that to its right), which is how much it ripples and folds. flex: where a corner goes of its own (x, y, z), and which kind it is.
+  for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), [w, , , y0] = sawAt(z), isWing = i >= wingFrom * 3 && i < wingTo * 3, reach = isWing ? Math.max(0, Math.abs(x) - w * 0.9) : 0;
+    const b = Math.sin(Math.PI * Math.min(1, Math.max(0, (z - 0.1) / 1.55))) ** 1.2 * (1 - Math.min(1, reach / 0.5)), u = Math.max(-1, Math.min(1, x / w));
+    S[i * 4] = 0.13 * u * b; S[i * 4 + 1] = (y >= y0 ? 0.17 * (1 - 0.5 * Math.abs(u)) : -0.04) * b; S[i * 4 + 3] = reach > 0 ? Math.sign(x) * Math.max(1e-4, reach) : 0;
+    const yr = top(0, z) - 0.03; if (!isWing && Math.abs(x) < 0.08 && z < 0.2 && z > -0.95 && y > yr + 0.02) { F[i * 4] = ((y - yr) / 0.8) ** 2 * 0.5; F[i * 4 + 3] = 3; } // the back fin: it leans most at its tip
+  }
+  for (const [p, d, kind] of moved) for (let i = 0; i < P.count; i++) if (Math.abs(P.getX(i) - p[0]) < 2e-4 && Math.abs(P.getY(i) - p[1]) < 2e-4 && Math.abs(P.getZ(i) - p[2]) < 2e-4) { F[i * 4] = d[0]; F[i * 4 + 1] = d[1]; F[i * 4 + 2] = d[2]; F[i * 4 + 3] = kind; }
+  for (const [a2, b2] of spots) for (let i = a2 * 3; i < b2 * 3; i++) C.setW(i, 0.5); // the gills: lit by its breath, not with its teeth
+  g.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4)); g.setAttribute('swell', new THREE.Float32BufferAttribute(S, 4));
+  return g;
+}
+// The saw's pieces. The blade and the break are in the saw's own space, which is the body's with the neck at the origin (z less SHEARER.neck); the end, and a
+// tooth, are each about a point of their own, so that they turn about themselves once they have come away. A tooth points along +x from its root.
+export function shearerSaw(pal) {
+  const { tone, saw: pale } = pal, shade = dim(tone, 0.8), dark = '#241833', hot = tint(tone, '#ffffff', 0.35), { neck, nose, snap, sawY: Y, wide, thick, all } = SHEARER, mid = (snap + nose) / 2;
+  const ring = (z, o, k = 1) => { const w = wide(z) * k, t = thick(z) * k; return [[-w, Y, z - o], [-w * 0.55, Y + t, z - o], [w * 0.55, Y + t, z - o], [w, Y, z - o], [w * 0.55, Y - t, z - o], [-w * 0.55, Y - t, z - o]]; };
+  const paint = (z0, z1) => (i, k) => { const c = tint(pale, CREAM, Math.min(1, Math.max(0, ((i ? z1 : z0) - 1.9) / 1.85))), c1 = tint(pale, CREAM, Math.min(1, Math.max(0, (z1 - 1.9) / 1.85))); return k === 1 ? [c, c1] : k === 4 ? [dim(c, 0.78), dim(c1, 0.78)] : k < 3 ? [dim(c, 0.9), dim(c1, 0.9)] : [dim(c, 0.84), dim(c1, 0.84)]; };
+  const stump = (m, t, o, y) => { const z = t.z - o, x = t.x, s = t.side; m.out([x, y + 0.022, z], [x, y, z + 0.042], [x + s * 0.085, y, z + 0.008], [x, y, z], [shade, shade, dark], true).out([x, y, z + 0.042], [x, y - 0.022, z], [x + s * 0.085, y, z + 0.008], [x, y, z], [shade, shade, dark], true)
+    .out([x, y - 0.022, z], [x, y, z - 0.042], [x + s * 0.085, y, z + 0.008], [x, y, z], [shade, shade, dark], true).out([x, y, z - 0.042], [x, y + 0.022, z], [x + s * 0.085, y, z + 0.008], [x, y, z], [shade, shade, dark], true); };
+  const pores = (m, from, to, o, y) => { for (let z = from; z < to; z += 0.21) for (const s of [1, -1]) { const x = s * wide(z) * 0.27, h = y + thick(z) + 0.004, r = 0.02; m.quad([x - r, h, z - o], [x, h, z - o + r * 1.6], [x + r, h, z - o], [x, h, z - o - r * 1.6], tint(pale, dark, 0.45)); } }; // the pores it feels a fish with, in two rows down the blade
+  // the blade, from inside the head to where it would break
+  const blade = mesher(), zs = [1.76, 1.95, 2.4, snap];
+  blade.skin(zs.map((z) => ring(z, neck)), (i, k) => paint(zs[i], zs[i + 1])(0, k)).cap(ring(zs[0], neck), [0, 0, -1], pale); pores(blade, 2.04, snap - 0.05, neck, Y);
+  for (const t of all) if (!t.end) stump(blade, t, neck, Y);
+  // the end beyond that, blunt at its tip, dark and ragged where it would come away
+  const end = mesher(), ze = [snap - 0.01, 3.3, 3.66, nose];
+  end.skin(ze.map((z, i) => ring(z, mid, i === 3 ? 0.62 : 1).map((p) => [p[0], p[1] - Y, p[2]])), (i, k) => paint(ze[i], ze[i + 1])(0, k)).cap(ring(nose, mid, 0.62).map((p) => [p[0], p[1] - Y, p[2]]), [0, 0, 1], CREAM, 0.035).cap(ring(snap - 0.01, mid).map((p) => [p[0], p[1] - Y, p[2]]), [0, 0, -1], [dark, pale, pale], -0.05);
+  pores(end, snap + 0.12, nose - 0.12, mid, 0); for (const t of all) if (t.end) stump(end, t, mid, 0);
+  // the break: what is left on the blade when the end has gone
+  const broken = mesher(); broken.cap(ring(snap, neck), [0, 0, 1], [dark, pale, pale], -0.04);
+  for (const [x, l] of [[-0.14, 0.2], [0.02, 0.11], [0.13, 0.26], [-0.04, 0.17]]) broken.limb([x, Y, snap - neck - 0.02], [x * 0.8, Y + (x > 0 ? 0.02 : -0.015), snap - neck + l], 0.045, 0.004, 3, [pale, dark]);
+  // one tooth: a flat spike, widest at its root, lit from the root out
+  const tooth = mesher(), L = all[0].long, r0 = [[-0.05, 0.03, 0], [-0.05, 0, 0.058], [-0.05, -0.03, 0], [-0.05, 0, -0.058]], r1 = [[0.11, 0.021, 0.004], [0.11, 0, 0.046], [0.11, -0.021, 0.004], [0.11, 0, -0.036]], tip = [L, 0, 0.022];
+  tooth.skin([r0, r1], [hot, tone], true); for (let k = 0; k < 4; k++) tooth.out(r1[k], r1[(k + 1) % 4], tip, [0.1, 0, 0], [tone, tone, shade], true); tooth.cap(r0, [-1, 0, 0], [pale, shade, shade]);
+  return { blade: blade.geometry(), end: end.geometry(), broken: broken.geometry(), tooth: tooth.geometry(), mid: [0, Y, mid - neck] };
+}
+// The tail: the trunk behind the hind fins, the second back fin, and the tail fin, its upper lobe much the longer. Straight along +z from where it joins the body
+// (the body's -z), its back toward +y; it begins a little inside the body, so that the join does not open when it swings.
+export function shearerTail(pal) {
+  const m = mesher(), { tone, back, flank, belly } = pal, shade = dim(tone, 0.8), mottle = '#4a375e', low = tint(flank, belly, 0.3), N = 8;
+  const secs = [[-0.24, 0.23, 0.25, 0.12, 0.02], [0, 0.3, 0.33, 0.17, 0.02], [0.35, 0.225, 0.27, 0.14, 0.03], [0.7, 0.155, 0.205, 0.11, 0.04], [1.0, 0.105, 0.15, 0.09, 0.05], [1.2, 0.075, 0.115, 0.07, 0.06], [1.36, 0.04, 0.085, 0.05, 0.08]];
+  hull(m, secs, (i, k) => (k === 0 || k === N - 1 ? back : k === 1 || k === N - 2 ? ((i + k) % 3 === 0 ? mottle : flank) : k === 3 || k === 4 ? belly : low), N);
+  m.cap(ringZ(-0.24, 0.23, 0.25, 0.12, 0.02, N), [0, 0, -1], flank, 0.12);
+  const ridge = (z) => { let i = 0; while (i < secs.length - 2 && secs[i + 1][0] < z) i++; const a = secs[i], b = secs[i + 1], t = (z - a[0]) / (b[0] - a[0]); return a[4] + a[2] + (b[4] + b[2] - a[4] - a[2]) * t; }; // the height of its back at z
+  sail(m, [0.16, 0.38, 0.6].map((z) => [ridge(z) - 0.03, z]), [[0.56, 0.36], [0.84, 0.66], [0.44, 0.86]], 0.055, [[shade, tone], [tone, tint(tone, '#ffffff', 0.2)]]); // the second back fin
+  // the tail fin: the spine turns up into the upper lobe, which carries a blade behind it; under it a short lower lobe
+  m.limb([0, 0.1, 1.3], [0, 0.62, 1.68], 0.07, 0.045, 4, [back, shade]).limb([0, 0.62, 1.68], [0, 1.14, 2.05], 0.045, 0.01, 4, [shade, tone]);
+  const lead = [[0, 0.1, 1.3], [0, 0.62, 1.68], [0, 1.14, 2.05]], trail = [[0, 0.0, 1.38], [0, 0.14, 1.63], [0, 0.66, 1.94]];
+  m.fin(lead, trail, [[shade, shade, tone], tone]).tri(lead[2], trail[2], [0, 0.94, 2.045], tint(tone, '#ffffff', 0.2)); // (and the notch near its tip)
+  m.tri([0, -0.06, 1.27], [0, 0.0, 1.38], [0, -0.44, 1.73], [shade, shade, tone]).tri([0, 0.0, 1.38], [0, 0.14, 1.63], [0, -0.44, 1.73], [shade, tone, tone]);
   return m.geometry();
 }
 

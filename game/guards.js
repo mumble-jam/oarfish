@@ -396,13 +396,14 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       rig.walker.legs.forEach((l, i) => { l.lame = S.leg[i] === 1; });
       rig.update(dt, { x: pos.x, z: pos.z, yaw, vx: (pos.x - was.x) * kk, vz: (pos.z - was.z) * kk, ground: world.footing, floor: S.sink > 0.05 ? undefined : world.footing(v.set(pos.x, 0, pos.z)).y, time: ctx.time,
         wary: awake && !S.done ? clamp(1.3 - close / 11, 0, 1) : 0, look: fish, act: id ? { id, k, at: st === 'feed' && bait ? bait.pos : aim } : null,
-        tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink });
+        tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink, rage: S.lost >= F.rage }); // (rage: only so that it can be seen to rage)
       const clear = pos.y - (rig.walker.body.ground + HOME[1]) - 0.7; if (clear > 0 && !S.done) mesh.position.y += clear; // lifted off the ground, it is drawn where it is
       for (const m of fallen) { m.position.x += T * Math.round((ctx.focus.x - m.position.x) / T); m.position.z += T * Math.round((ctx.focus.z - m.position.z) / T); const low = world.height(m.position.x, m.position.z) + 0.14; if (m.position.y > low) { m.position.y = Math.max(low, m.position.y - 2.4 * dt); m.rotation.x += 0.9 * dt; } } // a leg that has come off sinks to the bed and lies there
       was.copy(pos);
     } else if (rig) { // the Shearer bends its own body (sawfish.js): it is told where it is, how it is moving and what it is about
       const k = dt > 1e-5 && pos.distanceTo(was) < 5 ? 1 / dt : 0, mood = S.done ? 'down' : S.stun > 0 ? 'stun' : S.state === 'tired' ? (S.stuck === 'stone' ? 'jammed' : S.stuck ? 'stuck' : 'tired') : S.state === 'idle' ? 'search' : S.state === 'wheel' ? 'sense' : S.state === 'cock' ? 'aim' : S.state;
       rig.update(dt, { x: pos.x, y: pos.y, z: pos.z, yaw, speed: Math.hypot(pos.x - was.x, pos.z - was.z) * k, climb: (pos.y - was.y) * k, mood, mode: S.state === 'cock' ? 'slash' : S.mode, side: S.side, k: S.T > 0 ? 1 - S.t / S.T : 0, look: fish, time: ctx.time });
+      rig.settle(dt, (p) => { p.x += T * Math.round((ctx.focus.x - p.x) / T); p.z += T * Math.round((ctx.focus.z - p.z) / T); return world.height(p.x, p.z); }); // the teeth it has lost, and the end of its saw, sink to the bed and lie there
       was.copy(pos);
     } else {
       mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());

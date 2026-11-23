@@ -109,7 +109,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     if (S.turn && !S.drag) S.yaw += dt * 0.3;
     if (shown?.actor) {
       const a = shown.actor, o = a.object;
-      if (a.rig) a.rig.show(dt, state, S.speed); // it stands on its own legs
+      if (a.rig) a.rig.show(dt, state, S.speed, S.lift); // it stands on its own legs (and is told how far the bed is under the stand, for what falls off it)
       else { a.tick(dt * (state.rate || 1), S.speed); o.rotation.z = state.wobble ? 0.35 * Math.sin(S.t * 14) : 0; }
       if (spec.spin) { o.rotation.y += dt * spec.spin[1]; o.rotation.x += dt * spec.spin[0]; }
       if (state.sway) o.rotation.y = Math.sin(S.t * 0.4) * 0.6;
