@@ -19,7 +19,7 @@ const NATURAL = /^(rock|kelp|stag|finger|table|tuft|pebble|star|brittle|urchin|c
 const LOW = /^(flag|rubble|shard|coin)$/; // stone that lies and does not stand: paving, rubble, sherds, coin
 // the ground a piece covers: the corners of its model, sized, turned and put in its place, seen from above, and the outline round them
 function footprint(THREE, p) {
-  const q = new THREE.Quaternion(...p.q), v = new THREE.Vector3(), pts = [];
+  const q = new THREE.Quaternion(...p.turn), v = new THREE.Vector3(), pts = [];
   for (const i of [0, 3]) for (const j of [1, 4]) for (const k of [2, 5]) { v.set(p.box[i] * p.sx, p.box[j] * p.sy, p.box[k] * p.sz).applyQuaternion(q); pts.push([p.x + v.x, p.z + v.z]); }
   pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), half = (list) => { const h = []; for (const pt of list) { while (h.length > 1 && cross(h[h.length - 2], h[h.length - 1], pt) <= 0) h.pop(); h.push(pt); } h.pop(); return h; };
@@ -111,6 +111,7 @@ function draw({ panels, scale }) {
     // the words on the plan: each tries the places round its mark and takes the first that is clear of the words already there and of the marks that matter
     const taken = [], soft = [], keepOff = (x, y, r) => taken.push([x - r, y - r, x + r, y + r]);
     for (const [x, z, rad] of p.sites) if (rad <= 14) { const k = rad * scale * 0.8; soft.push([X(wrap(x)) - k, Y(wrap(z)) - k, X(wrap(x)) + k, Y(wrap(z)) + k]); } // and of the places themselves, if there is anywhere else to go
+    if (p.nest) keepOff(X(sx) + (1.2 * Math.cos(p.nest.yaw) - 3.75 * Math.sin(p.nest.yaw)) * scale, Y(sz) + (1.2 * Math.sin(p.nest.yaw) + 3.75 * Math.cos(p.nest.yaw)) * scale, 4.6 * scale); // the nest's own ground
     keepOff(X(sx), Y(sz), 11); for (const [x, z, n] of p.swarms) keepOff(X(wrap(x)), Y(wrap(z)), Math.sqrt(n) * 0.9 + 3); for (const q of p.puzzles) { keepOff(X(wrap(q.x)), Y(wrap(q.z)), 7); keepOff(X(wrap(q.cx)), Y(wrap(q.cz)), 5); }
     for (const [x, z] of [...p.fragments, ...p.shells, ...p.jars, ...p.hunters, ...p.stations]) keepOff(X(wrap(x)), Y(wrap(z)), 7); if (p.mural) keepOff(X(wrap(p.mural[0])), Y(wrap(p.mural[1])), 9);
     const label = (s, x, z, r, o = {}) => { const cx = X(wrap(x)), cy = Y(wrap(z)), size = o.size || 11.5; g.font = `${o.weight || 500} ${size}px ${FONT}`; const w = g.measureText(s).width, h = size + 3, d = r + 5;
