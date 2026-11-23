@@ -5,7 +5,7 @@ import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
 import { resolve } from './npc.js';
-import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, wrapD, wrapRule, canWrap } from './world.js';
+import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, NEST, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
@@ -310,7 +310,10 @@ export async function start(saved = {}) {
     sum?.dispose(); sum = null;
     world?.dispose(); foes?.dispose();
     run.floor = index;
-    world = createWorld(scene, { seed: run.seed, floor: index, calm, nursery: index === 0 && teach.on && !teach.done && !window.__noNursery });
+    world = createWorld(scene, { seed: run.seed, floor: index, calm, nursery: index === 0 && teach.on && !teach.done && !window.__noNursery,
+      nest: index === 0 ? { record: nest.record, fragments: nest.fragments, places: SHELL_TYPES.map((type) => ({ type, found: nest.shells.includes(type) })) } : null });
+    nestShells.length = 0; // the shells the nest has to show, each over its own place (the world made the places; the shells are this file's to make)
+    if (world.react?.nest) for (const p of world.react.nest.places) if (p.found) { const m = kit.mesh(p.type, 0.95); m.position.set(p.x, p.y, p.z); world.react.nest.group.add(m); nestShells.push({ m, p, ph: nestShells.length * 1.7 }); }
     foes = createFoes(scene, world, { seed: run.seed }, game);
     field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3 });
     Object.assign(tut, { on: !!world.nursery, step: 0, stall: 0, told: false, was: 0, prize: null });
@@ -324,7 +327,7 @@ export async function start(saved = {}) {
     goalEl.style.display = ''; fade(false);
     applyLook(world.floor);
     const y = Math.min(world.height(SPAWN.x, SPAWN.z) + (fromAbove ? 9.5 : 3.3), world.ceiling - 1);
-    rig.reset(new THREE.Vector3(SPAWN.x, y, SPAWN.z), fromAbove ? rig.yaw : world.nursery ? world.nursery.dir : 2.5, fromAbove ? -0.5 : 0);
+    rig.reset(new THREE.Vector3(SPAWN.x, y, SPAWN.z), fromAbove ? rig.yaw : world.nursery ? world.nursery.dir : NEST.yaw, fromAbove ? -0.5 : 0);
     if (world.nursery) { cam.yaw = world.nursery.dir + Math.PI; cam.ease = null; rig.speed = SPEED.idle; } // looking down the paved way at the first hoop, and at rest: the first move is the player's
     focus.copy(rig.joints[0]);
     run.state = fromAbove ? 'arrive' : 'play'; run.stateT = 0; run.safe = 1.5;
@@ -444,7 +447,13 @@ export async function start(saved = {}) {
   // on purpose. Carried out over the open rift (or to the palace gate) it is given to the deep, and counted: in this dive, for the card
   // at its end, and for good, in this browser, for the nest that is to come.
   const HAUL = { slow: 0.85, at: 0.55, grip: 0.8, wait: 1.5 }; // `wait`: seconds a dropped one lies before a body still curled round it can take it up again
-  const nest = (() => { const n = store.get('oarfish.nest') || {}; return { fragments: n.fragments | 0, ...n }; })();
+  const nest = (() => { const n = store.get('oarfish.nest') || {}; return { ...n, fragments: n.fragments | 0, record: n.record | 0, shells: Array.isArray(n.shells) ? n.shells.filter((t) => SHELLS[t]) : [] }; })();
+  const nestShells = [];
+  // what the nest is to remember, noted as it happens so that a dive cut short still counts: the longest body, and each kind of shell found
+  function remember() { let changed = false;
+    if (run.longest > nest.record) { nest.record = run.longest; changed = true; }
+    for (const sh of run.shells) if (!nest.shells.includes(sh.type)) { nest.shells.push(sh.type); changed = true; }
+    if (changed) store.set('oarfish.nest', nest); }
   function takeUp(f) { run.haul = f; f.held = true; moment('loop'); buzz(0.4, 0.4, 120); run.kick = Math.max(run.kick, 0.3); }
   function letGo(how) { const f = run.haul; if (!f) return false; run.haul = null; world.react?.settle(f); f.wait = HAUL.wait; if (how === 'bite') buzz(0.5, 0.3, 160); return true; }
   function hauling(dt) {
@@ -484,7 +493,7 @@ export async function start(saved = {}) {
     }
     if (grew) {
       const up = stature(run.segs) > stature(before), by = run.segs - before;
-      buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); pulse('grow');
+      buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); remember(); pulse('grow');
       growPulse(up ? 1.5 : clamp(0.7 + 0.12 * by + 0.3 * size, 0.7, 1.3), up);
       moment(up ? 'crest' : 'grow', clamp(0.45 + 0.14 * by + 0.3 * size, 0, 1));
       say('grow', 'Eating makes you longer. Your length is your health.', 7);
@@ -550,7 +559,7 @@ export async function start(saved = {}) {
     let seg = 0;
     for (let s = SLOT_EVERY; s <= run.segs; s += SLOT_EVERY) if (!run.shells.some((x) => x.seg === s)) seg = s;
     if (!seg) return false;
-    run.shells.push({ type, seg }); shellsChanged(); buildFish(run.segs);
+    run.shells.push({ type, seg }); shellsChanged(); buildFish(run.segs); remember();
     return true;
   }
   function throwShell(piece, type) {
@@ -1754,6 +1763,7 @@ export async function start(saved = {}) {
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
     if (world.react) for (const c of world.react.opened.splice(0)) openCache(c);
+    for (const sh of nestShells) { sh.m.rotation.y += dt * 0.5; sh.m.position.y = sh.p.y + 0.05 * Math.sin(world.time.value * 1.3 + sh.ph); } // the nest's shells turn over their places
     // the mural at the rift (world.js, MURAL) lights a carving as the fish comes up to it: a note each, rising, and when all three are lit the band answers
     if (world.react) for (const c of world.react.carved.splice(0)) {
       if (c.what === 'sign') { music.chime(1 + c.i * 2, 0.9); buzz(0.15, 0.3, 90); }
@@ -1768,7 +1778,7 @@ export async function start(saved = {}) {
       else if (c.what === 'broke') moment('flit');
       else if (c.what === 'done') {
         run.cleaned++;
-        if (run.segs < MAX_SEGS) { run.segs++; buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); growPulse(1, false); }
+        if (run.segs < MAX_SEGS) { run.segs++; buildFish(run.segs); run.longest = Math.max(run.longest, run.segs); remember(); growPulse(1, false); }
         else run.charge = Math.min(1, run.charge + 0.34); // full grown: it goes to the crest
         music.gulp(6, 7, 0.8); pulse('grow'); moment('grow', 0.7);
         foes.startle(rig.snout, CLEAN.ring[1] + 4, CLEAN.start); // the body flares as it grows, and the hunters that had closed in start back from it: that is the moment to go

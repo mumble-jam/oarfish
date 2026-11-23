@@ -22,6 +22,11 @@ export const SWARMS = { s: { n: 8, r: 0.42 }, m: { n: 18, r: 0.76 }, l: { n: 36,
 // The loop that takes them is the same loop; what differs is how the swarm is brought to hold still for it.
 export { TEMPER };
 const KIND = { b: 'bolt', t: 'twin', g: 'glow' }, LOWER = { m: 's', l: 'm' };
+// The nest: where every dive starts, in the first band, and what it remembers of the dives before (main.js keeps the record and hands it in).
+// To the left of the body as it lies at the start, a line of stones as long as the longest body there has been, painted at both ends, so the
+// new body is measured against it at a glance. To the right, a place for each kind of shell, in two rows: a dish that holds the shell once
+// that kind has been found. The first of them stand on the column tops that have been hauled to the rifts, one for each.
+export const NEST = { yaw: 2.5, line: -1.25, step: 0.42, rows: [2.3, 3.45], gap: 0.95, lift: 0.3, stand: 0.6 };
 // The mural at a rift: a stele by the near lip with three carvings, lit for what has been done in this band in this dive: its greatest swarm taken,
 // a cache opened, the rift's keeper beaten. They light, one after another, when the head comes within `near` metres; all three lit, the stele's
 // painted top lights too. Nothing is written on it. The third carving is the keeper's own sign, band by band.
@@ -345,7 +350,7 @@ class Scatter {
   }
 }
 
-export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery = false } = {}) {
+export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery = false, nest = null } = {}) {
   const F = FLOORS[floor], G = geometries();
   const last = floor === FLOORS.length - 1;
   const rand = rng(seed * 977 + floor * 7919 + 13);
@@ -1099,6 +1104,28 @@ float seaLight(vec2 p, float t) {
   for (const f of fragments) { const g = add(new THREE.Group()), stone = mat(new THREE.MeshLambertMaterial({ color: stoneTones[0], vertexColors: true })), cushion = new THREE.Mesh(G.echinus, stone), neck = new THREE.Mesh(G.stump, stone),
       slab = new THREE.Mesh(G.block, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: district, emissiveIntensity: 0.2 })));
     slab.scale.set(1.5, 0.18, 1.5); slab.position.y = 0.2; neck.rotation.x = Math.PI; cushion.castShadow = slab.castShadow = neck.castShadow = true; g.add(neck, cushion, slab); g.scale.setScalar(0.8); g.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh = g; f.slab = slab; single.push(f); }
+  // The nest (NEST). One group, moved with the world as it comes round; everything in it is placed from the start point.
+  let nestAt = null;
+  if (nest && floor === 0 && !nursery) { const g = add(new THREE.Group()), yaw = NEST.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)];
+    const at = (f, r) => [SPAWN.x + fw[0] * f + rt[0] * r, SPAWN.z + fw[1] * f + rt[1] * r], here = (x, y, z) => new THREE.Vector3(x - SPAWN.x, y, z - SPAWN.z);
+    const stoneMat = mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true })), nm = new THREE.Matrix4(), nc = new THREE.Color(), flat = new THREE.Quaternion(), turned = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), upside = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+    const lay = (geo, items) => { if (!items.length) return null; const m = new THREE.InstancedMesh(geo, stoneMat, items.length); items.forEach((it, i) => { m.setMatrixAt(i, nm.compose(it.p, it.q || flat, it.s)); m.setColorAt(i, nc.set(it.color)); });
+      m.castShadow = m.receiveShadow = true; m.frustumCulled = false; g.add(m); owned.push({ dispose: () => m.dispose() }); return m; };
+    // the line: a stone every `step`, the two ends standing and painted
+    const L = nest.record > 0 ? nest.record * 0.312 + 0.5 : 0, n = Math.round(L / NEST.step), tones = tonesOf('pebble'), stones = [];
+    for (let i = 0; i <= n && n > 0; i++) { const [x, z] = at(0.5 - (i / n) * L, NEST.line), p = new THREE.Vector3(x, height(x, z) - 0.03, z), q = p.clone(); pushOut(q, 0.15); if (q.distanceToSquared(p) > 1e-6) continue; // not where something stands
+      const end = i === 0 || i === n, k = 0.2 + 0.035 * Math.sin(i * 2.3); stones.push({ p: here(p.x, p.y, p.z), q: turned, s: end ? new THREE.Vector3(0.24, 0.75, 0.24) : new THREE.Vector3(k, k * 0.9, k * 1.2), color: end ? district : tones[i % tones.length] }); }
+    lay(G.pebble, stones);
+    // the places for shells: a kerb under each row, a dish at each place, and under the first of the found ones a column top that was hauled
+    const places = [], dishes = [], blocks = [], stumps = [], cushions = [], S = NEST.stand; let stood = 0;
+    (nest.places || []).forEach((pl, i) => { const row = i < 5 ? 0 : 1, [x, z] = at(0.4 - (i % 5) * NEST.gap, NEST.rows[row]), ground = height(x, z), raised = pl.found && stood < (nest.fragments | 0); let top = ground + 0.12;
+      if (raised) { stood++; const neck = ground + 0.9 * S - 0.14; stumps.push({ p: here(x, neck, z), q: upside, s: new THREE.Vector3(S, S, S), color: stoneTones[0] }); cushions.push({ p: here(x, neck, z), s: new THREE.Vector3(S, S, S), color: stoneTones[0] });
+        blocks.push({ p: here(x, neck + 0.2 * S, z), q: turned, s: new THREE.Vector3(1.5 * S, 0.18 * S, 1.5 * S), color: district }); top = neck + 0.38 * S; }
+      dishes.push({ p: here(x, top, z), s: new THREE.Vector3(0.62, 0.07, 0.62), color: pl.found ? stoneTones[1 % stoneTones.length] : new THREE.Color(stoneTones[0]).multiplyScalar(0.6) });
+      places.push({ type: pl.type, found: !!pl.found, raised, x: x - SPAWN.x, y: top + 0.07 + NEST.lift, z: z - SPAWN.z, top: top + 0.07 }); });
+    for (const r of places.length ? NEST.rows : []) { const [x, z] = at(0.4 - 2 * NEST.gap, r); blocks.push({ p: here(x, height(x, z) - 0.06, z), q: turned, s: new THREE.Vector3(0.9, 0.18, 4.7), color: stoneTones[0] }); }
+    lay(G.drum, dishes); lay(G.block, blocks); lay(G.stump, stumps); lay(G.echinus, cushions);
+    nestAt = { x: SPAWN.x, y: 0, z: SPAWN.z, mesh: g, group: g, places, line: L, stones: stones.length, stood, yaw }; single.push(nestAt); }
   // The mural's stonework and its three carvings. A carving is a flat sign standing a little proud of its panel: dark until it is lit.
   // Each is drawn in a square a metre across, x to the right and y up, from triangles and bars.
   const SIGNS = (() => {
@@ -1757,7 +1784,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, mural, earn, carved: muralNews, greatest: [...F.schools].reduce((a, b) => (TIERS.indexOf(b) > TIERS.indexOf(a) ? b : a), 's'), opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, swarms: swarmNews, cleaned: cleanNews, stations, mural, earn, nest: nestAt, carved: muralNews, greatest: [...F.schools].reduce((a, b) => (TIERS.indexOf(b) > TIERS.indexOf(a) ? b : a), 's'), opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

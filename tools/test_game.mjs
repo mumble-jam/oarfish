@@ -102,12 +102,12 @@ s = await ev(() => { const g = window.__game, T = window.T; T.idle(9); g.run.saf
   // somewhere with nothing standing within a coil's reach, and well away from the rift
   const free = (x, z) => { const y = g.world.height(x, z) + 3.5; for (let k = 0; k < 8; k++) { const p = g.rig.pos.clone().set(x + Math.sin(k * 0.785) * 4.5, y, z + Math.cos(k * 0.785) * 4.5), q = p.clone(); g.world.pushOut(q, 1.4); if (q.distanceTo(p) > 1e-6) return false; }
     const R = g.world.react, off = (o, d) => Math.hypot((o.cx ?? o.x) - x, (o.cz ?? o.z) - z) > d; // and nothing the wrap keys would rather go round, or that would start something
-    return g.world.rift.in(x, z) < -12 && g.world.schools.every((sc) => sc.left <= 0 || off(sc, 11)) && R.stations.every((o) => off(o, 9)) && R.fragments.every((o) => off(o, 8)) && R.puzzles.every((o) => off(o, 10)); };
-  let sx = 30, sz = 30; find: for (let d = 0; d < 44; d += 4) for (let k = 0; k < 8; k++) { const x = 30 + Math.sin(k * 0.785) * d, z = 30 + Math.cos(k * 0.785) * d; if (free(x, z)) { sx = x; sz = z; break find; } }
+    return g.world.rift.in(x, z) < -12 && g.world.schools.every((sc) => sc.left <= 0 || off(sc, 9)) && R.stations.every((o) => off(o, 8)) && R.fragments.every((o) => off(o, 7)) && R.puzzles.every((o) => off(o, 9)) && (!R.mural || off(R.mural, 6)); };
+  let sx = 30, sz = 30, found = false; find: for (let d = 0; d < 70; d += 3) for (let k = 0; k < 12; k++) { const x = 30 + Math.sin(k * 0.5236) * d, z = 30 + Math.cos(k * 0.5236) * d; if (free(x, z)) { sx = x; sz = z; found = true; break find; } }
   const y = g.world.height(sx, sz) + 3.5; T.put(sx, y, sz, 0); T.idle(0.3);
-  const r = (g.rig.length + 0.8) / (Math.PI * 2); const cx = sx + r, cz = sz; b.pos.set(cx, y, cz); b.vel.set(0, 0, 0); b.cool = 99; b.state = 'chew'; b.t = 99; b.wander.copy(b.pos); const caught = g.run.caught; T.coil(5); T.idle(1);
-  return { alive: b.alive, gained: g.run.caught - caught, at: [Math.round(sx), Math.round(sz)], floor: g.run.floor }; });
-check('a biter inside a closed loop is caught', s.alive === false && s.gained >= 3, JSON.stringify(s));
+  const r = (g.rig.length + 0.8) / (Math.PI * 2); const cx = sx + r, cz = sz; b.pos.set(cx, y, cz); b.vel.set(0, 0, 0); b.cool = 99; b.state = 'chew'; b.t = 99; b.wander.copy(b.pos); const caught = g.run.caught; T.coil(5); T.idle(2.5);
+  return { alive: b.alive, gained: g.run.caught - caught, at: [Math.round(sx), Math.round(sz)], found, floor: g.run.floor }; });
+check('a biter inside a closed loop is caught', s.found && s.alive === false && s.gained >= 3, JSON.stringify(s));
 
 // 6. hooks
 s = await ev(() => { const g = window.__game, T = window.T; g.run.safe = 0; const h = g.foes.hooks[0]; const y = g.world.height(100, 40) + 3.2; T.put(100, y, 40, 0); T.idle(0.5); g.run.safe = 0;
@@ -551,6 +551,26 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {}, still = { 
 check('every rift has a mural with three carvings, dark at first: the band\u2019s greatest swarm taken (not a lesser one), a cache opened and the keeper beaten each win one, and they light one after another only when the fish comes up to it, and then its painted top lights too; the palace has none',
   s.bands.slice(0, 4).every((d) => d >= 16 && d <= 36) && s.bands[4] === 0 && s.great0 === 'h' && s.great1 === 'l' && s.start === '00 00 00' && s.small === '00 00 00' && s.took && s.swarm === '10 00 00' && s.cache === '10 10 00' && s.guard === '10 10 10'
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
+
+// ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh).length;
+  Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
+  out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
+  Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());
+  const J = g.rig.joints, tail = J[J.length - 1], head = g.rig.snout, yaw = N.yaw, side = (p) => (p.x - N.x) * Math.cos(yaw) - (p.z - N.z) * Math.sin(yaw); // how far to the right of the start line a point is
+  const low = Math.min(...N.places.filter((p) => !p.raised).map((p) => p.top)), high = N.places.filter((p) => p.raised).map((p) => p.top);
+  out.full = { line: +N.line.toFixed(2), body: +(g.rig.length + 0.5).toFixed(2), stones: N.stones, found: N.places.filter((p) => p.found).map((p) => p.type).join(), stood: N.stood, shown: shown(N), lifted: high.length === 3 && high.every((y) => y > low + 0.3),
+    right: N.places.every((p) => p.x * Math.cos(yaw) - p.z * Math.sin(yaw) > 1.5), fish: +side(head).toFixed(1) };
+  g.enterFloor(1, false); out.below = !!g.world.react.nest;
+  // it is kept as it happens: a longer body than any before, a kind of shell not found before
+  Object.assign(g.nest, { record: 12, shells: [], fragments: 0 }); g.startRun(4242); for (let i = 0; i < 6; i++) g.addFood(12); g.sim(2, T.none()); g.giveShell('horn'); const saved = JSON.parse(localStorage.getItem('oarfish.nest'));
+  out.kept = { segs: g.run.segs, record: g.nest.record, saved: saved.record, shells: saved.shells.join() };
+  g.startRun(4242); N = g.world.react.nest; out.next = { line: +N.line.toFixed(2), found: N.places.filter((p) => p.found).map((p) => p.type).join(), shown: shown(N) };
+  Object.assign(g.nest, JSON.parse(kept)); localStorage.setItem('oarfish.nest', kept); g.startRun(4242); g.run.safe = 0; return out; });
+check('the nest is where a dive starts: nothing in it at first but ten empty places; then a line of stones as long as the longest body there has been, a shell over the place of each kind found, and the first of them raised on the column tops hauled to the rifts; it is kept as it happens and shown in the next dive, and only the first band has it',
+  s.bare.line === 0 && s.bare.stones === 0 && s.bare.places === 10 && s.bare.found === 0 && s.bare.stood === 0 && s.bare.shown === 0
+  && Math.abs(s.full.line - 6.43) < 0.02 && s.full.line > s.full.body + 2 && s.full.stones >= 13 && s.full.stones <= 17 && s.full.found === 'spire,fan,ring,cap,lamp' && s.full.stood === 3 && s.full.shown === 5 && s.full.lifted && s.full.right && Math.abs(s.full.fish) < 0.6 && !s.below
+  && s.kept.segs > 12 && s.kept.record === s.kept.segs && s.kept.saved === s.kept.segs && s.kept.shells === 'horn' && Math.abs(s.next.line - (s.kept.segs * 0.312 + 0.5)) < 0.02 && s.next.found === 'horn' && s.next.shown === 1, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake
