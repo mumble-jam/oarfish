@@ -463,6 +463,21 @@ check('body puzzles: a capstan turned by coiling round it, four windows threaded
   s.bands.join() === 'cwv,cwv,cwv,cwv,cv' && s.capstan.lid0 === 0 && s.capstan.passed > 0.1 && s.capstan.passed < 0.8 && s.capstan.slid > 0.1 && s.capstan.unwound === 0 && s.capstan.done && s.capstan.turned >= 1.25 && s.capstan.fed === 12 && s.capstan.open === 1 && s.capstan.off > 1.5
   && s.windows.two === 2 && s.windows.dark === 0 && s.windows.done && s.windows.lit === 4 && s.windows.fed === 12 && s.windows.open === 1
   && !s.vent.quick && s.vent.press > 0.1 && s.vent.press < 0.9 && s.vent.done && s.vent.t < 3 && s.vent.fed === 12 && s.vent.open === 1 && s.vent.shells === 1 && s.caches === '3', JSON.stringify(s));
+// ---- hauling: a fragment of the ruins, wrapped, carried with the body tied up, and given to the rift
+s = await ev(() => { const g = window.__game, T = window.T, out = { bands: [] };
+  for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const F = g.world.react.fragments, G = g.world.goal; out.bands.push(F.length + (F.every((x) => Math.hypot(x.x - G.x, x.z - G.z) >= 24) ? '' : '!')); }
+  try { localStorage.removeItem('oarfish.nest'); } catch {} g.nest.fragments = 0;
+  g.startRun(4242); g.run.safe = 1e9; const F = g.world.react.fragments, f = F[0], r = g.world.rift, bed = (x, z) => g.world.height(x, z);
+  const take = () => { T.put(f.x + 2.6, bed(f.x, f.z) + 1.6, f.z + 0.9, 1.1); T.idle(0.3); let t = 0; while (!g.run.haul && t < 14) { T.coil(0.1); t += 0.1; } return +t.toFixed(1); };
+  const t1 = take(), held = g.run.haul === f && f.held; g.sim(2.5, { ...T.none(), dir: { x: 1, y: 0, z: 0 } }); const tempo = +g.rig.tempo.toFixed(2), under = +g.rig.joints.reduce((m, j) => Math.min(m, Math.hypot(j.x - f.x, j.z - f.z)), 9).toFixed(2), off = +(f.y - bed(f.x, f.z)).toFixed(1);
+  const sw = T.swarm('s'), n0 = sw.left; T.put(sw.x + 2.6, sw.hy, sw.z + 0.9, 1.1); T.idle(0.6); T.coil(5); const tied = sw.left === n0 && g.run.haul === f; // it cannot wrap with a load
+  const segs = g.run.segs; g.shed(); T.idle(0.3); const dropped = !g.run.haul && !f.held && g.run.segs === segs, rest = +(f.y - bed(f.x, f.z)).toFixed(2);
+  take(); const had = g.run.haul === f, pre = g.run.segs; g.run.safe = 0; const bit = g.bite(1, 5, g.rig.pos); g.run.safe = 1e9; T.coil(0.8); const shaken = had && bit && !g.run.haul && !f.held, lost = pre - g.run.segs;
+  const t3 = take(), again = g.run.haul === f; T.put(r.x, r.y + 1.5, r.z, 0); T.idle(0.5); const given = { t3, again, haul: !g.run.haul, gone: f.gone, hauled: g.run.hauled, kept: g.nest.fragments, stored: JSON.parse(localStorage.getItem('oarfish.nest') || '{}').fragments };
+  T.idle(7); const sunk = !f.mesh.visible; g.die(); g.sim(4); const card = document.getElementById('end-text').textContent; g.startRun(4242); g.run.safe = 0;
+  return { bands: out.bands.join(), t1, held, tempo, under, off, tied, dropped, rest, shaken, lost, given, sunk, card: /1 fragment of the ruins given to the rift \(1 in all\)/.test(card) }; });
+check('a fragment of the ruins is taken up by going round it, rides under the body, and ties it up: no wrapping, a slower swim; the shed key or a bite lets it go; carried over the rift it is given, counted on the end card and kept for the nest',
+  s.bands === '2,2,2,2,2' && s.t1 < 8 && s.held && Math.abs(s.tempo - 0.85) < 0.03 && s.under < 0.6 && s.off > 0.5 && s.tied && s.dropped && s.rest < 0.6 && s.shaken && s.lost >= 1 && s.given.haul && s.given.gone && s.given.hauled === 1 && s.given.kept === 1 && s.given.stored === 1 && s.sunk && s.card, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake

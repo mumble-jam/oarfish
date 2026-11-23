@@ -62,8 +62,11 @@ s = await ev(() => { const g = window.__game, j = g.world.nursery.jar, n = g.wor
   return { chip, bumped, broken: j.broken, on: g.tut.on, done: g.teach.done, shells: g.run.shells.length, first, toast: window.N.toast(), label: window.N.label(), skip: !document.getElementById('btn-skip').hidden, saved: JSON.parse(localStorage.getItem('oarfish.teach')).done }; });
 check('swimming into the jar does nothing, a dash breaks it, the first shell is inside, and that ends the nursery for good', /Shift.*dash/.test(s.chip) && !s.bumped && s.broken && !s.on && s.done && s.saved && s.shells === 1 && /on shell\|/.test(s.first) && /teach\|That was the nursery/.test(s.toast) && /the rift/.test(s.label) && !s.skip, JSON.stringify(s));
 await snap('t-done');
-s = await ev(() => { const g = window.__game; g.startRun(4242); g.sim(0.2, window.N.none); const again = !!g.world.nursery; const u = g.world.urns.find((x) => !x.broken), fwd = (a) => ({ ...window.N.none, dir: { x: Math.sin(a), y: 0, z: Math.cos(a) } });
-  g.rig.reset(g.rig.pos.clone().set(u.x, u.y + 1, u.z - 4), 0); g.sim(0.2, fwd(0)); const food = g.run.caught; g.sim(1 / 60, { ...fwd(0), dashNow: true }); g.sim(0.5, fwd(0)); g.sim(1.5, window.N.none);
+s = await ev(() => { const g = window.__game; g.startRun(4242); g.sim(0.2, window.N.none); const again = !!g.world.nursery; const fwd = (a) => ({ ...window.N.none, dir: { x: Math.sin(a), y: 0, z: Math.cos(a) } });
+  // a jar and a side of it with nothing standing in the run-up
+  const open = (u, a) => { for (let d = 1.8; d <= 4.4; d += 0.2) { const p = g.rig.pos.clone().set(u.x - Math.sin(a) * d, u.y + 1, u.z - Math.cos(a) * d), q = p.clone(); g.world.pushOut(q, 0.9); if (q.distanceTo(p) > 0.01) return false; } return true; };
+  let u = null, a = 0; for (const x of g.world.urns) { if (x.broken) continue; for (let k = 0; k < 8 && !u; k++) if (open(x, k * 0.785)) { u = x; a = k * 0.785; } if (u) break; }
+  g.rig.reset(g.rig.pos.clone().set(u.x - Math.sin(a) * 4, u.y + 1, u.z - Math.cos(a) * 4), a); g.sim(0.2, fwd(a)); const food = g.run.caught; g.sim(1 / 60, { ...fwd(a), dashNow: true }); g.sim(0.5, fwd(a)); g.sim(1.5, window.N.none);
   return { again, urns: g.world.urns.length, broken: u.broken, fed: g.run.caught - food }; });
 check('the next dive does not open in the nursery, and a sealed jar by the ruins breaks open for food', !s.again && s.urns >= 3 && s.broken && s.fed === 3, JSON.stringify(s));
 

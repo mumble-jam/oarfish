@@ -255,7 +255,7 @@ export async function start(saved = {}) {
   }
   const session = { dives: 0, played: 0, frames: 0, clock: 0 }; // what this visit has been like, for a note of feedback
   const fb = { open: false, own: false }; // the feedback sheet. own: it opened over the end of a dive, with no pause menu under it
-  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
+  const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
   let world = null, foes = null;
@@ -306,6 +306,7 @@ export async function start(saved = {}) {
   function glowFish(segs = run.segs) { const F = world?.floor || FLOORS[0], rank = stature(segs), k = F.finGlow * (1 + 0.3 * rank) + STATURE_GLOW[rank] + 0.06 * run.harmony; // and a little for every voice it is rowing
     for (const n of ['FinPale', 'FinPink', 'FinMid', 'FinRed', 'Eye']) { fishMats[n].emissive.set(PALETTE[n]); fishMats[n].emissiveIntensity = k * (n === 'Eye' ? 1.4 : 1); } }
   function enterFloor(index, fromAbove) {
+    run.haul = null; // what was being carried stays in the band it was found in
     sum?.dispose(); sum = null;
     world?.dispose(); foes?.dispose();
     run.floor = index;
@@ -344,7 +345,7 @@ export async function start(saved = {}) {
   function startRun(seed = (Math.random() * 1e6) | 0) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
-    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     $('end').classList.remove('on'); $('fade').classList.remove('on');
@@ -426,7 +427,7 @@ export async function start(saved = {}) {
       if (oars.offBeat < i - 1 && run.drive > 0) run.drive = Math.max(0, run.drive - 2);
     }
     if (run.harmony <= 0) run.drive = 0;
-    rig.tempo = damp(rig.tempo, 1 + OARS.speed * run.harmony + OARS.drive * run.drive, 3.5, dt);
+    rig.tempo = damp(rig.tempo, (1 + OARS.speed * run.harmony + OARS.drive * run.drive) * (run.haul ? HAUL.slow : 1), 3.5, dt); // a load slows it
     if (run.harmony !== oars.level) { oars.level = run.harmony; glowFish(); }
     // the lights: one at each side of the head, where the oars are rooted, flashing on the beat and resting between
     const beat = Math.exp(-b.phase * 6), sx = Math.cos(rig.yaw), sz = -Math.sin(rig.yaw), h = rig.joints[0], next = oars.side === 0 ? 0 : -oars.side; // (sx, sz) points to the fish's own left
@@ -435,6 +436,29 @@ export async function start(saved = {}) {
       s.position.set(h.x - sx * sd * 0.55, h.y - 0.22, h.z - sz * sd * 0.55); s.scale.setScalar(0.35 + 0.6 * beat * on + 0.06 * run.harmony);
       s.material.opacity = damp(s.material.opacity, lit * on * (0.1 + 0.05 * run.harmony + 0.75 * beat * (0.55 + 0.09 * run.harmony)), 16, dt); });
     for (const m of oarRings) { const u = m.userData; if (u.t >= u.life) { m.visible = false; continue; } u.t += dt; const k = clamp(u.t / u.life, 0, 1); m.scale.setScalar(lerp(u.from, u.to, 1 - (1 - k) * (1 - k))); m.material.opacity = u.peak * (1 - k) * (1 - k); }
+  }
+  // ---------------------------------------------------------------- hauling: a fragment of the ruins, wrapped and dragged to the rift
+  // Go round a fallen column top as round a swarm and the body takes hold of it. It rides under the body from then on, and the body is
+  // tied up with it: no wrapping, no shedding the tail, and a slower swim. A bite shakes it loose; so does the shed key, which lets it go
+  // on purpose. Carried out over the open rift (or to the palace gate) it is given to the deep, and counted: in this dive, for the card
+  // at its end, and for good, in this browser, for the nest that is to come.
+  const HAUL = { slow: 0.85, at: 0.55, grip: 0.8, wait: 1.5 }; // `wait`: seconds a dropped one lies before a body still curled round it can take it up again
+  const nest = (() => { const n = store.get('oarfish.nest') || {}; return { fragments: n.fragments | 0, ...n }; })();
+  function takeUp(f) { run.haul = f; f.held = true; moment('loop'); buzz(0.4, 0.4, 120); run.kick = Math.max(run.kick, 0.3); }
+  function letGo(how) { const f = run.haul; if (!f) return false; run.haul = null; world.react?.settle(f); f.wait = HAUL.wait; if (how === 'bite') buzz(0.5, 0.3, 160); return true; }
+  function hauling(dt) {
+    const frags = world.react?.fragments; if (!frags || run.state !== 'play') { if (run.haul && run.state !== 'play') letGo('end'); return; }
+    const f = run.haul;
+    if (!f) { // is the body round one of them?
+      const rule = wrapRule(feel.assist);
+      const orbit = clamp((0.9 * (bodyMetres() - 0.05)) / rule.sweep, 0.8, 1.5); // the ring the wrap keys swim, as for a swarm: one this body can close
+      for (const g of frags) { g.ring.orbit = orbit; if (g.wait > 0) g.wait -= dt; if (g.gone || g.held || g.wait > 0 || Math.hypot(g.ring.x - rig.snout.x, g.ring.z - rig.snout.z) > 7) continue; const w = rig.wrap(g.ring.x, rig.pos.y, g.ring.z, 5.2); if (w.angle >= rule.sweep * HAUL.grip && w.minD > 0.25) { flashWrap(w.k, rig.pos.y); takeUp(g); break; } }
+      return;
+    }
+    const N = rig.joints.length - 1, j = rig.joints[clamp(Math.round(N * HAUL.at), 1, N)]; // it rides under the middle of the body
+    f.x = j.x; f.z = j.z; f.y = j.y - 0.62; f.mesh.position.set(f.x, f.y, f.z); f.mesh.rotation.y += dt * 0.4;
+    const r = world.rift, there = r ? r.in(rig.pos.x, rig.pos.z) > r.ledge + 0.4 : Math.hypot(wrapD(rig.pos.x - world.goal.x), wrapD(rig.pos.z - world.goal.z)) < 5;
+    if (there) { run.haul = null; f.held = false; f.gone = true; run.hauled++; nest.fragments++; store.set('oarfish.nest', nest); moment('cache'); run.kick = Math.max(run.kick, 0.5); flash.material.opacity = Math.max(flash.material.opacity, 0.25); }
   }
   // A cache has been opened by one of the body puzzles in the ruins (world.js, PUZZLE): what was put by in it comes to the mouth, as a
   // catch does, and from some a shell is left lying by it. What is opened is counted, band by band, for whatever keeps score later.
@@ -471,7 +495,7 @@ export async function start(saved = {}) {
   function lose(n, kind) {
     const N = rig.spine.length;
     for (let i = 0; i < n; i++) foes.spawnPiece(rig.joints[Math.max(N - i, 1)], 'debris');
-    pulse('hurt'); run.chain = 0; run.chainT = 0; run.harmony = Math.max(0, run.harmony - 2); run.drive = 0;
+    pulse('hurt'); run.chain = 0; run.chainT = 0; run.harmony = Math.max(0, run.harmony - 2); run.drive = 0; letGo('bite');
     if (run.segs - n < MIN_SEGS) return die();
     run.segs -= n; run.safe = 1.5;
     if (trimShells().length) tell('It rode on the segment you lost.', 4, { kind: 'warn', title: 'A shell is gone' });
@@ -482,6 +506,7 @@ export async function start(saved = {}) {
   }
   function shed() {
     if (run.state !== 'play') return;
+    if (letGo('shed')) return; // with a fragment in its coils the tail cannot be shed: the key lets the load go instead
     if (foes.state.stalked > 0) know('shed');
     if (run.segs - SHED_COST < MIN_SEGS) { tell('Too short to shed your tail.', 3, { kind: 'warn' }); return; }
     const worn = run.shells.find((s) => s.seg > run.segs - SHED_COST); // a shell on the part being shed goes with it, and the bait takes its power
@@ -640,7 +665,7 @@ export async function start(saved = {}) {
     const best = Math.max(store.get('oarfish.best', 0), depth);
     store.set('oarfish.best', best);
     $('end-title').textContent = title;
-    $('end-text').textContent = `${line} Longest body ${(run.longest * 0.312 + 0.5).toFixed(1)} m. ${run.caught} caught.`;
+    $('end-text').textContent = `${line} Longest body ${(run.longest * 0.312 + 0.5).toFixed(1)} m. ${run.caught} caught.${run.hauled ? ` ${run.hauled} ${run.hauled === 1 ? 'fragment' : 'fragments'} of the ruins given to the rift (${nest.fragments} in all).` : ''}`;
     $('end-best').textContent = `Deepest dive so far: ${best} m`;
     setTimeout(() => { $('end').classList.add('on'); $('btn-again').focus({ preventScroll: true }); }, 900);
   }
@@ -1386,15 +1411,25 @@ export async function start(saved = {}) {
     else if (run.rest > STAMINA.pause) run.stamina = Math.min(1, run.stamina + dt / STAMINA.regen);
     if (run.winded && run.stamina >= cost) run.winded = false;
   }
-  const ringable = () => { const big = sum?.ring || guard?.ring, posts = world.react?.posts; return big || posts?.length ? [...world.schools, ...(posts || []), ...(big ? [big] : [])] : world.schools; }; // swarms, a capstan in the ruins, and the Sum's head while it holds still
+  const ringable = () => { const big = sum?.ring || guard?.ring; return big ? [...world.schools, big] : world.schools; }; // swarms, and the Sum's head while it holds still
+  const ringableToo = () => [...(world.react?.posts || []), ...(world.react?.fragments || []).map((f) => f.ring)]; // and, when none of those is in reach, a capstan or a fragment in the ruins
+  // what the wrap keys would go round from here, and how far off it is: the nearest swarm or keeper in reach, else the nearest thing in the ruins
+  function nearestRing() {
+    let t = null, td = Infinity;
+    if (run.haul) return { t, td }; // a body with a load in it goes round nothing
+    for (const list of [ringable(), ringableToo()]) {
+      for (const sc of list) {
+        if (sc.left <= 0 || !sc.can || sc.threat < 0.3) continue;
+        const d = Math.hypot(sc.x - rig.snout.x, sc.z - rig.snout.z);
+        if (d < sc.orbit * 2.4 + 1.2 && d < td) { t = sc; td = d; }
+      }
+      if (t) break;
+    }
+    return { t, td };
+  }
   // the nearest swarm the body could take, and which way round it the fish is already heading
   function wrapSide() {
-    let t = null, td = Infinity;
-    for (const sc of ringable()) {
-      if (sc.left <= 0 || !sc.can || sc.threat < 0.3) continue;
-      const d = Math.hypot(sc.x - rig.snout.x, sc.z - rig.snout.z);
-      if (d < sc.orbit * 2.4 + 1.2 && d < td) { t = sc; td = d; }
-    }
+    const { t, td } = nearestRing();
     if (t) return rig.forward.x * (rig.snout.z - t.z) - rig.forward.z * (rig.snout.x - t.x) >= 0 ? 1 : -1;
     return Math.abs(rig.yawRate) > 0.25 ? Math.sign(rig.yawRate) : side;
   }
@@ -1453,12 +1488,7 @@ export async function start(saved = {}) {
   function assist(inp) {
     const a = feel.assist;
     if (a < 0.02 || inp.tight) return inp;
-    let t = null, td = Infinity;
-    for (const sc of ringable()) {
-      if (sc.left <= 0 || !sc.can || sc.threat < 0.3) continue;
-      const d = Math.hypot(sc.x - rig.snout.x, sc.z - rig.snout.z);
-      if (d < sc.orbit * 2.4 + 1.2 && d < td) { t = sc; td = d; }
-    }
+    const { t, td } = nearestRing();
     if (!t) return inp;
     const rx = (rig.snout.x - t.x) / (td || 1e-3), rz = (rig.snout.z - t.z) / (td || 1e-3); // from the swarm out to the nose
     let sense = rig.forward.x * rz - rig.forward.z * rx >= 0 ? 1 : -1, full = false; // keep going the way the fish already turns
@@ -1546,6 +1576,7 @@ export async function start(saved = {}) {
   const body = { joints: rig.joints, snout: rig.snout, total: 3.5, assist: feel.assist };
   function step(dt, forced) {
     let inp = forced || readInput();
+    if (run.state === 'play' && run.haul && (inp.coil || inp.tight)) inp = { ...inp, coil: 0, tight: false }; // a body with a load in it cannot coil
     if (run.state === 'play') { effort(dt, inp); inp = assist(inp); }
     run.stateT += dt;
     if (run.state === 'play') run.time += dt;
@@ -1612,6 +1643,7 @@ export async function start(saved = {}) {
     run.kick = Math.max(0, run.kick - dt * 4);
     if (run.chainT > 0 && (run.chainT -= dt) <= 0) run.chain = 0; // nothing caught in time: the band goes back to what it was playing
     rowing(dt);
+    hauling(dt);
     if (run.state === 'play' && !tut.on && run.time > 16 && rig.speed > 2) say('oars', dev === 'pad' ? `${pb('oarL')} and ${pb('oarR')} are your oars. Pull them in turn, on the beat of the band. Each pull in time adds a voice to the chord and speed to your swim.` : `${kb('oarL')} and ${kb('oarR')} are your oars. Pull them in turn, on the beat of the band. Each pull in time adds a voice to the chord and speed to your swim.`, 10);
     if (pulse3.at < 1.25) { pulse3.at += dt * pulse3.pace; fishPulse.value.x = pulse3.at; fishPulse.value.y = pulse3.k * clamp((1.25 - pulse3.at) / 0.3, 0, 1); } else fishPulse.value.y = 0;
     fish.mesh.visible = run.state === 'dead' ? run.stateT < 0.2 || Math.floor(run.stateT * 9) % 2 === 0 : !(run.safe > 0 && run.state === 'play' && Math.floor(run.time * 14) % 2);
@@ -1632,7 +1664,7 @@ export async function start(saved = {}) {
         p.life = 0.1; run.segs = Math.min(MAX_SEGS, run.segs + 2); buildFish(run.segs); moment('grow'); pulse('grow');
       }
       for (const sc of world.schools) {
-        if (sc.left <= 0 || sc.threat < 0.3) { sc.progress = 0; continue; }
+        if (sc.left <= 0 || sc.threat < 0.3 || run.haul) { sc.progress = 0; continue; }
         const w = rig.wrap(sc.x, sc.y, sc.z, sc.ball * 2.6 + 2);
         sc.progress = clamp(w.angle / rule.sweep, 0, 1); sc.arcStart = w.start; sc.arcSign = w.sign;
         if (sc.can) wrapBest = Math.max(wrapBest, sc.progress);
@@ -1766,7 +1798,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, nest, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

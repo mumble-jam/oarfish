@@ -860,6 +860,13 @@ float seaLight(vec2 p, float t) {
       }
     }
   }
+  // Fragments of the ruins that can be hauled to the rift (main.js, `haul`): the top of a column, fallen, its slab still in the band's paint.
+  // Two to a band, a good way from the rift, so that getting one there is a journey with the body tied up.
+  const fragments = [], LIE = 0.45; // how far off the bed the middle of one is, lying on its side
+  for (let i = 0, t = 0; i < 2 && t < 300; t++) { const [x, z] = t < 120 ? along(xr(12, Math.max(goalDist - 26, 16)), (xrand() < 0.5 ? -1 : 1) * xr(7, 22)) : polar(xr(0, 6.28), xr(14, 60));
+    if (!clearNow(x, z, 2.5) || !farFrom(x, z, goal.x, goal.z, 24) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 16)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 7))) continue;
+    sites.push([x, z, 2.2, 'puzzle']); i++;
+    fragments.push({ x, y: height(x, z) + LIE, z, yaw: xr(0, 6.28), tilt: xr(1.2, 1.36), held: false, gone: false, sink: 0, mesh: null, ring: { x, z, left: 1, can: true, threat: 1, orbit: 1.5 } }); }
   const clearOfSites = (x, z, pad = 0) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r * 0.75 + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 5 + pad) && riftClear(x, z, pad + 0.6);
 
   // ------------------------------------------------------------ swarms of small fish: the food, in four sizes
@@ -1035,6 +1042,10 @@ float seaLight(vec2 p, float t) {
         p.head = { mesh: g, x: p.x, y: p.y, z: p.z, mat: m }; single.push(p.head); }
       if (p.kind === 'windows') for (const h of p.hoops) { h.mesh = add(new THREE.Mesh(G.wreath, paint())); h.mesh.scale.setScalar(h.r); h.mesh.rotation.y = p.dir; h.mesh.castShadow = true; h.mesh.frustumCulled = false; single.push(h); }
     } }
+  // The top of a column with the snapped end of its shaft still on it: lying on its side on the bed, hanging upright under whoever carries it.
+  for (const f of fragments) { const g = add(new THREE.Group()), stone = mat(new THREE.MeshLambertMaterial({ color: stoneTones[0], vertexColors: true })), cushion = new THREE.Mesh(G.echinus, stone), neck = new THREE.Mesh(G.stump, stone),
+      slab = new THREE.Mesh(G.block, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: district, emissiveIntensity: 0.2 })));
+    slab.scale.set(1.5, 0.18, 1.5); slab.position.y = 0.2; neck.rotation.x = Math.PI; cushion.castShadow = slab.castShadow = neck.castShadow = true; g.add(neck, cushion, slab); g.scale.setScalar(0.8); g.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh = g; f.slab = slab; single.push(f); }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
   const breakUrn = (u) => { if (u.broken) return false; u.broken = true; u.col.off = true; u.mesh.geometry = G.jarBroken; return true; };
 
@@ -1348,7 +1359,16 @@ float seaLight(vec2 p, float t) {
     if (portal.mesh) { portal.mesh.position.x = goal.x + ox; portal.mesh.position.z = goal.z + oz; portal.mesh.material.opacity = (0.7 + 0.2 * Math.sin(t * 1.6)) * portal.level; beaconMat.opacity = 0.5 * portal.level; }
     solve(dt, focus, body);
     stir(dt, focus, body);
+    for (const f of fragments) { // a loose one glows a little, slowly; one given to the rift goes down into the cloud; one being carried is placed by whoever carries it
+      const ox = T * Math.round((focus.x - f.x) / T), oz = T * Math.round((focus.z - f.z) / T);
+      f.slab.material.emissiveIntensity = f.held ? 0.26 : 0.14 + 0.12 * Math.sin(t * 2.1 + f.x);
+      if (f.held) f.mesh.rotation.x += (0.3 - f.mesh.rotation.x) * Math.min(1, dt * 4);
+      if (f.gone) { if (f.sink < 6) { f.sink += dt; f.y -= dt * (1.2 + 1.5 * f.sink); f.mesh.rotation.x += dt * 0.9; f.mesh.position.set(f.x + ox, f.y, f.z + oz); if (f.sink >= 6) f.mesh.visible = false; } continue; }
+      Object.assign(f.ring, { x: f.x + ox, z: f.z + oz, left: f.held ? 0 : 1 });
+    }
   }
+  // a fragment let go where it is: it comes to rest on the bed
+  function settle(f) { f.held = false; f.y = height(f.x, f.z) + LIE; f.mesh.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh.position.y = f.y; }
 
   // Where a foot comes down (legs.js): on the bed, or on top of whatever low stone is there. A foot that would land inside something too
   // tall to step up onto is put down beside it. p is changed: its height always, its place only in that last case.
@@ -1525,7 +1545,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }
