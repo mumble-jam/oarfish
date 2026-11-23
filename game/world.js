@@ -33,7 +33,9 @@ export const NEST = { yaw: 2.5, line: -1.25, step: 0.42, rows: [2.3, 3.45], gap:
 // The mural at a rift: a stele back from the near lip, clear of the row of columns that stands behind the kerb, with three carvings, lit for what has been done in this band in this dive: its greatest swarm taken,
 // a cache opened, the rift's keeper beaten. They light, one after another, when the head comes within `near` metres; all three lit, the stele's
 // painted top lights too. Nothing is written on it. The third carving is the keeper's own sign, band by band.
-export const MURAL = { near: 13, each: 0.55, back: [19.5, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
+// Every rift has one. It is looked for at `back` metres from the rift's line and `side` along it, nearest first; where all of that ground is taken (a ruin, a puzzle, the Keeper),
+// the search goes wider (`wide`), and at the last it stands on the first of that wider ground that is clear of the rift and of anything solid, whoever has claimed it.
+export const MURAL = { near: 13, each: 0.55, back: [19.5, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], wide: { back: [19.5, 22, 25, 28, 32, 36, 40, 45], side: [7.5, 9.5, 12, 15, 18, 21, 24, 27, 30, 34] }, signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
 const TIERS = 'smlh';
 // A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. A head held still over it (within `reach`, slower
 // than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
@@ -55,6 +57,9 @@ export const canWrap = (total, room) => (0.9 * total) / GATE.sweep >= room * GAT
 //         lost to the Keeper begins again
 // What is scattered by chance (reefs, rocks, kelp, coral, what lives on the bed) is counted for a BASE square and made in proportion to the band's
 // area, so a wider band is as thickly grown, not thinner. What is counted for the dive (swarms, hunters, ruins, puzzles, shells) is as written.
+// `ruins` names what is built at a place drawn by chance (the builders: gate, remains, arch). 'ring', in the first band and the third, has no builder
+// and is passed over, drawing nothing: it is older than this file's history, and by what stands there now it was a ring of columns before the hero's
+// rings were given their own places in each band. It is left in the lists as it was found. Give it a builder and both bands would gain a ruin and be laid out anew.
 export const FLOORS = [
   { name: 'The sunlight zone', depth: 40, water: '#2b93a3', sky: '#e2f8ff', bed: '#4f97a0', hemi: 2.0, sun: 2.3, lamp: 0, lampReach: 30, fog: [0.75, 42], seaLight: 0.2, shafts: 0.42, fishGlow: 0, finGlow: 0,
     rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'], size: 204, way: 100, home: 144 },
@@ -846,7 +851,7 @@ float seaLight(vec2 p, float t) {
       for (let d = 4, i = 0; d < gd - 20; d += 5.5, i++) hoop(jx + gx2 * d + gz2 * (i % 2 ? 2.6 : -2.6), jz + gz2 * d - gx2 * (i % 2 ? 2.6 : -2.6), 1.1); }
   }
   F.ruins.forEach((kind, i) => {
-    if (!builders[kind]) return;
+    if (!builders[kind]) return; // 'ring' has none (see FLOORS), and draws nothing
     for (let tries = 0; tries < 12; tries++) { const [x, z] = polar(rr(0, 6.28), rr(30, 60)); if (clearNow(x, z, 16)) { builders[kind](x, z); break; } }
   });
 
@@ -981,10 +986,14 @@ float seaLight(vec2 p, float t) {
   // The mural (MURAL): beside the way in, a little back from the rift's near lip, turned to face whoever is coming.
   let mural = null;
   if (rift) { const turn = xrand() < 0.5 ? 1 : -1;
-    find: for (const back of MURAL.back) for (const side of MURAL.side) for (const sgn of [turn, -turn]) {
+    // Three goes at it, and the third cannot fail: the ground it has always been given; then wider ground by the same rule; then that wider ground again, asking only
+    // that it is not in the rift, not on the Keeper's ground and not in anything that stands. (A world that had its mural at the first go has it where it was.)
+    const free = (x, z) => clearNow(x, z, 2.6) && !stations.some((o) => !farFrom(x, z, o.x, o.z, 8)) && !fragments.some((f) => !farFrom(x, z, f.x, f.z, 5)) && !puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8));
+    const bare = (x, z) => riftClear(x, z, 3.6) && colliders.every((c) => farFrom(x, z, c.x, c.z, c.r + 2.6));
+    find: for (const [net, ok] of [[MURAL, free], [MURAL.wide, free], [MURAL.wide, bare], [MURAL.wide, (x, z) => riftClear(x, z, 3.6)]]) for (const back of net.back) for (const side of net.side) for (const sgn of [turn, -turn]) {
       const x = rift.x - rift.nx * back + rift.tx * side * sgn, z = rift.z - rift.nz * back + rift.tz * side * sgn;
       if (floor === 0 && !farFrom(x, z, rift.x - rift.nx * 24, rift.z - rift.nz * 24, 14)) continue; // the Keeper walks the shelf at the near edge (guards.js): not on its ground
-      if (!clearNow(x, z, 2.6) || stations.some((o) => !farFrom(x, z, o.x, o.z, 8)) || fragments.some((f) => !farFrom(x, z, f.x, f.z, 5)) || puzzles.some((p) => !farFrom(x, z, p.x, p.z, 8))) continue;
+      if (!ok(x, z)) continue;
       const yaw = Math.atan2(rift.x - rift.nx * (back + 11) - x, rift.z - rift.nz * (back + 11) - z), y = drawnY(x, z) - 0.12;
       for (const k of [-1.3, 0, 1.3]) colliders.push({ x: x + Math.cos(yaw) * k, z: z - Math.sin(yaw) * k, r: 0.5, top: y + 3.2 });
       sites.push([x, z, 3, 'puzzle']);
