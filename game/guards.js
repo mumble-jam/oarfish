@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { canWrap } from './world.js';
 import { rng, lerp, clamp, damp, glowTexture } from './geo.js';
 import { make, paintOf } from './npc.js';
+import { fishBody, struck as takes, gap, pushOut as pushFrom, onSeg as onLeg, FISH } from './shapes.js';
 
 const KINDS = ['keeper', 'shearer', 'lamplighter', 'warden'];
 // The Keeper's fight, made the way a Souls boss is. Every blow is shown before it lands, lands where it was aimed and not where the fish has got to,
@@ -20,13 +21,16 @@ const KINDS = ['keeper', 'shearer', 'lamplighter', 'warden'];
 export const KEEPER_FIGHT = {
   legs: 4, rage: 2, haste: 0.8, // haste: what its wind-ups and rests are multiplied by once it rages
   near: 15, leash: 13, edge: 2.6, walk: [2.1, 3.1], turn: [2.6, 3.7], // it takes up with a body within `near`, and keeps to its ground: `leash` from the middle of it, `edge` back from the rift
-  slam: { reach: 4.5, wind: 0.95, aim: 0.6, hit: 1.5, cost: 3, stuck: 2.4 }, // aim: the part of the wind-up it still follows the body for
-  sweep: { reach: 4.2, wind: 0.75, time: 0.3, low: 1.5, cost: 2, rest: 1.1, bodies: 4 }, // low: it passes under anything this far over its own back; bodies: how many joints lying in its way make it choose this
-  jab: { reach: 2.8, wind: 0.34, hit: 1.0, cost: 1, rest: 0.5, every: 1.7 },
-  charge: { from: 5.5, to: 12, tell: 0.75, speed: 9.5, run: 1.0, hit: 2.1, cost: 2, rest: 1.3, every: 7 },
-  dig: { down: 0.8, speed: 5.5, under: [1.3, 2.2], tell: 0.55, hit: 2.4, high: 3, cost: 3, rest: 1.8, every: 9 },
-  leg: { reach: 1.1, numb: 4.5, stagger: 1.1, torn: 1.7, wrapped: 3.2, room: 0.55 }, // stagger, torn, wrapped: how long each leaves it reeling
-  bait: { reach: 8, walk: 3.4, feed: 3.4 },
+  // What a blow hits is the claw as it is drawn when it lands (crab.js: `landing`, `strike`), not a disc: see shapes.js. So no blow has a `hit` radius any more.
+  // high: how far over the bed the great claw comes down from: it takes anything under its hand and fingers, as seen from above, lower than that.
+  // shock: where its fingers hit the bed the bed jolts, and silt flies: that round, this high over the bed, takes a body lying low there too.
+  slam: { reach: 4.5, wind: 0.95, aim: 0.6, high: 3.2, shock: 1.3, shockHigh: 1.9, cost: 3, stuck: 2.4 }, // aim: the part of the wind-up it still follows the body for
+  sweep: { reach: 4.2, wind: 0.75, time: 0.3, low: 1.5, cost: 2, rest: 1.1, bodies: 4 }, // low: it does not choose to sweep at what is more than this over its own back (the claw goes across at a fish's height off the bed, and passes under what is higher); bodies: how many joints lying in its way make it choose this
+  jab: { reach: 2.8, wind: 0.34, short: 0.3, cost: 1, rest: 0.5, every: 1.7 }, // short: how much of its fingers' span the small claw keeps back of where it is aimed (the rest goes past it)
+  charge: { from: 5.5, to: 12, tell: 0.75, speed: 9.5, run: 1.0, slack: 0.2, cost: 2, rest: 1.3, every: 7 }, // running, it takes what its shell or its legs meet (slack: how near counts as meeting)
+  dig: { down: 0.8, speed: 5.5, under: [1.3, 2.2], tell: 0.55, burst: 0.6, high: 3.0, cost: 3, rest: 1.8, every: 9 }, // coming up, its shell takes what is over it: within its rim and `burst` more, `high` over the bed
+  leg: { reach: 0.5, numb: 4.5, stagger: 1.1, torn: 1.7, wrapped: 3.2, room: 0.4 }, // reach: how near the tip of the snout must come to a leg as it is drawn, in metres from its skin. stagger, torn, wrapped: how long each leaves it reeling
+  bait: { reach: 8, walk: 3.4, feed: 3.4, near: 2.7, most: 6 }, // near: how close it must get to eat; most: how long it will try to get to one. A tail lying where it cannot get that close (past its leash, or out over the rift) it leaves, and does not go for again
 };
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -93,7 +97,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     game.event('hit', pos); if (S.hp === 1) game.event('laststand', pos); // one blow from done: its instrument takes a solo (main.js)
     if (S.hp <= 0) fall();
   }
-  if (kind === 'keeper') Object.assign(S, { leg: new Array(8).fill(0), legT: new Array(8).fill(0), lost: 0, open: false, sink: 0, jabT: 0, chargeT: 4, digT: 0, once: false, dir: 0, last: '', jabbed: 0, wrapLeg: -1, puffT: 0 }); // leg: 0 sound, 1 numb, 2 gone
+  if (kind === 'keeper') Object.assign(S, { leg: new Array(8).fill(0), legT: new Array(8).fill(0), lost: 0, open: false, sink: 0, jabT: 0, chargeT: 4, digT: 0, once: false, dir: 0, last: '', jabbed: 0, wrapLeg: -1, puffT: 0, pending: '' }); // leg: 0 sound, 1 numb, 2 gone
   if (kind === 'shearer') Object.assign(S, { lost: 0, snapped: false, chain: 0, swipeT: 3, baited: false, slid: 0, locked: false, cut: 0, puffT: 0, hit2: 0 });
   // the Shearer's line: where it means to go, laid on the water while it winds up
   const line = kind === 'shearer' ? new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)), keep(new THREE.MeshBasicMaterial({ color: '#ffc2cf', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }))) : null;
@@ -105,8 +109,11 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   // a dash that reaches it
   // The Keeper's legs. Which one a point is at (the leg from a quarter of the way down it to the foot: nearer the hip than that is shell), and what a blow does to one.
   // (Seen from above, as the dive is: a leg arches up from the shell and down to its foot, and a fish that cannot get lower than a metre and a half off the bed still reaches it.)
-  function legNear(p, reach) { let best = -1, least = reach; if (p.y > pos.y + 2.6) return -1; rig.walker.legs.forEach((l, i) => { if (S.leg[i] === 2) return; hip.copy(l.hip).applyMatrix4(mesh.matrix); v.subVectors(l.foot, hip).setY(0);
-    const t = clamp(near.subVectors(p, hip).setY(0).dot(v) / v.lengthSq(), 0.3, 1), d = Math.hypot(hip.x + v.x * t - p.x, hip.z + v.z * t - p.z); if (d < least) { least = d; best = i; } }); return best; }
+  // The Keeper's legs, as they are drawn (crab.js `solids`: a capsule for each length). Which one the tip of a snout is at, if any; and whether it is at the shell.
+  let SOL = [];
+  const solidsNow = () => (SOL = rig.solids());
+  function legAt(snout, reach) { let best = -1, least = reach; for (const s of SOL) { if (s.leg < 0 || S.leg[s.leg] === 2) continue; const d = gap(s, snout, snout, FISH.head); if (d < least) { least = d; best = s.leg; } } return best; }
+  const atShell = (snout, reach) => SOL.length && SOL[0].t === 'ell' && gap(SOL[0], snout, snout, FISH.head) < reach;
   function numb(i) { S.leg[i] = 1; S.legT[i] = F.leg.numb; S.hits++; S.flash = 1; S.stun = Math.max(S.stun, F.leg.stagger); set('rest', S.stun); game.event('hit', pos); game.event('numb', rig.walker.legs[i].foot); }
   function tear(i, wrapped) { const foot = rig.walker.legs[i].foot;
     S.leg[i] = 2; S.lost++; S.hp = HP - S.lost; S.hits++; S.flash = 1; S.stun = wrapped ? F.leg.wrapped : F.leg.torn; set('rest', S.stun); vel.set(0, 0, 0);
@@ -115,8 +122,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (S.lost >= HP) fall(); else if (S.lost === F.rage) { S.digT = 0; game.event('rage', pos); } }
   function ramKeeper(snout, power) {
     if (S.done || S.sink > 0.5) return null;
-    const i = legNear(snout, F.leg.reach);
-    if (i < 0 && snout.distanceTo(pos) > 2.1) return null;
+    const i = legAt(snout, F.leg.reach);
+    if (i < 0 && !atShell(snout, F.leg.reach)) return null;
     if (S.stun > 0.3 && S.flash > 0.2) return null; // one ram, one blow
     if (i < 0 || !S.open) { // the shell, or a leg it has its weight on
       if (power > 1 && !S.open) { S.stun = 2; S.flash = 1; set('rest', 2); game.event('hit', pos); return { kind: 'guard', pos: pos.clone(), food: 0 }; } // a full crest breaks its guard: it reels, and is open
@@ -152,7 +159,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const tailNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(pos) < reach) return j; return -1; };
   const tailPoint = (ctx) => { const J = ctx.joints; if (!J) return null; const N = J.length - 1; let best = null, near = 1e9; for (let j = Math.ceil(N * 0.4); j <= N; j++) { const d = J[j].distanceToSquared(pos); if (d < near) { near = d; best = J[j]; } } return best; };
   const sawNear = (ctx, reach) => { const J = ctx.joints, N = J.length - 1; v.copy(vel).setLength(2.6).add(pos); for (let j = Math.ceil(N * 0.4); j <= N; j++) if (J[j].distanceTo(v) < reach || J[j].distanceTo(pos) < reach) return j; return -1; }; // the tail, where the saw out ahead of it can reach, or its body
-  const baitNear = (ctx, reach) => ctx.pieces.find((p) => p.kind === 'decoy' && !p.dead && p.life > 0.8 && p.pos.distanceTo(pos) < reach) || null;
+  const spurned = new WeakSet(); // shed tails the Keeper has given up on: it cannot get to them from its ground
+  const baitNear = (ctx, reach) => ctx.pieces.find((p) => p.kind === 'decoy' && !p.dead && p.life > 0.8 && !spurned.has(p) && p.pos.distanceTo(pos) < reach) || null;
   const go = (dt, to, speed, turn = 4) => { // swim toward a point
     v.subVectors(to, pos); const d = v.length();
     if (d > 1e-3) { vel.lerp(v.multiplyScalar(speed / d), 1 - Math.exp(-turn * dt)); yaw += wrapPi(Math.atan2(vel.x, vel.z) - yaw) * (1 - Math.exp(-6 * dt)); }
@@ -173,11 +181,29 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const move = (dt) => { const x0 = pos.x, z0 = pos.z; pos.addScaledVector(vel, dt); world.steer(pos, 1.2); hold(); pos.y = damp(pos.y, world.height(pos.x, pos.z) + HOME[1], 3, dt); return Math.hypot(pos.x - x0, pos.z - z0); };
   const walk = (dt, to, speed) => { v.subVectors(to, pos).setY(0); const d = v.length(); if (d > 1e-3) vel.lerp(v.multiplyScalar(speed / d), 1 - Math.exp(-3 * dt)); move(dt); return d; };
   const turnTo = (dt, a, rate) => { yaw += clamp(wrapPi(a - yaw), -rate * dt, rate * dt); };
-  const struckAt = (ctx, test) => { const J = ctx.joints; for (let j = J.length - 1; j >= 0; j--) if (test(J[j])) return j; return -1; }; // whatever part of the body is in a blow's way: the part nearest the tail
+  const struckAt = (ctx, test) => { const J = ctx.joints; for (let j = J.length - 1; j >= 0; j--) if (test(J[j])) return j; return -1; }; // whatever part of the body is in a blow's way: the part nearest the tail (the Shearer's swipe)
+  // the fish's body as the Keeper's blows meet it: a capsule for each length, as wide as the body is there (shapes.js), refreshed each frame
+  let BODY = []; const hitBy = (shape, slack = 0) => takes(shape, BODY, slack);
+  const blow = { t: 'cap', a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0, role: 'blow' }, slamAt = { t: 'prism', a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0, y0: 0, h: 0, role: 'blow' }, shock = { t: 'prism', a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0, y0: 0, h: 0, role: 'blow' }, burst = { t: 'prism', a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0, y0: 0, h: 0, role: 'blow' };
+  // the great claw coming down at `at` (on the bed): where its hand and fingers will be, stood up from the bed to `high`, and the jolt where the fingers hit
+  // (before the blow, `at` is where it is aimed, and the crab will take a step toward it first if it is far: the shape is worked out for where it will stand)
+  const stepTo = (at, out) => { out.set(at.x - pos.x, 0, at.z - pos.z); const far = out.length(); return out.multiplyScalar(far > 3.3 ? Math.min(far - 3.3, 1.4) / far : 0); }, STEP = new THREE.Vector3(), AT2 = new THREE.Vector3();
+  const slamShape = (at, now) => { if (now) rig.strike(true, at, 0.6, blow); else { stepTo(at, STEP); rig.landing(true, AT2.copy(at).sub(STEP), 0.6, blow); blow.a.add(STEP); blow.b.add(STEP); } const bed = world.height(at.x, at.z); slamAt.a.copy(blow.a); slamAt.b.copy(blow.b); slamAt.r = blow.r; slamAt.y0 = bed - 0.5; slamAt.h = F.slam.high + 0.5;
+    shock.a.copy(blow.b); shock.b.copy(blow.b); shock.r = F.slam.shock; shock.y0 = world.height(blow.b.x, blow.b.z) - 0.5; shock.h = F.slam.shockHigh + 0.5; return slamAt; };
+  const burstShape = () => { const bed = world.height(pos.x, pos.z); burst.a.copy(pos); burst.b.copy(pos); burst.r = rig.SHELL.r[0] + F.dig.burst; burst.y0 = bed - 0.5; burst.h = F.dig.high + 0.5; return burst; };
   const silt = (at, n, push = 1.6) => { if (world.puff) for (let i = 0; i < n; i++) { const a = rand() * 6.28, r = 0.3 + rand() * 0.9; world.puff(at.x + Math.sin(a) * r, world.height(at.x, at.z) + 0.15, at.z + Math.cos(a) * r, Math.sin(a) * push, 0.5 + rand() * 0.9, Math.cos(a) * push, 0.3 + rand() * 0.35, 1 + rand()); } };
   const lineTo = (to, locked) => { v2.subVectors(to, pos); const d = v2.length() || 1, far = d + 5; v2.multiplyScalar(1 / d); // from the Shearer, through where it is aimed, and on
     line.visible = true; line.material.opacity = locked ? 0.75 : 0.32; line.scale.set(locked ? 0.5 : 0.3, 1, far);
     line.rotation.set(-Math.asin(clamp(v2.y, -1, 1)), Math.atan2(v2.x, v2.z), 0); line.position.copy(pos).addScaledVector(v2, far / 2); line.position.y -= 0.25; };
+  // The Keeper's marks on the bed are the true footprint of what is coming: a flat stadium (a capsule seen from above) for each shape it is handed, lit, with its rim brighter
+  const bedMarks = [], markMat = kind === 'keeper' ? keep(new THREE.MeshBasicMaterial({ color: '#ffe2a8', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })) : null,
+    rimMat = kind === 'keeper' ? keep(new THREE.LineBasicMaterial({ color: '#fff1cf', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })) : null;
+  function markCaps(...shapes) { shapes.forEach((sh, i) => { let m = bedMarks[i]; if (!m) { m = { fill: new THREE.Mesh(new THREE.BufferGeometry(), markMat), rim: new THREE.LineLoop(new THREE.BufferGeometry(), rimMat), key: '' }; m.fill.renderOrder = m.rim.renderOrder = 3; root.add(m.fill, m.rim); bedMarks.push(m); trash.push(m.fill.geometry, m.rim.geometry); }
+      const L = Math.hypot(sh.b.x - sh.a.x, sh.b.z - sh.a.z), key = `${L.toFixed(2)} ${sh.r.toFixed(2)}`;
+      if (key !== m.key) { m.key = key; const pts = []; for (let k = 0; k <= 12; k++) { const a = Math.PI / 2 + (k / 12) * Math.PI; pts.push(new THREE.Vector2(Math.cos(a) * sh.r, Math.sin(a) * sh.r)); } for (let k = 0; k <= 12; k++) { const a = -Math.PI / 2 + (k / 12) * Math.PI; pts.push(new THREE.Vector2(L + Math.cos(a) * sh.r, Math.sin(a) * sh.r)); }
+        m.fill.geometry.dispose(); m.fill.geometry = new THREE.ShapeGeometry(new THREE.Shape(pts)).rotateX(Math.PI / 2); m.rim.geometry.dispose(); m.rim.geometry = new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, 0, p.y))); }
+      const y = Math.max(world.height(sh.a.x, sh.a.z), world.height(sh.b.x, sh.b.z), world.height((sh.a.x + sh.b.x) / 2, (sh.a.z + sh.b.z) / 2)) + 0.12, ang = Math.atan2(sh.b.x - sh.a.x, sh.b.z - sh.a.z) - Math.PI / 2;
+      for (const o of [m.fill, m.rim]) { o.visible = true; o.position.set(sh.a.x, y, sh.a.z); o.rotation.set(0, L > 1e-3 ? ang : 0, 0); } }); }
   const markAt = (at, size) => { mark.visible = true; mark.position.set(at.x, world.height(at.x, at.z) + 0.25, at.z); mark.scale.setScalar(size); };
   const watch = { p: new THREE.Vector3(), t: 0, lift: 0, side: 0, dodge: 0 }, UP = new THREE.Vector3(0, 1, 0); // the last resort: if it is getting nowhere, the Shearer rises until it is, and the Keeper turns aside
 
@@ -185,10 +211,12 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     W.set(well.x + T * Math.round((ctx.focus.x - well.x) / T), Y0, well.z + T * Math.round((ctx.focus.z - well.z) / T)); // where it lives, on the nearest copy of the world
     pos.x += T * Math.round((ctx.focus.x - pos.x) / T); pos.z += T * Math.round((ctx.focus.z - pos.z) / T);
     for (const s of slabs) { s.p.x += T * Math.round((ctx.focus.x - s.p.x) / T); s.p.z += T * Math.round((ctx.focus.z - s.p.z) / T); }
+    if (kind === 'keeper' && ctx.rig) BODY = fishBody(ctx.rig, BODY); // the fish's body as the Keeper's blows meet it, this frame
     fadeStrikes(dt); S.t -= dt; S.cool -= dt; S.flash = Math.max(0, S.flash - dt * 2.5); S.danger = 0;
     const fish = ctx.pos, far = Math.hypot(fish.x - W.x, fish.z - W.z), awake = ctx.playing && far < 26;
     let warnSize = 0;
     if (mark) mark.visible = false;
+    for (const m of bedMarks) m.fill.visible = m.rim.visible = false;
     if (line) line.visible = false;
     if (kind === 'keeper') for (let i = 0; i < 8; i++) if (S.leg[i] === 1 && !(S.wrapLeg === i && target.progress > 0.15) && (S.legT[i] -= dt) <= 0) S.leg[i] = 0; // a numb leg comes back, unless a body is going round it
     if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, kind === 'shearer' ? world.topNear(pos.x, pos.z, 0.9) + 0.4 : -1e9, pos.y - 1.6 * dt); if (!rig) mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
@@ -220,26 +248,21 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         if (k < F.slam.aim) { aim.copy(P); turnTo(dt, bearing, 5); }
         v.subVectors(aim, pos).setY(0); const d = v.length(); if (d > F.slam.reach) aim.set(pos.x + v.x * F.slam.reach / d, 0, pos.z + v.z * F.slam.reach / d);
         aim.y = world.height(aim.x, aim.z); vel.multiplyScalar(Math.exp(-6 * dt)); move(dt);
-        if (k >= F.slam.aim) markAt(aim, F.slam.hit * 2);
+        if (k >= F.slam.aim) { slamShape(aim, false); markCaps(slamAt, shock); } // the mark is the claw's own footprint, and the jolt where its fingers will hit
         if (S.t <= 0) { // down it comes, with a step forward if it needs one
-          v.subVectors(aim, pos).setY(0); const far = v.length(); if (far > 3.3) { pos.addScaledVector(v, Math.min(far - 3.3, 1.4) / far); hold(); }
-          struckShow({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.slam.hit, y0: aim.y, h: 3.2, role: 'blow' });
-          const j = struckAt(ctx, (p) => Math.hypot(p.x - aim.x, p.z - aim.z) < F.slam.hit && p.y - aim.y < 3.2);
-          if (j >= 0) { aim.y = ctx.joints[j].y - 0.2; if (game.bite(F.slam.cost, j, pos)) S.bites++; } // it closes on the body if the body is there; if not, it goes into the bed
-          game.event('slam', aim); silt(aim, 8); set('stuck', F.slam.stuck * (raging ? 0.85 : 1)); vel.set(0, 0, 0);
+          pos.add(stepTo(aim, STEP)); hold();
+          S.pending = 'slam'; set('stuck', F.slam.stuck * (raging ? 0.85 : 1)); vel.set(0, 0, 0); // what it takes is judged once the crab is drawn where it now stands (the end of update)
         }
       }
       else if (S.state === 'stuck') { if (S.t <= 0) { set('stalk'); S.cool = 0.6 * q; } } // the claw is in the bed, and it hauls on it
       else if (S.state === 'sweep') { warnSize = 3.2; S.danger = 0.8; vel.multiplyScalar(Math.exp(-6 * dt)); move(dt); if (S.t <= 0) { set('sweeping', F.sweep.time); S.once = false; } } // drawn back, wide and low: it does not turn again
       else if (S.state === 'sweeping') { // across its front from its right to its left, under anything that has risen over its back
         S.danger = 1; const swept = lerp(-1.8, 1.8, k) + 0.3;
-        if (!S.once) { const j = struckAt(ctx, (p) => { const dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz); if (d > F.sweep.reach || d < 0.9 || p.y > pos.y + F.sweep.low) return false; const o = wrapPi(Math.atan2(dx, dz) - S.dir); return o > -1.9 && o < swept; });
-          if (j >= 0 && game.bite(F.sweep.cost, j, pos)) { S.bites++; S.once = true; } }
-        if (S.t <= 0) set('rest', F.sweep.rest * q);
+        if (S.t <= 0) set('rest', F.sweep.rest * q); // (what it takes is judged after the claw is drawn this frame: see the end of update)
       }
       else if (S.state === 'jab') { // the small claw, cocked: quick, and it does not take much
         warnSize = 1.5; S.danger = 0.5; if (k < 0.5 && nd < F.jab.reach + 0.5) aim.copy(P); turnTo(dt, bearing, 1.5); vel.multiplyScalar(Math.exp(-6 * dt)); move(dt);
-        if (S.t <= 0) { struckShow({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.jab.hit, y0: aim.y - 2, h: 4, role: 'blow' }); const j = struckAt(ctx, (p) => Math.hypot(p.x - aim.x, p.z - aim.z) < F.jab.hit && Math.abs(p.y - aim.y) < 2); if (j >= 0 && game.bite(F.jab.cost, j, pos)) S.bites++; S.jabbed = 0.2; set('rest', F.jab.rest * q); }
+        if (S.t <= 0) { S.pending = 'jab'; S.jabbed = 0.2; set('rest', F.jab.rest * q); } // the small claw goes out: judged where it is drawn as it gets there (the end of update)
       }
       else if (S.state === 'charge') { // it turns side on to the body and draws itself in: crabs run sideways
         warnSize = 3; S.danger = 0.7; turnTo(dt, bearing - S.side * Math.PI / 2, 6); aim.copy(P); vel.multiplyScalar(Math.exp(-6 * dt)); move(dt);
@@ -247,13 +270,13 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       }
       else if (S.state === 'run') { // and runs, through where the body was. What stands stops it, and so does the end of its ground
         S.danger = 1; const went = move(dt);
-        if (!S.once) { const j = struckAt(ctx, (p) => Math.hypot(p.x - pos.x, p.z - pos.z) < F.charge.hit && p.y < pos.y + 1.8); if (j >= 0 && game.bite(F.charge.cost, j, pos)) { S.bites++; S.once = true; } }
         if (went < F.charge.speed * dt * 0.45) { vel.set(0, 0, 0); game.event('clang', pos); set('rest', F.charge.rest * 1.5); }
         else if (S.t <= 0) set('rest', F.charge.rest * q);
       }
       else if (S.state === 'rest') { vel.multiplyScalar(Math.exp(-5 * dt)); move(dt); if (S.t <= 0) { set('stalk'); S.cool = 0.35 * q; } } // it has struck, and gets its breath: open
       else if (S.state === 'fetch') { // to the bait, by the shortest way
         if (!bait || bait.dead || bait.life < 0.4) { bait = null; set('stalk'); }
+        else if (Math.hypot(bait.pos.x - W.x, bait.pos.z - W.z) > F.leash + F.bait.near || rift.in(bait.pos.x, bait.pos.z) + F.edge > F.bait.near || S.t < -F.bait.most) { spurned.add(bait); bait = null; set('stalk'); } // out of its ground, or it has been at it too long: it gives up, and that one it will not go for again
         else { bait.life = Math.max(bait.life, 0.9); turnTo(dt, Math.atan2(bait.pos.x - pos.x, bait.pos.z - pos.z), rate * 1.5); if (walk(dt, bait.pos, F.bait.walk) < 2.7) { vel.set(0, 0, 0); set('feed', F.bait.feed); } }
       }
       else if (S.state === 'feed') { if (bait && !bait.dead) bait.life = Math.max(bait.life, 0.5); if (S.t <= 0) { if (bait) bait.life = 0.2; bait = null; set('stalk'); S.cool = 0.5; } } // both claws at its mouth: open
@@ -264,8 +287,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         if (S.t <= 0) { aim.copy(pos); set('rise', F.dig.tell * q); }
       }
       else if (S.state === 'rise') { // the sand heaves where it is coming up
-        S.sink = 1; warnSize = 3.2; S.danger = 0.9; markAt(pos, F.dig.hit * 2); if ((S.puffT -= dt) <= 0) { S.puffT = 0.05; silt(pos, 2, 2.6); }
-        if (S.t <= 0) { world.steer(pos, 1.2); hold(); struckShow({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.dig.hit, y0: world.height(pos.x, pos.z), h: pos.y + F.dig.high - world.height(pos.x, pos.z), role: 'blow' }); const j = struckAt(ctx, (p) => Math.hypot(p.x - pos.x, p.z - pos.z) < F.dig.hit && p.y < pos.y + F.dig.high); if (j >= 0 && game.bite(F.dig.cost, j, pos)) S.bites++;
+        S.sink = 1; warnSize = 3.2; S.danger = 0.9; markCaps(burstShape()); if ((S.puffT -= dt) <= 0) { S.puffT = 0.05; silt(pos, 2, 2.6); }
+        if (S.t <= 0) { world.steer(pos, 1.2); hold(); struckShow(burstShape()); const j = hitBy(burst); if (j >= 0 && game.bite(F.dig.cost, j, pos)) S.bites++; // its shell, coming up
           game.event('slam', pos); silt(pos, 10, 3); yaw = bearing; set('rest', F.dig.rest * q); }
       }
       else { // nobody near: its round
@@ -399,6 +422,15 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         wary: awake && !S.done ? clamp(1.3 - close / 11, 0, 1) : 0, look: fish, act: id ? { id, k, at: st === 'feed' && bait ? bait.pos : aim } : null,
         tuck: !S.done && st === 'charge', stun: S.stun > 0, limp: S.done, sink: S.sink, rage: S.lost >= F.rage }); // (rage: only so that it can be seen to rage)
       const clear = pos.y - (rig.walker.body.ground + HOME[1]) - 0.7; if (clear > 0 && !S.done) mesh.position.y += clear; // lifted off the ground, it is drawn where it is
+      mesh.updateMatrix(); solidsNow();
+      // The blows, judged against the crab as it is now drawn: what lands this frame, and what is sweeping or running through the water
+      if (S.pending === 'slam') { slamShape(aim, true); const j = Math.max(hitBy(slamAt), hitBy(shock)); struckShow(slamAt); struckShow(shock); // the claw as it lands, and where its fingers hit the bed
+        if (j >= 0) { aim.y = BODY.find((c) => c.j === j).b.y - 0.2; rig.strike(true, aim, 0.6, blow); if (game.bite(F.slam.cost, j, pos)) S.bites++; } // it closes on the body if the body is there; if not, it goes into the bed
+        game.event('slam', aim); silt(shock.a, 8); }
+      else if (S.pending === 'jab') { rig.strike(false, aim, F.jab.short, blow); struckShow(blow); const j = hitBy(blow); if (j >= 0 && game.bite(F.jab.cost, j, pos)) S.bites++; }
+      S.pending = '';
+      if (st === 'sweeping' && !S.once) { rig.clawNow(true, blow); const j = hitBy(blow); if (j >= 0) { struckShow(blow); if (game.bite(F.sweep.cost, j, pos)) { S.bites++; S.once = true; } } } // the great claw going across, where it is
+      if (st === 'run' && !S.once) for (const sh of SOL) { const j = hitBy(sh, F.charge.slack); if (j >= 0) { struckShow({ ...sh, a: sh.a.clone(), b: sh.b.clone(), c: sh.c.clone(), role: 'blow' }); if (game.bite(F.charge.cost, j, pos)) { S.bites++; S.once = true; } break; } } // running: its shell and its legs, as they go
       for (const m of fallen) { m.position.x += T * Math.round((ctx.focus.x - m.position.x) / T); m.position.z += T * Math.round((ctx.focus.z - m.position.z) / T); const low = world.height(m.position.x, m.position.z) + 0.14; if (m.position.y > low) { m.position.y = Math.max(low, m.position.y - 2.4 * dt); m.rotation.x += 0.9 * dt; } } // a leg that has come off sinks to the bed and lies there
       was.copy(pos);
     } else if (rig) { // the Shearer bends its own body (sawfish.js): it is told where it is, how it is moving and what it is about
@@ -419,42 +451,48 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
 
     S.wrap = null;
     if (kind === 'keeper') { // what a body can be drawn round is a numb leg: the one nearest the head
-      let wi = -1, least = 1e9; if (!S.done && ctx.playing && S.sink < 0.5) rig.walker.legs.forEach((l, i) => { if (S.leg[i] !== 1) return; const d = l.foot.distanceToSquared(fish); if (d < least) { least = d; wi = i; } });
+      let wi = -1, least = 1e9; if (!S.done && ctx.playing && S.sink < 0.5) for (const sh of SOL) { if (sh.leg < 0 || S.leg[sh.leg] !== 1) continue; onLeg(fish, sh.a, sh.b, v2); const d = v2.distanceToSquared(fish); if (d < least) { least = d; wi = sh.leg; } }
       if (wi !== S.wrapLeg) target.progress = 0; S.wrapLeg = wi;
-      if (wi >= 0) { const f = rig.walker.legs[wi].foot; target.x = f.x; target.y = pos.y + 0.4; target.z = f.z; target.can = canWrap(ctx.total, target.room); S.wrap = target; }
+      if (wi >= 0) { let least2 = 1e9; for (const sh of SOL) { if (sh.leg !== wi) continue; onLeg(fish, sh.a, sh.b, v2); const d = v2.distanceToSquared(fish); if (d < least2) { least2 = d; target.x = v2.x; target.y = v2.y; target.z = v2.z; } } // round the leg where the body is: the point of it nearest the head
+        target.can = canWrap(ctx.total, target.room); S.wrap = target; }
     }
     else if (wrappable() && ctx.playing) { const out = kind === 'shearer' && S.stuck ? 1.9 : 0; target.x = pos.x + Math.sin(yaw) * out; target.y = pos.y; target.z = pos.z + Math.cos(yaw) * out; // (the Shearer's saw, when that is what is stuck)
       target.can = canWrap(ctx.total, target.room); S.wrap = target; } else target.progress = 0;
   }
   // while the keeper lives the veil holds: the ledges can be swum over, but nothing goes down between the walls
   function pushOut(p, radius) {
+    if (kind === 'keeper' && SOL.length && S.sink < 0.5 && Math.abs(p.x - pos.x) < 7 && Math.abs(p.z - pos.z) < 7) for (let pass = 0; pass < 2; pass++) for (const sh of SOL) pushFrom(sh, p, FISH.head); // the Keeper is solid: its shell and legs turn the head aside
     if (S.done) return;
     const top = rift.ledgeY + 0.5 + radius;
     if (p.y < top && rift.in(p.x, p.z) > rift.ledge - 0.3) p.y = top;
   }
-  function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
+  // ...and the rest of the body: rig.js hands over the points the body is laid along (the trail it follows, and where each joint wants to be), each with how
+  // thick the body is there, and each is turned out of the shell and the legs. The trail is kept, so a body pushed to one side of a leg stays on that side.
+  function bend(items, radiusOf) {
+    if (kind !== 'keeper' || !SOL.length || S.sink >= 0.5) return;
+    for (let i = 0; i < items.length; i++) { const p = items[i].p; if (Math.abs(p.x - pos.x) > 7 || Math.abs(p.z - pos.z) > 7) continue; const r = radiusOf(i); if (r < 0) break; for (const sh of SOL) pushFrom(sh, p, r); }
+  }
+  function dispose() { for (const m of bedMarks) { m.fill.geometry.dispose(); m.rim.geometry.dispose(); } scene.remove(root); for (const o of trash) o.dispose(); }
   const wrapped = () => { if (kind === 'shearer') { S.snapped = true; target.progress = 0; game.event('snap', pos); return tooth(Z.snap, 2.6); } // the saw goes, and two rows with it
     if (kind !== 'keeper') return fall(); if (S.wrapLeg >= 0 && S.leg[S.wrapLeg] === 1) tear(S.wrapLeg, true); target.progress = 0; }; // round the Keeper's numb leg, it comes off; round any of the others, they are held
-  // What the fight believes, as shapes (shapes.js), for the testing tool that draws them over the picture: the fish, what is solid, each leg and whether
-  // it can be hurt now, and the blow on its way (or, for a moment after, the one that has just landed). The fish here is as the fight saw it: its joints, points.
-  const SHOWN = [], strikes = [], pt = (p, r, role) => ({ t: 'cap', a: p.clone(), b: p.clone(), r, role });
-  const struckShow = (shape) => { strikes.push({ ...shape, hot: true, life: 0.45 }); };
+  // What the fight believes, as shapes (shapes.js), for the testing tool that draws them over the picture: the fish's body, what is solid of the crab, each
+  // leg and whether it can be hurt now, the blow on its way, and for a moment after it lands, what it was judged by (`hot`). The same shapes the fight uses.
+  const SHOWN = [], strikes = [];
+  const struckShow = (shape) => { strikes.push({ ...shape, a: shape.a.clone(), b: shape.b.clone(), c: shape.c ? shape.c.clone() : undefined, role: 'blow', hot: true, life: 0.45 }); };
+  const copy = (sh, role) => ({ ...sh, a: sh.a.clone(), b: sh.b.clone(), c: sh.c ? sh.c.clone() : undefined, role });
   function shapes(ctx) {
-    SHOWN.length = 0; if (kind !== 'keeper' || !ctx || !ctx.joints) return SHOWN;
-    for (const j of ctx.joints) SHOWN.push(pt(j, 0.06, 'fish'));
-    if (S.done) return SHOWN;
-    const bed = world.height(pos.x, pos.z), st = S.state, k = S.T > 0 ? clamp(1 - S.t / S.T, 0, 1) : 0;
-    SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: 2.1, y0: bed, h: pos.y + 2.6 - bed, role: 'solid' }); // what a ram meets as shell: anything within 2.1 m of its middle, at any height
-    if (S.sink < 0.5) rig.walker.legs.forEach((l, i) => { if (S.leg[i] === 2) return; hip.copy(l.hip).applyMatrix4(mesh.matrix); const a = hip.clone().lerp(l.foot, 0.3); // a leg: within 1.1 m of the line from a third of the way down it to its foot, seen from above
-      SHOWN.push({ t: 'prism', a, b: l.foot.clone(), r: F.leg.reach, y0: Math.min(a.y, l.foot.y), h: pos.y + 2.6 - Math.min(a.y, l.foot.y), role: 'leg', live: S.open }); });
-    if (st === 'slam') SHOWN.push({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.slam.hit, y0: aim.y, h: 3.2, role: 'blow' });
-    else if (st === 'jab') SHOWN.push({ t: 'prism', a: aim.clone(), b: aim.clone(), r: F.jab.hit, y0: aim.y - 2, h: 4, role: 'blow' });
-    else if (st === 'sweep' || st === 'sweeping') SHOWN.push({ t: 'fan', c: pos.clone(), r0: 0.9, r1: F.sweep.reach, a0: (st === 'sweep' ? yaw : S.dir) - 1.9, a1: (st === 'sweep' ? yaw : S.dir) + (st === 'sweep' ? 2.1 : lerp(-1.8, 1.8, k) + 0.3), y0: bed, h: pos.y + F.sweep.low - bed, role: 'blow', hot: st === 'sweeping' });
-    else if (st === 'charge' || st === 'run') SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.charge.hit, y0: bed, h: pos.y + 1.8 - bed, role: 'blow', hot: st === 'run' });
-    else if (st === 'rise' || st === 'under') SHOWN.push({ t: 'prism', a: pos.clone(), b: pos.clone(), r: F.dig.hit, y0: bed, h: pos.y + F.dig.high - bed, role: 'blow' });
-    for (let i = strikes.length - 1; i >= 0; i--) { SHOWN.push(strikes[i]); }
+    SHOWN.length = 0; if (kind !== 'keeper' || !ctx || !ctx.rig) return SHOWN;
+    for (const c of fishBody(ctx.rig)) SHOWN.push(c);
+    if (S.done || S.sink >= 0.5) { if (S.state === 'rise') SHOWN.push(copy(burstShape(), 'blow')); for (const st of strikes) SHOWN.push(st); return SHOWN; }
+    for (const sh of SOL) { const o = copy(sh, sh.leg >= 0 ? 'leg' : 'solid'); if (sh.leg >= 0) o.live = S.open; SHOWN.push(o); }
+    const st = S.state;
+    if (st === 'slam') { slamShape(aim, false); SHOWN.push(copy(slamAt, 'blow'), copy(shock, 'blow')); }
+    else if (st === 'jab') SHOWN.push(copy(rig.landing(false, aim, F.jab.short, blow), 'blow'));
+    else if (st === 'sweep' || st === 'sweeping') SHOWN.push({ ...copy(rig.clawNow(true, blow), 'blow'), hot: st === 'sweeping' });
+    else if (st === 'charge' || st === 'run') for (const sh of SOL) SHOWN.push({ ...copy(sh, 'blow'), hot: st === 'run' });
+    for (const s2 of strikes) SHOWN.push(s2);
     return SHOWN;
   }
   const fadeStrikes = (dt) => { for (let i = strikes.length - 1; i >= 0; i--) if ((strikes[i].life -= dt) <= 0) strikes.splice(i, 1); };
-  return { update, ram, pushOut, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legNear, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
+  return { update, ram, pushOut, bend, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legAt, solids: () => SOL, body: () => BODY, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
 }
