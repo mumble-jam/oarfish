@@ -23,12 +23,25 @@ const sprite = (a, color, size) => { const m = new THREE.SpriteMaterial({ map: g
 const BULB = new THREE.IcosahedronGeometry(0.1, 0), LINE = new THREE.CylinderGeometry(0.014, 0.014, 1, 4).translate(0, 0.5, 0), BAIT = new THREE.OctahedronGeometry(0.07, 0);
 const GUARD = { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.1 }; // the keepers of the rifts carry a little light of their own, so they read in the dark
 const SCHOOL = { tone1: '#f3f7fa', tone2: '#ffd96b', tone3: '#9fe0ea', tone4: '#ffb38a' }; // the tints a swarm may take, one to a swarm
-// where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp); sc: its swarm (x, y, z, ball, pack, threat, burst)
+// where one fish of a swarm is at time t. f: its own numbers (ph, rho, h, sp, half); sc: its swarm (x, y, z, ball, pack, threat, burst).
+// A swarm with a temper (world.js, TEMPER) may also say how it lies when loose: `slack` wider or closer, `tall` stretched up or pressed flat,
+// `gap` and its line (ax, az) for two lobes; and `swell`, a size it is easing out of.
 function place(out, f, sc, t) {
-  const R = sc.ball * lerp(2.6, sc.pack, sc.threat) * (1 + 2.2 * sc.burst) * f.rho, a = f.ph + t * 0.55 * f.sp * (1 + 1.4 * sc.threat);
-  return out.set(sc.x + Math.sin(a) * R, sc.y + f.h * R * 0.6 + Math.sin(a * 1.7 + f.ph) * 0.12, sc.z + Math.cos(a) * R * 0.9);
+  const loose = 1 - sc.threat, R = sc.ball * lerp(2.6 * (sc.slack ?? 1), sc.pack, sc.threat) * (1 + 2.2 * sc.burst) * (sc.swell ?? 1) * f.rho, a = f.ph + t * 0.55 * f.sp * (1 + 1.4 * sc.threat);
+  out.set(sc.x + Math.sin(a) * R, sc.y + f.h * R * 0.6 * (1 + (sc.tall || 0) * loose) + Math.sin(a * 1.7 + f.ph) * 0.12, sc.z + Math.cos(a) * R * 0.9);
+  if (sc.gap) { const g = f.half ? sc.gap : -sc.gap; out.x += sc.ax * g; out.z += sc.az * g; }
+  return out;
 }
-const swarmStates = [{ id: 'calm', name: 'Loose', threat: 0, pack: 1 }, { id: 'ball', name: 'Balled up', threat: 1, pack: 1 }, { id: 'pressed', name: 'Pressed', threat: 1, pack: 0.84 }, { id: 'burst', name: 'Scattering', threat: 0.4, pack: 1, burst: 0.8 }];
+// The tempers a swarm may have (world.js gives them out, a letter to a swarm in each band's `kinds`, and runs them). The numbers that shape the loose
+// swarm are here because the library shows them too: `slack` wider or closer than the plain sort, `tall` stretched up or pressed flat, `lobes` two of them.
+export const TEMPER = {
+  bolt: { rise: 2.6, top: 6.5, over: 1.2, sink: 0.7, hang: 1.4, tall: 2.6, slack: 0.45 },
+  twin: { at: 0.5, part: 2.2, mend: 5, lobes: 1.7, slack: 0.42 },
+  glow: { fear: 9, run: 4.4, pool: 3.4, hold: 4.6, seek: 16, pull: 0.9, home: 0.05, far: 40, slack: 1.45, flat: -0.6 },
+};
+const swarmStates = [{ id: 'calm', name: 'Loose', threat: 0, pack: 1 }, { id: 'ball', name: 'Balled up', threat: 1, pack: 1 }, { id: 'pressed', name: 'Pressed', threat: 1, pack: 0.84 }, { id: 'burst', name: 'Scattering', threat: 0.4, pack: 1, burst: 0.8 },
+  { id: 'column', name: 'One that bolts', threat: 0, pack: 1, slack: TEMPER.bolt.slack, tall: TEMPER.bolt.tall }, { id: 'lobes', name: 'One that parts', threat: 0, pack: 1, slack: TEMPER.twin.slack, lobes: TEMPER.twin.lobes },
+  { id: 'sheet', name: 'In the dark', threat: 0, pack: 1, slack: TEMPER.glow.slack, tall: TEMPER.glow.flat }];
 const swarmOf = (kind) => ({ group: 'Swarms', role: 'Food. A swarm is taken whole, by a body long enough to go round it.', swarm: true, length: 0.43, swim: { amp: 0.022, waves: 2.6, nose: 0.16, length: 0.43 }, beat: [11, 0], build: (pal) => model.swarmFish(kind, pal), states: swarmStates, place });
 
 export const NPCS = [

@@ -539,6 +539,8 @@ export function createMusic({ context = null } = {}) {
       const low = bassPitch(ch.root, 36);
       st.pulse = Math.min(1, st.pulse + ({ catch: 0.22, crest: 0.4, cache: 0.4, kill: 0.5, bite: 0.6, snag: 0.5, shed: 0.4, loop: 0.08, grow: 0.12, wake: 0.7, open: 0.6, ram: 0.35 }[kind] || 0) * (0.5 + strength * 0.5));
       if (kind === 'loop') { kit.rim(t, 0.8 * v); kit.splash(t, 0.35 * v); }
+      else if (kind === 'flit') { kit.rim(t, 0.6 * v); kit.splash(t + 0.03, 0.3 * v); } // a swarm has bolted, or run
+      else if (kind === 'part') { kit.rim(t, 0.8 * v); kit.rim(t + 0.09, 0.8 * v); kit.splash(t + 0.09, 0.4 * v); } // one swarm has become two
       else if (kind === 'burst') { kit.splash(t, 0.7 * v); kit.rim(t, v); kit.tom(t + 0.07, 0.6 * v, 112); } // ringed a swarm too big to hold
       else if (kind === 'catch') { // as big as the catch: a small swarm is a cymbal and a chord, a great one is the whole band
         kit.crash(t, 0.75 * v); kit.kick(t, 0.9 * v); up.forEach((m, i) => pianoNote(t + i * 0.012, m + 12, 0.5, 0.8 * v)); st.tension *= 0.3;

@@ -220,7 +220,7 @@ export async function start(saved = {}) {
   const pad = createPad();
   let dev = 'keys'; // what the player last touched: 'keys' (keyboard, mouse, finger) or 'pad'
   // a moment of the game, told to the band and, on a controller, to its motors
-  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], cache: [0.6, 0.6, 260], surge: [0.5, 0.6, 200], burst: [0.2, 0.5, 120], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
+  const RUMBLE = { dash: [0, 0.3, 70], ram: [0.8, 0.6, 140], wake: [0.8, 0.4, 900], open: [1, 0.8, 900], close: [0.3, 0.6, 1200], bite: [0.9, 0.5, 260], snag: [0.7, 0.9, 220], shed: [0.4, 0.7, 160], catch: [0, 0.45, 110], kill: [0.5, 0.7, 180], grow: [0, 0.25, 90], crest: [0.5, 0.5, 320], cache: [0.6, 0.6, 260], surge: [0.5, 0.6, 200], burst: [0.2, 0.5, 120], flit: [0, 0.22, 70], part: [0.15, 0.4, 110], descend: [0.3, 0.2, 500], dead: [1, 0.6, 700], win: [0.2, 0.5, 600] };
   function moment(kind, strength) {
     music.hit(kind, strength);
     const r = RUMBLE[kind];
@@ -528,7 +528,7 @@ export async function start(saved = {}) {
   }
   // ---- the rift's toll. What it would take from the fish as it is; nothing if the fish cannot spare it
   const tollOf = (segs) => (segs - riftToll(segs) >= LENGTH.toll.keep ? riftToll(segs) : 0);
-  const couldFeed = () => world.schools.some((sc) => sc.left > 0 && canWrap(bodyMetres() - 0.05, sc.ball)); // is there still a swarm here this body could take
+  const couldFeed = () => world.schools.some((sc) => sc.left > 0 && canWrap(bodyMetres() - 0.05, sc.least || sc.ball)); // is there still a swarm here this body could take
   const overRift = () => world.rift && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.rift.in(rig.pos.x, rig.pos.z) > 0 && rig.pos.y < world.rift.y + 6;
   const tollHere = () => (run.state === 'play' && overRift() ? tollOf(run.segs) : 0);
   function payToll(n) { // the tail goes; the shells that rode on it move up the body to the rearmost places left
@@ -1750,6 +1750,14 @@ export async function start(saved = {}) {
     body.joints = rig.joints; body.total = bodyMetres() - 0.05; body.assist = feel.assist;
     world.update(dt, focus, rig.pos, camera, body);
     if (world.react) for (const c of world.react.opened.splice(0)) openCache(c);
+    // a swarm with a temper has just shown it (world.js, TEMPER): the band marks it, and the first time each is seen there is a line about what it wants
+    if (world.react) for (const c of world.react.swarms.splice(0)) {
+      if (run.state !== 'play') continue;
+      if (c.what === 'bolt') { moment('flit'); say('bolt', 'That swarm bolts upward when you come at it level. Get above it first, then go round it.', 8); }
+      else if (c.what === 'part') { moment('part'); say('twin', 'Cornered, that swarm parted in two. Each half is a smaller swarm: take one, then the other.', 8); }
+      else if (c.what === 'shy') { moment('flit'); say('glow', 'That swarm will not bunch in the dark. Drive it to a lantern flower and take it there.', 8); }
+      else if (c.what === 'lit') music.chime(2, 0.5);
+    }
     if (world.react) for (const c of world.react.rang.splice(0)) { music.chime(c.note, c.v); buzz(0, 0.16 * c.v, 40); } // a chime brushed: the band gives it its note, the hands a tick. (The sea's surface, at the end, is a world with nothing in it to answer.)
     lessons(dt);
     hud(dt);

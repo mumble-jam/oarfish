@@ -47,7 +47,8 @@ await page.evaluate(() => {
     coil(seconds, tight = false) { g.sim(seconds, { ...none(), coil: 1, tight }); },
     idle(seconds) { g.sim(seconds, none()); },
     swim(seconds, dx, dz, extra = {}) { g.sim(seconds, { ...none(), dir: { x: dx, y: 0, z: dz }, ...extra }); },
-    swarm(tier) { g.sim(0.05, none()); return g.world.schools.find((s) => s.tier === tier && s.left > 0); },
+    swarm(tier) { g.sim(0.05, none()); return g.world.schools.find((s) => s.tier === tier && s.left > 0 && !s.kind); }, // one of the plain sort
+    toward(b, secs, stop = 0) { for (let t = 0; t < secs; t += 0.1) { const dx = b.x - g.rig.pos.x, dz = b.z - g.rig.pos.z, d = Math.hypot(dx, dz) || 1; if (d < stop) break; g.sim(0.1, { ...none(), dir: { x: dx / d, y: 0, z: dz / d }, vertical: Math.max(-1, Math.min(1, (b.y - g.rig.pos.y) * 1.5)) }); } },
     safeOff() { g.run.safe = 0; },
   };
 });
@@ -478,6 +479,33 @@ s = await ev(() => { const g = window.__game, T = window.T, out = { bands: [] };
   return { bands: out.bands.join(), t1, held, tempo, under, off, tied, dropped, rest, shaken, lost, given, sunk, card: /1 fragment of the ruins given to the rift \(1 in all\)/.test(card) }; });
 check('a fragment of the ruins is taken up by going round it, rides under the body, and ties it up: no wrapping, a slower swim; the shed key or a bite lets it go; carried over the rift it is given, counted on the end card and kept for the nest',
   s.bands === '2,2,2,2,2' && s.t1 < 8 && s.held && Math.abs(s.tempo - 0.85) < 0.03 && s.under < 0.6 && s.off > 0.5 && s.tied && s.dropped && s.rest < 0.6 && s.shaken && s.lost >= 1 && s.given.haul && s.given.gone && s.given.hauled === 1 && s.given.kept === 1 && s.given.stored === 1 && s.sunk && s.card, JSON.stringify(s));
+
+// ---- swarms with tempers: one bolts upward, one parts in two, one only bunches near light
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, quiet = () => { g.run.safe = 1e9; for (const list of [g.foes.biters, g.foes.anglers || []]) for (const b of list) b.alive = false; g.sim(0.1, T.none()); };
+  out.kinds = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); out.kinds.push(g.world.schools.filter((x) => !x.of).map((x) => (x.kind || '.')[0]).join('')); }
+  // the one that bolts: come at level, it climbs; left alone it sinks back; come down on it and it holds, and is taken
+  g.startRun(4242); quiet(); const b = g.world.schools.find((x) => x.kind === 'bolt'), rest = b.y;
+  T.put(b.x + 7, b.y, b.z, -1.57); for (let i = 0; i < 36; i++) { const dx = b.x - g.rig.pos.x, dz = b.z - g.rig.pos.z, d = Math.hypot(dx, dz) || 1; g.sim(0.1, { ...T.none(), dir: { x: dx / d, y: 0, z: dz / d } }); }
+  out.bolt = { rose: +(b.y - rest).toFixed(1), capped: b.capped, left: b.left, told: g.world.react.swarms.some((n) => n.what === 'bolt') || b.bolted };
+  T.put(b.x + 40, b.y, b.z + 40, 0); g.sim(14, T.none()); out.bolt.sunk = +(b.y - rest).toFixed(1);
+  for (let i = 0; i < 6; i++) g.addFood(8); g.sim(3, T.none()); T.put(b.x + 2.6, b.y + 3, b.z + 0.9, 1.1); g.sim(0.6, T.none()); out.bolt.held = b.capped && Math.abs(b.y - rest) < 0.3;
+  let t = 0; while (b.left > 0 && t < 12) { g.sim(0.1, { ...T.none(), coil: 1, vertical: g.rig.pos.y > b.y + 1.3 ? -1 : 0 }); t += 0.1; } out.bolt.taken = b.left === 0;
+  // the one that parts: two swarms a size down, which a body too short for the whole can take; a fresh one, left alone, mends
+  const take = (q) => { T.put(q.x + 2.6, q.y, q.z + 0.9, 1.1); g.sim(0.4, T.none()); let t = 0; while (q.left > 0 && t < 10) { g.sim(0.1, { ...T.none(), coil: 1 }); t += 0.1; } return q.left === 0; };
+  const fresh = () => { g.startRun(4242); g.enterFloor(1, false); quiet(); return g.world.schools.find((x) => x.kind === 'twin'); };
+  let w = fresh(), tw = w.twin; const whole = { n: w.n, tier: w.tier, can: w.can, least: +w.least.toFixed(2), halfLeft: tw.left }; T.put(w.x + 14, w.y, w.z, -1.57); T.toward(w, 6, 3);
+  out.twin = { whole, split: w.split, n: [w.n, tw.n].join(), tier: w.tier + tw.tier, apart: +Math.hypot(w.x - tw.x, w.z - tw.z).toFixed(1), can: w.can && tw.can, segs: g.run.segs };
+  const c0 = g.run.caught; out.twin.one = take(w) && tw.left > 0; out.twin.two = take(tw); g.sim(2.5, T.none()); out.twin.fed = g.run.caught - c0;
+  w = fresh(); tw = w.twin; T.put(w.x + 14, w.y, w.z, -1.57); T.toward(w, 6, 3); const parted = w.split; T.put(w.x + 50, w.y, w.z + 50, 0); g.sim(12, T.none()); out.twin.mend = parted && !w.split && w.n === whole.n && w.left === whole.n && w.tier === whole.tier && tw.left === 0;
+  // the ones that seek the light: in the dark they do not bunch but run, to a lantern flower, and there they bunch and are taken
+  g.startRun(4242); g.enterFloor(2, false); quiet(); out.glow = [];
+  for (const q of g.world.schools.filter((x) => x.kind === 'glow')) { const o = { dark: !q.lit }; T.put(q.x + 12, q.y, q.z, -1.57); g.sim(0.3, T.none()); const x0 = q.x, z0 = q.z; let t = 0, loose = 0; while (!q.lit && t < 20) { T.toward(q, 0.1, 2.5); t += 0.1; loose = Math.max(loose, q.threat); }
+    o.loose = +loose.toFixed(2); o.ran = +Math.hypot(q.x - x0, q.z - z0).toFixed(1); o.lit = q.lit; g.sim(1, T.none()); o.bunched = q.threat > 0.6; for (let i = 0; i < 6; i++) g.addFood(8); g.sim(2, T.none()); o.taken = take(q); out.glow.push(o); }
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('swarms have tempers, the same in every dive: one bolts straight up when come at level, sinks back, and holds for a body that comes down on it; one parts into two a size down, which a short body can take one after the other, and mends if left; some will not bunch in the dark but run to a lantern flower and bunch there',
+  s.kinds.join() === '......b..,...b.t..,.gbtg.t.,.gbtg..,.btg..' && s.bolt.rose > 5 && !s.bolt.capped && s.bolt.left > 0 && s.bolt.told && Math.abs(s.bolt.sunk) < 0.3 && s.bolt.held && s.bolt.taken
+  && s.twin.whole.tier === 'm' && s.twin.whole.halfLeft === 0 && s.twin.split && s.twin.n === '9,9' && s.twin.tier === 'ss' && s.twin.apart > 3 && s.twin.can && s.twin.one && s.twin.two && s.twin.fed === 18 && s.twin.mend
+  && s.glow.length === 2 && s.glow.every((o) => o.dark && o.loose < 0.3 && o.ran > 1 && o.lit && o.bunched && o.taken), JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake

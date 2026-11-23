@@ -46,7 +46,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     let tris = 0;
     if (spec.swarm) {
       const kit = swarmKit(S.id, { glow: FLOORS[S.band].fishGlow, preview }), n = SWARMS[S.tier].n, rand = rng(7);
-      const mesh = new THREE.InstancedMesh(kit.geometry, kit.material, n), fish = Array.from({ length: n }, () => ({ ph: rand() * 6.28, rho: 0.25 + 0.75 * Math.cbrt(rand()), h: rand() * 2 - 1, sp: 0.7 + rand() * 0.6, p: new THREE.Vector3(), first: true }));
+      const mesh = new THREE.InstancedMesh(kit.geometry, kit.material, n), fish = Array.from({ length: n }, (_, i) => ({ half: i % 2, ph: rand() * 6.28, rho: 0.25 + 0.75 * Math.cbrt(rand()), h: rand() * 2 - 1, sp: 0.7 + rand() * 0.6, p: new THREE.Vector3(), first: true }));
       mesh.frustumCulled = false; const c = new THREE.Color(); fish.forEach((f, i) => mesh.setColorAt(i, c.set(kit.tones[S.tone % 4])));
       stand.add(mesh); tris = kit.geometry.attributes.position.count / 3;
       shown = { kit, mesh, fish, body: mesh, dispose() { mesh.dispose(); kit.dispose(); } };
@@ -117,7 +117,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     } else if (shown?.near) { shown.near.value += ((state.near || 0) - shown.near.value) * (1 - Math.exp(-(state.near ? 7 : 1.6) * dt)); // what answers the fish: shut or leaning at once, open again slowly
     } else if (shown?.spin) { stand.rotation.y += dt * 0.5; stand.position.y = S.lift + 0.12 * Math.sin(S.t * 1.6); // a thing adrift turns and bobs
     } else if (shown?.fish) {
-      const sc = { x: 0, y: 0, z: 0, ball: SWARMS[S.tier].r, pack: state.pack ?? 1, threat: state.threat ?? 0, burst: state.burst || 0 }, kit = shown.kit;
+      const ball = SWARMS[S.tier].r, sc = { x: 0, y: 0, z: 0, ball, pack: state.pack ?? 1, threat: state.threat ?? 0, burst: state.burst || 0, slack: state.slack ?? 1, tall: state.tall || 0, gap: (state.lobes || 0) * ball, ax: 1, az: 0 }, kit = shown.kit;
       shown.fish.forEach((f, i) => {
         kit.place(v, f, sc, S.t);
         if (f.first) { f.p.copy(v); f.first = false; }

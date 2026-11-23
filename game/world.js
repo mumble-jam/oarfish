@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from './geo.js';
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing, WAKE } from './kit.js';
-import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf } from './npc.js';
+import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from './npc.js';
 
 export const T = 144;
 const CELL = 3, GRID = 46, NCELL = T / CELL;
@@ -15,6 +15,13 @@ export const wrapD = (d) => d - T * Math.round(d / T); // shortest way round the
 // Swarms of small fish are the treasure chests: a swarm is only caught whole, by a body long enough to
 // go round the entire ball, so the big ones wait for a long body. n fish, ball radius r in metres.
 export const SWARMS = { s: { n: 8, r: 0.42 }, m: { n: 18, r: 0.76 }, l: { n: 36, r: 1.05 }, h: { n: 70, r: 1.34 } };
+// Not every swarm waits to be gone round. Each band's `kinds` gives one letter to a swarm of its `schools`: '.' the plain sort; and
+//   b  bolts: come at from the side or from below it goes straight up, out of the plane the body turns in. It holds for a body that is over it.
+//   t  twins: cornered, it parts in two along the line its two lobes lie on, each half a swarm one size down. Left alone the halves mend.
+//   g  glow-seekers: in the dark they will not bunch at all. Frightened, they run, bearing for the nearest lantern flower, and bunch in its light.
+// The loop that takes them is the same loop; what differs is how the swarm is brought to hold still for it.
+export { TEMPER };
+const KIND = { b: 'bolt', t: 'twin', g: 'glow' }, LOWER = { m: 's', l: 'm' };
 // What counts as ringing something. `assist` (0..1) is the one feel setting: with more of it the body
 // need not go quite all the way round, and the ball packs a little tighter to fit inside.
 export const wrapRule = (assist) => ({ sweep: Math.PI * 2 * lerp(0.93, 0.8, assist), squeeze: lerp(0.96, 0.84, assist) });
@@ -24,15 +31,15 @@ export const canWrap = (total, room) => (0.9 * total) / GATE.sweep >= room * GAT
 // The five bands of the dive. Counts are per band; light fades and the hunters multiply on the way down.
 export const FLOORS = [
   { name: 'The sunlight zone', depth: 40, water: '#2b93a3', sky: '#e2f8ff', bed: '#4f97a0', hemi: 2.0, sun: 2.3, lamp: 0, lampReach: 30, fog: [0.75, 42], seaLight: 0.2, shafts: 0.42, fishGlow: 0, finGlow: 0,
-    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'] },
+    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'] },
   { name: 'The edge of light', depth: 180, water: '#1d6f8e', sky: '#bfe6f5', bed: '#2f6f85', hemi: 1.5, sun: 1.35, lamp: 3, lampReach: 26, fog: [0.7, 36], seaLight: 0.1, shafts: 0.22, fishGlow: 0.2, finGlow: 0.12,
-    rocks: 180, kelp: 34, coral: 90, glow: 30, schools: 'ssssmmml', biters: 3, hooks: 6, anglers: 0, ruins: ['gate', 'remains', 'arch'] },
+    rocks: 180, kelp: 34, coral: 90, glow: 30, schools: 'ssssmmml', kinds: '...b.t..', biters: 3, hooks: 6, anglers: 0, ruins: ['gate', 'remains', 'arch'] },
   { name: 'The twilight zone', depth: 450, water: '#12426a', sky: '#7fb4d8', bed: '#173f5e', hemi: 0.85, sun: 0.4, lamp: 10, lampReach: 24, fog: [0.62, 28], seaLight: 0.03, shafts: 0, fishGlow: 0.7, finGlow: 0.3,
-    rocks: 200, kelp: 14, coral: 40, glow: 110, schools: 'sssmmllh', biters: 5, hooks: 4, anglers: 3, ruins: ['ring', 'remains'] },
+    rocks: 200, kelp: 14, coral: 40, glow: 110, schools: 'sssmmllh', kinds: '.gbtg.t.', biters: 5, hooks: 4, anglers: 3, ruins: ['ring', 'remains'] },
   { name: 'Deep twilight', depth: 800, water: '#0a2444', sky: '#4d7fb0', bed: '#0d2a4a', hemi: 0.42, sun: 0, lamp: 16, lampReach: 21, fog: [0.55, 22], seaLight: 0, shafts: 0, fishGlow: 1, finGlow: 0.5,
-    rocks: 210, kelp: 0, coral: 14, glow: 170, schools: 'ssmmllh', biters: 6, hooks: 2, anglers: 5, ruins: ['gate', 'remains', 'arch'] },
+    rocks: 210, kelp: 0, coral: 14, glow: 170, schools: 'ssmmllh', kinds: '.gbtg..', biters: 6, hooks: 2, anglers: 5, ruins: ['gate', 'remains', 'arch'] },
   { name: 'Ryūgū, the palace below', depth: 1000, water: '#07142e', sky: '#3c6aa0', bed: '#0a1c3a', hemi: 0.3, sun: 0, lamp: 17, lampReach: 19, fog: [0.5, 20], seaLight: 0, shafts: 0, fishGlow: 1, finGlow: 0.6,
-    rocks: 190, kelp: 0, coral: 30, glow: 200, schools: 'smmllh', biters: 6, hooks: 0, anglers: 6, ruins: ['remains'] },
+    rocks: 190, kelp: 0, coral: 30, glow: 200, schools: 'smmllh', kinds: '.btg..', biters: 6, hooks: 0, anglers: 6, ruins: ['remains'] },
 ];
 
 function hash2(ix, iz, salt = 0) {
@@ -884,9 +891,23 @@ float seaLight(vec2 p, float t) {
     if (hall) for (let t = 0; t < 20 && !farFrom(hx, hz, hall.x, hall.z, hall.R + 12); t++) { hx = rand() * T; hz = rand() * T; } // no swarm drifts into the hall
     if (rift && !kept && !first && !tease) for (let t = 0; t < 20 && !riftClear(hx, hz, 5); t++) { hx = rand() * T; hz = rand() * T; } // or lives in the rift
     const sw = SWARMS[tier];
-    schools.push({ tier, n: sw.n, ball: sw.r, fit: sw.r, orbit: sw.r + 0.3, can: false, px: 0, pz: 0, pack: 1, progress: 0, arcStart: 0, arcSign: 1, hx, hz, hy: height(hx, hz) + rr(2.6, 4.2), ph: rand() * 6.28, r: kept ? 0.6 : first ? 1.6 : tease ? 1.4 : penned ? 0.7 : rr(4, 9), clock: rand() * 50,
-      threat: 0, x: hx, z: hz, y: 0, left: sw.n, burst: 0, tone: schoolTones[s % schoolTones.length], ring: null, arc: null });
+    let kind = kept || first || tease ? '' : KIND[(F.kinds || '')[s]] || '';
+    if (kind === 'twin' && (penned || !LOWER[tier])) kind = ''; // the halves need room to part, and a size to be
+    if (kind === 'glow' && penned) kind = '';
+    const sc = { tier, kind, n: sw.n, ball: sw.r, fit: sw.r, orbit: sw.r + 0.3, can: false, px: 0, pz: 0, pack: 1, progress: 0, arcStart: 0, arcSign: 1, hx, hz, hy: height(hx, hz) + rr(2.6, 4.2), ph: rand() * 6.28, r: kept ? 0.6 : first ? 1.6 : tease ? 1.4 : penned ? 0.7 : rr(4, 9), clock: rand() * 50,
+      threat: 0, x: hx, z: hz, y: 0, left: sw.n, burst: 0, tone: schoolTones[s % schoolTones.length], ring: null, arc: null };
+    // what the tempers add: how the loose swarm is shaped (`slack` wider or narrower, `tall` stretched or flattened), and each sort's own state
+    if (kind === 'bolt') Object.assign(sc, { hy: sc.hy + TEMPER.bolt.hang, slack: TEMPER.bolt.slack, tall: TEMPER.bolt.tall, by: 0, capped: false, bolted: 0 });
+    if (kind === 'twin') Object.assign(sc, { slack: TEMPER.twin.slack, ax: Math.sin(sc.ph), az: Math.cos(sc.ph), gap: sw.r * TEMPER.twin.lobes, whole: { tier, n: sw.n, ball: sw.r }, split: false, part: 0, calm: 0, sx: 0, sz: 0, swell: 1 });
+    if (kind === 'glow') Object.assign(sc, { slack: TEMPER.glow.slack, tall: TEMPER.glow.flat, lit: false, fled: 0, light: null });
+    schools.push(sc);
   });
+  // the other half of each swarm that parts: it has no fish until the parting, then half of them, and keeps to the same drift as the half it came from
+  for (const sc of schools.filter((x) => x.kind === 'twin')) {
+    const low = SWARMS[LOWER[sc.tier]];
+    sc.twin = { ...sc, kind: 'half', tier: LOWER[sc.tier], n: 0, left: 0, ball: low.r, fit: low.r, slack: 1, gap: 0, whole: null, twin: null, of: sc, split: true, ring: null, arc: null };
+    schools.push(sc.twin);
+  }
   const total = schools.reduce((a, sc) => a + sc.n, 0);
   const minnowMat = mat(fishKit.material), fishSize = new THREE.Vector3().setScalar(fishKit.scale);
   const fishMesh = add(new THREE.InstancedMesh(fishKit.geometry, minnowMat, Math.max(total, 1)));
@@ -896,7 +917,7 @@ float seaLight(vec2 p, float t) {
     const c = new THREE.Color();
     for (const sc of schools) for (let i = 0; i < sc.n; i++) {
       // an even-ish fill of the ball: radius by cube root, so the middle is not crowded
-      minnows.push({ sc, ph: rand() * 6.28, rho: 0.25 + 0.75 * Math.cbrt(rand()), h: rr(-1, 1), sp: rr(0.7, 1.3), flee: new THREE.Vector3(), p: new THREE.Vector3(), first: true, alive: true });
+      minnows.push({ sc, half: i % 2, ph: rand() * 6.28, rho: 0.25 + 0.75 * Math.cbrt(rand()), h: rr(-1, 1), sp: rr(0.7, 1.3), flee: new THREE.Vector3(), p: new THREE.Vector3(), first: true, alive: true });
       fishMesh.setColorAt(minnows.length - 1, c.set(sc.tone));
     }
   }
@@ -1265,6 +1286,64 @@ float seaLight(vec2 p, float t) {
   // ------------------------------------------------------------ per-frame
   const m4 = new THREE.Matrix4(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), none = new THREE.Vector3(0, 0, 0);
   let wrapTimer = 0;
+  // ---- the tempers of swarms (TEMPER). What each does is told to whoever is listening through `swarmNews`: { what: 'bolt' | 'part' | 'shy' | 'lit', x, y, z }.
+  const swarmNews = [], tell = (what, sc) => { swarmNews.push({ what, x: sc.x, y: sc.y, z: sc.z }); if (swarmNews.length > 12) swarmNews.shift(); };
+  // One that bolts: its height is its own. Cornered by a head that is not over it, it climbs; with the head over it, it stays, and goes down with the head
+  // but never up to it. Left alone it sinks back to where it hangs.
+  function bolting(sc, cx, cz, rest, dt, head) {
+    const W = TEMPER.bolt, top = Math.min(rest + W.top, 15.5 - 3.6), hot = sc.threat > 0.3 && sc.left > 0;
+    if (!sc.by) sc.by = rest;
+    if (!hot) { sc.capped = false; sc.rising = false; sc.by += clamp(rest - sc.by, -W.sink * dt, W.sink * dt); }
+    else if (sc.capped || head.y > sc.by + W.over) { sc.capped = true; sc.by = Math.max(height(cx, cz) + 1.6, Math.min(sc.by, Math.max(head.y, sc.by - 4 * dt))); }
+    else if (sc.by < top) { sc.by = Math.min(top, sc.by + W.rise * dt); if (!sc.rising) { sc.rising = true; sc.bolted++; tell('bolt', sc); } }
+    return sc.by;
+  }
+  // One that parts in two. Whole, its fish keep to two lobes `gap` either side of the middle along its own line; parted, the two halves' middles are
+  // `mid` either side instead, so nothing jumps on the frame it happens. `swell` eases the fish from the size of the old ball to the new.
+  function twinning(sc, dt) {
+    const W = TEMPER.twin, tw = sc.twin;
+    if (!sc.split) {
+      if (sc.left > 0 && sc.threat > W.at) {
+        const low = SWARMS[LOWER[sc.whole.tier]], was = sc.ball * lerp(2.6 * sc.slack, sc.pack, sc.threat);
+        let a = 0, b = 0; for (const f of minnows) if (f.sc === sc && f.alive) { if (f.half) { f.sc = tw; b++; } else a++; }
+        Object.assign(sc, { tier: LOWER[sc.whole.tier], n: a, left: a, ball: low.r, slack: 1, split: true, calm: 0, mid: sc.gap, gap: 0, progress: 0 });
+        Object.assign(tw, { n: b, left: b, threat: sc.threat, pack: sc.pack, px: sc.px, pz: sc.pz, y: sc.y, burst: 0, progress: 0 });
+        sc.swell = tw.swell = was / (low.r * lerp(2.6, sc.pack, sc.threat));
+        tell('part', sc);
+      }
+    } else {
+      const both = sc.left > 0 && tw.left > 0, mending = both && sc.calm > W.mend, to = mending ? sc.whole.ball * W.lobes : (W.part + sc.ball * 3) / 2;
+      sc.calm = both && sc.threat < 0.1 && tw.threat < 0.1 ? sc.calm + dt : 0;
+      sc.mid += (to - sc.mid) * (1 - Math.exp(-(mending ? 1.2 : 3.5) * dt));
+      sc.swell = tw.swell = 1 + (sc.swell - 1) * Math.exp(-3 * dt);
+      if (mending && Math.abs(sc.mid - to) < 0.05) { // the halves have come together again: one swarm, as it was
+        for (const f of minnows) if (f.sc === tw && f.alive) f.sc = sc;
+        Object.assign(sc, { ...sc.whole, left: sc.whole.n, slack: W.slack, split: false, gap: sc.mid, mid: 0, swell: 1 });
+        Object.assign(tw, { n: 0, left: 0, threat: 0 }); tw.ring.visible = tw.arc.visible = false;
+      }
+    }
+    const m = sc.mid || 0; sc.sx = -sc.ax * m; sc.sz = -sc.az * m; tw.sx = sc.ax * m; tw.sz = sc.az * m;
+    sc.least = sc.split ? sc.ball : SWARMS[LOWER[sc.whole.tier]].r; // the smallest ball it can be taken as
+  }
+  // One that seeks the light: is it in the light of a lantern flower? In the dark it does not bunch, and with the head near it runs: away, and toward the
+  // nearest lantern if there is one in reach. Returns whether it is lit, which is whether it can be cornered.
+  let lightX = 0, lightZ = 0;
+  const lightFrom = (x, z) => { let bd = 1e9; for (const L of lanterns) { const dx = wrapD(L.x - x), dz = wrapD(L.z - z), q = dx * dx + dz * dz; if (q < bd) { bd = q; lightX = dx; lightZ = dz; } } return Math.sqrt(bd); };
+  function seeking(sc, cx, cz, d, dt, head) {
+    const W = TEMPER.glow, ld = lightFrom(cx, cz), lit = ld < (sc.lit ? W.hold : W.pool), ease = 1 - Math.exp(-3 * dt);
+    if (lit && !sc.lit && sc.left > 0 && d < 24) tell('lit', sc);
+    sc.lit = lit; sc.slack += ((lit ? 1 : W.slack) - sc.slack) * ease; sc.tall += ((lit ? 0 : W.flat) - sc.tall) * ease;
+    sc.fleeing = !lit && sc.left > 0 && d < W.fear;
+    if (sc.fleeing) {
+      let ax = (cx - head.x) / (d || 1), az = (cz - head.z) / (d || 1);
+      if (ld < W.seek) { ax += (lightX / ld) * W.pull; az += (lightZ / ld) * W.pull; }
+      const m = Math.hypot(ax, az) || 1;
+      if (Math.hypot(sc.px, sc.pz) < W.far) { sc.px += (ax / m) * W.run * dt; sc.pz += (az / m) * W.run * dt; }
+      sc.fled += dt; if (!sc.shied) { sc.shied = true; tell('shy', sc); }
+    } else if (d > W.fear + 6) sc.shied = false;
+    return lit;
+  }
+
   // body: { joints, snout, total (metres, nose to tail), assist (0..1) }
   function update(dt, focus, fishHead, camera, body = null) {
     if (!calm) time.value += dt;
@@ -1276,12 +1355,16 @@ float seaLight(vec2 p, float t) {
     // each swarm drifts on its own clock, balls up when the oarfish comes near, and gives way to its body
     const rule = wrapRule(body ? body.assist : 0);
     for (const sc of schools) {
-      sc.clock += dt * (1 - 0.9 * sc.threat);
-      let cx = sc.hx + Math.sin(sc.clock * 0.11 + sc.ph) * sc.r + sc.px, cz = sc.hz + Math.cos(sc.clock * 0.083 + sc.ph * 1.7) * sc.r + sc.pz;
+      if (sc.kind === 'twin') twinning(sc, dt); // before it is placed, so that the frame it parts on has both halves where their fish already are
+      if (sc.of) sc.clock = sc.of.clock; else sc.clock += dt * (1 - 0.9 * sc.threat);
+      let cx = sc.hx + Math.sin(sc.clock * 0.11 + sc.ph) * sc.r + sc.px + (sc.sx || 0), cz = sc.hz + Math.cos(sc.clock * 0.083 + sc.ph * 1.7) * sc.r + sc.pz + (sc.sz || 0);
       cx += T * Math.round((focus.x - cx) / T); cz += T * Math.round((focus.z - cz) / T);
-      const d = Math.hypot(cx - fishHead.x, cz - fishHead.z);
-      sc.threat += ((d < 6 + sc.ball * 3 && sc.left > 0 ? 1 : 0) - sc.threat) * (1 - Math.exp(-2.2 * dt));
-      sc.y = lerp(Math.max(sc.hy, height(cx, cz) + 1.6), fishHead.y, sc.threat); // a cornered swarm does not flee up or down
+      const d = Math.hypot(cx - fishHead.x, cz - fishHead.z), rest = Math.max(sc.hy, height(cx, cz) + 1.6);
+      let cornered = d < 6 + sc.ball * 3 && sc.left > 0;
+      if (sc.kind === 'glow') cornered = seeking(sc, cx, cz, d, dt, fishHead) && cornered;
+      sc.threat += ((cornered ? 1 : 0) - sc.threat) * (1 - Math.exp(-2.2 * dt));
+      if (sc.kind === 'bolt') sc.y = bolting(sc, cx, cz, rest, dt, fishHead);
+      else sc.y = lerp(rest, fishHead.y, sc.threat); // a cornered swarm does not flee up or down
       sc.burst = Math.max(0, sc.burst - dt * 0.9);
       sc.fit = sc.ball * rule.squeeze;
       // the ball slides away from the body, so an arc drawn round it gathers it in, and packs tighter when pressed
@@ -1296,7 +1379,7 @@ float seaLight(vec2 p, float t) {
         };
         shove(body.snout);
         for (const p of body.joints) shove(p);
-      } else { const fade = Math.exp(-0.4 * dt); sc.px *= fade; sc.pz *= fade; }
+      } else { const fade = Math.exp(-(sc.kind === 'glow' ? (sc.fleeing ? 0 : TEMPER.glow.home) : 0.4) * dt); sc.px *= fade; sc.pz *= fade; } // one that has run to a light is in no hurry home
       sc.pack += (clamp((nearest - 0.14) / sc.ball, rule.squeeze, 1) - sc.pack) * (1 - Math.exp(-6 * dt));
       sc.x = cx; sc.z = cz;
       const total = body ? body.total : 0;
@@ -1545,7 +1628,7 @@ float seaLight(vec2 p, float t) {
   }
 
   // what answered the fish, for whoever gives it sound (rang: chimes brushed since last read, each { note, v, x, y, z }) and for the checks
-  const react = { rang: stirred.rang, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
+  const react = { rang: stirred.rang, swarms: swarmNews, opened, puzzles, posts: puzzles.filter((p) => p.ring).map((p) => p.ring), fragments, settle, wake, pilots, chimes: chimeSets, grown: grownAt, get rings() { return stirred.rings; }, get puffed() { return stirred.puffed; }, get puffs() { return puffs.filter((pf) => pf.age < pf.life).length; }, get speed() { return stirred.speed; } };
   return { update, react, pushOut, footing, steer, height, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }
