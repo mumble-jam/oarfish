@@ -26,7 +26,7 @@ html.kit-shell #stage { display: none; }
 #kit-bar select { font: inherit; color: #f2f5f7; background: #2b3036; border: 1px solid #4a525b; border-radius: 3px; padding: 4px 6px; max-width: 250px; cursor: pointer; accent-color: auto; backdrop-filter: none; }
 #kit-bar a { color: #ffd400; }
 #kit-bar kbd { font: inherit; min-width: 0; padding: 1px 6px; border-radius: 3px; background: #2b3036; border: 1px solid #4a525b; color: #f2f5f7; }
-#kit-desk { position: fixed; inset: 44px 0 0 0; display: grid; place-items: center; overflow: hidden; background: repeating-conic-gradient(#272b30 0 25%, #22262b 0 50%) 0 0 / 24px 24px; }
-#kit-frame { display: block; border: 0; flex: none; background: #000; transform-origin: 50% 50%; box-shadow: 0 0 0 1px #4a525b, 0 12px 40px rgba(0, 0, 0, 0.5); }
+#kit-desk { position: fixed; inset: 44px 0 0 0; overflow: hidden; background: repeating-conic-gradient(#272b30 0 25%, #22262b 0 50%) 0 0 / 24px 24px; }
+#kit-frame { position: absolute; display: block; border: 0; background: #000; transform-origin: 0 0; box-shadow: 0 0 0 1px #4a525b, 0 12px 40px rgba(0, 0, 0, 0.5); }
 html.kit-nobar #kit-bar { display: none; }
 html.kit-nobar #kit-desk { inset: 0; }

@@ -125,9 +125,10 @@
     const address = (bareToo) => { const q = new URLSearchParams(); if (bareToo) q.set('bare', ''); q.set('screen', S.screen); q.set('state', S.state); if (S.bg) q.set('bg', S.bg); if (!bareToo) q.set('size', S.size); const t = S.touch || (S.size.startsWith('phone') ? '1' : ''); if (t) q.set('touch', t); return `${location.pathname}?${q.toString().replace('bare=&', 'bare&')}`; };
     function fit() {
       const size = SIZES[S.size], W = desk.clientWidth, H = desk.clientHeight;
-      if (!size) { Object.assign(frame.style, { width: `${W}px`, height: `${H}px`, transform: 'none' }); $('kit-scale').textContent = `${W} × ${H}`; return; }
+      if (!size) { Object.assign(frame.style, { width: `${W}px`, height: `${H}px`, left: '0px', top: '0px', transform: 'none' }); $('kit-scale').textContent = `${W} × ${H}`; return; }
+      // placed by hand, scaled from its top left corner: a frame wider than the desk is not centred by the grid
       const k = Math.min(1, (W - 24) / size[0], (H - 24) / size[1]);
-      Object.assign(frame.style, { width: `${size[0]}px`, height: `${size[1]}px`, transform: `scale(${k})` });
+      Object.assign(frame.style, { width: `${size[0]}px`, height: `${size[1]}px`, left: `${Math.round((W - size[0] * k) / 2)}px`, top: `${Math.round((H - size[1] * k) / 2)}px`, transform: `scale(${k})` });
       $('kit-scale').textContent = `${size[0]} × ${size[1]}${k < 1 ? `, shown at ${Math.round(k * 100)}%` : ''}`;
     }
     function draw(load = true) {
@@ -145,7 +146,7 @@
       fit();
     }
     const toggle = () => { html.classList.toggle('kit-nobar'); fit(); };
-    window.addEventListener('message', (e) => { if (e.source !== frame.contentWindow || !e.data) return; if (e.data.kit === 'bar') toggle(); if (e.data.kit === 'at' && e.data.screen !== S.screen && SCREENS.some((s) => s.id === e.data.screen)) { const sel = $('kit-screen'); if (sel) { sel.value = e.data.screen; $('kit-state').innerHTML = '<option>as clicked</option>'; } } });
+    window.addEventListener('message', (e) => { if (e.source !== frame.contentWindow || !e.data) return; if (e.data.kit === 'bar') toggle(); if (e.data.kit === 'at' && e.data.screen !== S.screen && SCREENS.some((s) => s.id === e.data.screen)) { const sel = $('kit-screen'); if (sel) { const to = SCREENS.find((s) => s.id === e.data.screen); sel.value = to.id; S.screen = to.id; S.state = ''; $('kit-state').innerHTML = `<option value="" selected>as clicked</option>${to.states.map((s) => opt(s.id, s.name, '')).join('')}`; } } });
     window.addEventListener('keydown', (e) => { if (e.code === 'Backquote' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) toggle(); });
     window.addEventListener('resize', fit);
     draw();

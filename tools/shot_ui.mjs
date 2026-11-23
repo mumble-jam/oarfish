@@ -5,6 +5,7 @@
 //   node tools/shot_ui.mjs game [id…]           the same screens in the real game, laid over the same still: out/ui-compare/<id>.game.png,
 //                                               beside the copy's (<id>.copy.png) and a count of the pixels that differ
 //   node tools/shot_ui.mjs dump                 what the game writes into its menus by script (key list, binding grid, library…), as JSON
+//   node tools/shot_ui.mjs layers [id…]         every state read back as boxes and text, for ui/figma/build.js: out/ui-figma/<id>.json
 // add small to any of them for a quick look at 960 × 540 (written to out/ui-trial/ and never into ui/).
 // The world is 4242, the one the checks stand in. Chrome: CHROME=/usr/bin/google-chrome, as for the other tools.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
@@ -21,7 +22,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const HOST = `http://localhost:${server.address().port}`;
-const args = process.argv.slice(2), small = args.includes('small'), MODES = ['stills', 'page', 'game', 'dump'];
+const args = process.argv.slice(2), small = args.includes('small'), MODES = ['stills', 'page', 'game', 'dump', 'layers'];
 const mode = args.find((a) => MODES.includes(a)) || 'stills', picks = args.filter((a) => a !== 'small' && !MODES.includes(a));
 const VIEW = small ? { width: 960, height: 540 } : { width: 1920, height: 1080 };
 const trial = path.join(ROOT, 'out/ui-trial'), dir = (d) => { fs.mkdirSync(d, { recursive: true }); return d; };
@@ -237,7 +238,8 @@ const RECIPES = {
   'binds--default': () => { window.__game.setPaused(true); document.getElementById('btn-binds').click(); },
   'binds--waiting': () => { window.__game.setPaused(true); document.getElementById('btn-binds').click(); document.querySelector('#bind-grid button[data-a="wrap"][data-k="0"]').click(); },
   'feedback--empty': () => { window.__game.setPaused(true); document.getElementById('btn-note').click(); },
-  'feedback--from-end': () => { document.getElementById('btn-note-end').click(); },
+  // (wait for the end card, as a player must: it comes up on a timer that gives its own button the keyboard)
+  'feedback--from-end': async () => { await new Promise((r) => { const t = () => (document.getElementById('end').classList.contains('on') ? setTimeout(r, 50) : setTimeout(t, 50)); t(); }); document.getElementById('btn-note-end').click(); },
   'end--taken': () => {},
   'end--over': () => {},
   'library--default': () => {},
@@ -288,7 +290,98 @@ async function compare() {
   await copy.context().close();
 }
 
+// ------------------------------------------------------------------------------------------------ the layers, for Figma
+// The page as it is drawn, read back as boxes and lines of text: every element that shows, where it is, its fill, border, corners,
+// blur and shadow, and every run of text with its typeface, size, spacing and colour, nested as the markup nests. ui/figma/build.js
+// turns one of these into editable layers in Figma (text as text, panels as shapes, the still as a picture behind). One file per
+// state: out/ui-figma/<screen>--<state>.json. The native controls (tick boxes, sliders, text fields, a menu) are drawn as Chrome
+// draws them, near enough; the scale bar's ticks, which are a repeating gradient, become one line per segment.
+function readLayers() {
+  const W = innerWidth, H = innerHeight, cs = (el) => getComputedStyle(el);
+  const col = (s) => { if (!s || s === 'transparent') return null; let m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(s);
+    if (m) { const a = m[4] === undefined ? 1 : +m[4]; return a < 0.004 ? null : [+(m[1] / 255).toFixed(4), +(m[2] / 255).toFixed(4), +(m[3] / 255).toFixed(4), +a.toFixed(3)]; }
+    m = /color\(srgb\s+([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)(?:\s*\/\s*([\d.]+))?\)/.exec(s);
+    if (m) { const a = m[4] === undefined ? 1 : +m[4]; return a < 0.004 ? null : [+(+m[1]).toFixed(4), +(+m[2]).toFixed(4), +(+m[3]).toFixed(4), +a.toFixed(3)]; } return null; };
+  const shadows = (s, inset = false) => { if (!s || s === 'none') return []; const out = [];
+    for (const part of s.split(/,(?![^(]*\))/)) { const c = col(/(rgba?\([^)]*\)|color\([^)]*\))/.exec(part)?.[1]); const n = (part.replace(/(rgba?\([^)]*\)|color\([^)]*\))/, '').match(/-?[\d.]+px/g) || []).map(parseFloat);
+      if (!c || n.length < 3) continue; const isIn = /inset/.test(part); if (isIn !== inset && !inset) { if (isIn) out.push({ in: 1, c, x: n[0], y: n[1], b: n[2], s: n[3] || 0 }); continue; } out.push({ in: isIn ? 1 : 0, c, x: n[0], y: n[1], b: n[2], s: n[3] || 0 }); } return out; };
+  const fam = (f) => f.split(',')[0].trim().replace(/["']/g, '');
+  const name = (el) => (el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].join('.') : ''}`);
+  const shown = (el, s) => s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.01;
+  const textOf = (node, s) => (s.whiteSpace.startsWith('pre') ? node.textContent : node.textContent.replace(/\s+/g, ' '));
+  const tstyle = (s) => { const sh = shadows(s.textShadow); return { f: fam(s.fontFamily), wt: +s.fontWeight, it: s.fontStyle === 'italic' ? 1 : 0, sz: parseFloat(s.fontSize), lh: s.lineHeight === 'normal' ? null : parseFloat(s.lineHeight), ls: s.letterSpacing === 'normal' ? 0 : parseFloat(s.letterSpacing), c: col(s.color), op: 1, sh: sh[0] || null, tt: s.textTransform }; };
+  function texts(el, s, box, kids) {
+    const pure = [...el.childNodes].every((n) => n.nodeType === 3 || n.tagName === 'BR');
+    const all = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim());
+    for (const node of all) {
+      const r = document.createRange(); r.selectNodeContents(node); const rects = [...r.getClientRects()].filter((q) => q.width > 0);
+      if (!rects.length) continue; const u = r.getBoundingClientRect(); const st = tstyle(s);
+      if (pure || rects.length === 1) {
+        const pad = parseFloat(s.paddingLeft) + parseFloat(s.borderLeftWidth), padR = parseFloat(s.paddingRight) + parseFloat(s.borderRightWidth);
+        const wrap = rects.length > 1 || (pure && el.textContent.includes('\n') && s.whiteSpace.startsWith('pre'));
+        const x = wrap ? box.left + pad : u.left, w = wrap ? box.width - pad - padR : u.width;
+        kids.push({ t: 't', n: el.id ? `${name(el)} text` : 'text', x: x - box.left, y: u.top - box.top, w, h: u.height, s: pure ? [...el.childNodes].map((n) => (n.tagName === 'BR' ? '\n' : textOf(n, s))).join('').trim() : textOf(node, s).trim(), al: s.textAlign, wrap: wrap ? 1 : 0, ...st });
+        if (pure) break; continue;
+      }
+      // a run that starts or ends inside a line of mixed text: one text per line it lies on
+      const words = [...node.textContent.matchAll(/\S+\s*/g)]; let line = null; const lines = [];
+      for (const wm of words) { const wr = document.createRange(); wr.setStart(node, wm.index); wr.setEnd(node, wm.index + wm[0].length); const q = [...wr.getClientRects()].filter((x) => x.width > 0)[0]; if (!q) continue;
+        if (line && Math.abs(q.top - line.top) < 3) { line.s += wm[0]; line.r = Math.max(line.r, q.right); } else { line = { top: q.top, l: q.left, r: q.right, h: q.height, s: wm[0] }; lines.push(line); } }
+      for (const ln of lines) kids.push({ t: 't', n: 'text', x: ln.l - box.left, y: ln.top - box.top, w: ln.r - ln.l, h: ln.h, s: ln.s.replace(/\s+/g, ' ').trim(), al: 'left', wrap: 0, ...st });
+    }
+  }
+  function svg(el, box) { const c = el.cloneNode(true); const src = [el, ...el.querySelectorAll('*')], dst = [c, ...c.querySelectorAll('*')];
+    src.forEach((n, i) => { const s = cs(n); for (const k of ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'opacity']) { const v = s.getPropertyValue(k); if (v) dst[i].setAttribute(k, k === 'fill' || k === 'stroke' ? (col(v) ? `rgb(${col(v).slice(0, 3).map((x) => Math.round(x * 255)).join(',')})` : 'none') : v); }
+      const sv = col(s.stroke); if (sv && sv[3] < 1) dst[i].setAttribute('stroke-opacity', sv[3]); });
+    c.setAttribute('width', box.width); c.setAttribute('height', box.height); c.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); return c.outerHTML; }
+  function walk(el, pbox) {
+    const s = cs(el); if (!shown(el, s)) return null;
+    const b = el.getBoundingClientRect(); if (el.id === 'still') return null;
+    const node = { t: 'f', n: name(el), x: b.left - pbox.left, y: b.top - pbox.top, w: b.width, h: b.height, op: +s.opacity < 1 ? +s.opacity : undefined, z: s.position !== 'static' && s.zIndex !== 'auto' ? +s.zIndex : undefined, kids: [] };
+    if (el.tagName === 'svg') { if (!b.width) return null; return { t: 'svg', n: name(el), x: node.x, y: node.y, w: b.width, h: b.height, svg: svg(el, b), op: node.op }; }
+    node.fill = col(s.backgroundColor) || undefined;
+    const sides = ['Top', 'Right', 'Bottom', 'Left'].map((k) => [parseFloat(s[`border${k}Width`]) || 0, col(s[`border${k}Color`])]); if (sides.some(([w, c]) => w && c)) { const c = sides.find(([w, c]) => w && c)[1]; node.stroke = { c, w: sides.map(([w, cc]) => (cc ? w : 0)) }; }
+    const rad = parseFloat(s.borderTopLeftRadius) || 0; if (rad) node.r = Math.min(rad, b.width / 2, b.height / 2);
+    const bf = /blur\(([\d.]+)px\)/.exec(s.backdropFilter); if (bf) node.blur = +bf[1];
+    const sh = shadows(s.boxShadow); if (sh.length) node.fx = sh;
+    if (s.overflowY !== 'visible' || s.overflowX !== 'visible') node.clip = 1;
+    const cp = /polygon\(([^)]*)\)/.exec(s.clipPath); if (cp) { const pts = cp[1].split(',').map((p) => p.trim().split(/\s+/).map((v, i) => (parseFloat(v) / 100) * (i ? b.height : b.width)).join(',')).join(' '); return { t: 'svg', n: name(el), x: node.x, y: node.y, w: b.width, h: b.height, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${b.width}" height="${b.height}" viewBox="0 0 ${b.width} ${b.height}"><polygon points="${pts}" fill="rgb(${(col(s.backgroundColor) || [1, 1, 1]).slice(0, 3).map((x) => Math.round(x * 255)).join(',')})"/></svg>`, op: node.op }; }
+    if (/linear-gradient/.test(s.backgroundImage) && el.id !== 'scale-bar') node.grad = s.backgroundImage;
+    // native controls
+    if (el.tagName === 'INPUT' && el.type === 'checkbox') { node.ctl = { k: 'check', on: el.checked ? 1 : 0 }; return node; }
+    if (el.tagName === 'INPUT' && el.type === 'range') { node.ctl = { k: 'range', v: (el.value - el.min) / ((el.max - el.min) || 1), c: col(s.accentColor) }; return node; }
+    if (el.tagName === 'INPUT' && el.type === 'color') { node.ctl = { k: 'swatch', c: col(el.value.replace(/^#(..)(..)(..)$/, (m, r, g, bb) => `rgb(${parseInt(r, 16)},${parseInt(g, 16)},${parseInt(bb, 16)})`)) }; return node; }
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
+      const v = el.tagName === 'SELECT' ? (el.selectedOptions[0]?.textContent || '') : el.value, ph = !v && el.placeholder;
+      const st = tstyle(s); if (ph) { const p = cs(el, '::placeholder'); st.c = col(getComputedStyle(el, '::placeholder').color) || st.c; }
+      const pl = parseFloat(s.paddingLeft) + parseFloat(s.borderLeftWidth), pt = parseFloat(s.paddingTop) + parseFloat(s.borderTopWidth);
+      node.kids.push({ t: 't', n: ph ? 'placeholder' : 'value', x: pl, y: pt, w: b.width - pl * 2 - (el.tagName === 'SELECT' ? 18 : 0), h: b.height - pt * 2, s: (v || ph || '').trim(), al: 'left', wrap: el.tagName === 'TEXTAREA' ? 1 : 0, ...st });
+      if (el.tagName === 'SELECT') node.ctl = { k: 'select', c: col(s.color) };
+      return node;
+    }
+    if (el.id === 'scale-bar') { const tick = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tick')) || 11; const c = col(s.borderBottomColor);
+      for (let x = 0; x < b.width - 0.5; x += tick) node.kids.push({ t: 'f', n: 'tick', x, y: 0, w: 1, h: b.height, fill: c, kids: [] }); }
+    texts(el, s, b, node.kids);
+    for (const ch of el.children) { const k = walk(ch, b); if (k) node.kids.push(k); }
+    if (!node.kids.length) delete node.kids;
+    return node;
+  }
+  const stage = document.getElementById('stage'), root = walk(stage, stage.getBoundingClientRect());
+  const after = getComputedStyle(stage, '::after'); root.after = after.content !== 'none' && after.display !== 'none' ? after.backgroundImage : null;
+  return { w: W, h: H, title: document.title, root };
+}
+async function layers() {
+  const out = dir(path.join(ROOT, 'out/ui-figma')), page = await standalone();
+  await open(page, 'pause', 'default');
+  const list = await listed(page);
+  const want = picks.length ? list.filter((it) => picks.some((p) => it.id.startsWith(p))) : list;
+  for (const it of want) { await open(page, it.screen, it.state); const data = await page.evaluate(readLayers); data.id = it.id; data.bg = await page.evaluate(() => (/bg\/(\w+)\.png/.exec(getComputedStyle(document.getElementById('still')).backgroundImage) || [])[1] || null);
+    const json = JSON.stringify(data, (k, v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)); fs.writeFileSync(path.join(out, `${it.id}.json`), json); console.log(it.id, `${json.length} bytes`); }
+  await page.context().close();
+}
+
 if (mode === 'stills') await stills();
+if (mode === 'layers') await layers();
 if (mode === 'game') await compare();
 if (mode === 'page') await shots();
 if (mode === 'dump') await dump();

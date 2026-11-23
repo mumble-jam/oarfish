@@ -13,10 +13,11 @@
 | `game-data.js`, `bg/stills.js` | Written by the tool from the running game: its words and lists, and what the plate said at each still. Never edited by hand. |
 | `bg/*.png` | Nine stills from the game, 1920 × 1080, no interface in them. |
 | `fonts/` | The game's three typefaces, so the page asks the network for nothing (see "Fonts" below). |
-| `shots/` | A picture of every screen and state, taken from this page. Not committed (34 MB); `node tools/shot_ui.mjs page` makes them again in a few minutes. |
-| `../tools/shot_ui.mjs` | The one tool: takes the stills, the pictures, the game's data, and compares the copy with the real game. |
+| `shots/` | A picture of every screen and state, taken from this page. Not committed (38 MB); `node tools/shot_ui.mjs page` makes them again in a few minutes. |
+| `figma/build.js` | Turns one state, as `node tools/shot_ui.mjs layers` reads it, into editable layers in Figma (through the Figma tools' `use_figma`). |
+| `../tools/shot_ui.mjs` | The one tool: takes the stills, the pictures, the game's data, the layers for Figma, and compares the copy with the real game. |
 
-**Open it.** From the repository's folder: `npm start`, then http://localhost:8080/ui/ (any static server does the same; opening `ui/index.html` straight from disk is meant to work too, but has not been tried). You get the menus in a frame under a dashed yellow bar marked KIT. The bar picks the screen, its state, the still behind it, the size of the screen (1920 × 1080, 1440 × 900, 1280 × 720, a phone upright and on its side, or the window as it is) and whether to pretend the screen is a touch screen. The backquote key (`` ` ``) hides the bar and brings it back.
+**Open it.** From the repository's folder: `npm start`, then http://localhost:8080/ui/ (any static server does the same; opening `ui/index.html` straight from disk works too: tried in Chrome, the bar, the frame and the address all behave, and nothing is asked of the network). You get the menus in a frame under a dashed yellow bar marked KIT. The bar picks the screen, its state, the still behind it, the size of the screen (1920 × 1080, 1440 × 900, 1280 × 720, a phone upright and on its side, or the window as it is) and whether to pretend the screen is a touch screen. The backquote key (`` ` ``) hides the bar and brings it back.
 
 Every state has an address, so a link or a screenshot can point at one:
 
@@ -38,6 +39,7 @@ node tools/shot_ui.mjs stills keeper    only one of them
 node tools/shot_ui.mjs dump             ui/game-data.js, from the running game (do this when the game's words, keys, shells or creatures change)
 node tools/shot_ui.mjs page             a picture of every screen and state of this page: ui/shots/<screen>--<state>.png
 node tools/shot_ui.mjs game             the same screens in the real game, over the same still, compared with the copy: out/ui-compare/
+node tools/shot_ui.mjs layers           every state read back as boxes and text, for figma/build.js: out/ui-figma/
 ```
 
 Add `small` to try a still at 960 × 540 first (it goes to `out/ui-trial/`, never into `ui/`). How each still is set up is one line in `STILLS` in the tool; change the line and take it again.
@@ -63,7 +65,9 @@ After carrying anything back: `npm test` (five suites, about ten minutes) and lo
 - Before saying something works, run the checks and look at the picture yourself. Say plainly what is unverified.
 - Words on screen: short, concrete, no jargon. Explain a change in terms of what the player sees.
 
-**The same screens in Figma.** NOT DONE YET. Nothing has been written to the Figma file (https://www.figma.com/design/rFNso5egYivjGoBfhuqi1B/the-oarfish). See `HANDOVER.md` at the top of the repository.
+**The same screens in Figma.** In the file https://www.figma.com/design/rFNso5egYivjGoBfhuqi1B/the-oarfish, on a page of its own, "Menus today (from the game)" (nothing else in the file was touched). One section per screen, and in it the screen's main state as a 1920 × 1080 frame of **editable layers**: text as text in the game's typefaces (Figma has IM FELL English, IM FELL English SC and Alegreya Sans; JetBrains Mono stands in for the system monospace), panels as shapes with the game's colours and strengths, the veils' blur as a background blur, the plate's shade as a gradient. Layers are named by the game's ids and classes (`#pause`, `div.in`, `#btn-resume`…), so a change can be found again in `menus.css` and `index.html`. They were made from the page itself: `node tools/shot_ui.mjs layers` reads every state back as boxes and text (`out/ui-figma/<id>.json`) and `figma/build.js` turns one into layers, so any other state can be added the same way. The eight frames: Heads-up display / plain (`16:550`), Tuning drawer / default (`17:550`), Pause menu / default (`18:550`), Key bindings / default (`19:550`), Leave feedback / empty (`20:550`), End of a dive / taken (`20:632`), Specimen library / default (`21:550`), The dive could not start (`20:684`); the page is `15:550`.
+
+**Not there yet:** the pictures. Uploading an image to Figma was refused by the network this was made from, so (1) the still behind each frame is missing: its place is a locked layer named "Still · ruins" (or swarm, deep, end, library) in a flat abyss colour, and dropping `bg/<name>.png` onto it as an image fill puts the picture in; (2) the other 35 states, meant to go in as pictures from `shots/`, are not in the file at all. Every state is in `shots/` and on the page. Other limits: positions are fixed, not auto layout (they were measured, not rebuilt); Figma sets type a hair differently from Chrome, so a line can sit a pixel or two off; focus rings are left out; the tick boxes, sliders, text boxes and drop-down are drawn to look like Chrome's; in the library the line of facts is one text, not two.
 
 **An opening message for a new chat.** Paste this to start menu work from here:
 
@@ -149,7 +153,7 @@ States: all depths or this depth; sound on or off; before sound has started (sel
 
 ### 3. Pause menu (`pause`)
 
-Opened by P, Esc, the pause button, or Options on a controller. It also opens by itself when the tab is hidden, when Esc takes the page out of full screen, and when the browser takes the mouse back in the adventure camera. One column 400 px wide over the dimmed, blurred dive. **At 1920 × 1080 the column is taller than the screen (it reaches only as far as the first testing buttons), so the rest is below the fold and the whole overlay scrolls.** (Its full height has not been measured.) Markup 422 to 463; css 243 to 252, 171 to 174, 279 to 285; behaviour `setPaused()` `main.js` 1059 to 1075.
+Opened by P, Esc, the pause button, or Options on a controller. It also opens by itself when the tab is hidden, when Esc takes the page out of full screen, and when the browser takes the mouse back in the adventure camera. One column 400 px wide over the dimmed, blurred dive. **At 1920 × 1080 the column is taller than the screen: 1,650 px of column (1,706 with the overlay's padding) against 1,080, so the screen ends in the middle of the "Bring one to look at" buttons, and the rest is below the fold; the whole overlay scrolls.** (Measured in the standalone page.) Markup 422 to 463; css 243 to 252, 171 to 174, 279 to 285; behaviour `setPaused()` `main.js` 1059 to 1075.
 
 From the top:
 
@@ -301,7 +305,7 @@ Shell colours come from the game's data (ten of them, `#f4e3c1` to `#cfe6ff`), n
 Noted, not fixed.
 
 1. **No way in.** No title, no "start", no name of the game on screen but the plate's caption in French and Latin. A first-time player lands in a moving dive with a button that says "Skip tutorial".
-2. **The pause menu is one long list in the order things were added.** Taller than a 1080 screen: only as far as the first testing buttons fits. Vibration and the controller's status are at the very end, after the testing tools and the key list. The key list (reference) sits between two groups of settings.
+2. **The pause menu is one long list in the order things were added.** Taller than a 1080 screen (1,706 px in all): it fits only as far as the middle of the testing tools. Vibration and the controller's status are at the very end, after the testing tools and the key list. The key list (reference) sits between two groups of settings.
 3. **Testing tools are in every player's pause menu**, between the settings and the key list, with five creatures "not in the dive yet". (They were hidden once, and George could not find them. Where they live is a decision for the redesign.)
 4. **Settings are in two places with no rule one can see.** Look speed, teaching, lighter picture and vibration are in the pause menu. Loop assist is in the Tuning drawer under "The feel", a heading with one dial under it, though look speed and vibration are saved as "feel" too. The drawer's button says "Tuning", its heading says "The band".
 5. **The Tuning drawer cannot be reached from the plain view** except by pausing first: its button only shows in the full view or while paused.
@@ -313,11 +317,17 @@ Noted, not fixed.
 11. **Dials are uneven.** Four of the band's dials explain themselves and two do not; a dial is the browser's own slider tinted coral.
 12. **Left-overs in the styles**: `--water` is never used; `#drawer h2 + .lede` styles a paragraph that is not in the page; the classes `paste` (rows in key bindings) and `many` (the library's Show row) have no styles; `#bind-grid` is given its gap twice (lines 271 and 278); a comment about the stamina ring (line 108) sits over the library's styles.
 13. **Under the end card the dive's lettering carries on**: the last message stays up, and a short body's scale bar keeps throbbing pink through the blur.
-14. **On a phone on its side the foot is cut off.** The stage is never less than 440 px tall, so on a screen 390 px tall the caption and the scale bar (the health bar) are below the edge. Upright, the caption breaks onto two lines and the model tools, if on, sit in the middle of the foot.
+14. **On a phone on its side the foot is cut off.** The stage is never less than 440 px tall, so on a screen 390 px tall the scale bar (the health bar) is below the edge and the caption sits on it; the touch sentence of the key list runs into the caption. In both directions the marker's label ("the rift · 76 m") is cut by the right edge, and upright the corner buttons sit over the band's name. Upright, the caption breaks onto two lines. (Seen in the phone pictures in `shots/`.)
 15. **Things only a developer needs are a key away**: H puts Wireframe and Skeleton on a player's screen.
 16. **Long sentences in small places**: the vibration test answers with up to fifty words under a button; the controller line can run to three lines.
 17. **The error screen** is a bare paragraph: no heading, nothing to press.
 18. **"Connect DualSense motors"**, "Test the vibration" and the Vibration dial show whether or not a controller is there.
+
+Found later, while building the Figma frames (all three are in the copied styles, and the two screens they are on matched the real game to the pixel, so they are in the game too):
+
+19. **In the library's list the specimen on show is dark on dark.** The general rule for a pressed button turns its text ink-dark; the list's own rule replaces only the coral background, with a pale see-through one. "The Keeper" reads ink on near-ink.
+20. **The "Name this set" box in key bindings is in the monospace face.** It takes the rule written for the drawer's preset box (`.preset input`), because the saved-sets section carries the class `preset` too.
+21. **The drawer's "Now: …" line runs into "Sound on"** when it wraps onto two lines (as it does at 1920 × 1080 with a player sitting in): the drawer is a column taller than the screen, and `min-height: 1.35em` on that line lets it be squeezed to one line's height.
 
 ---
 
@@ -325,7 +335,54 @@ Noted, not fixed.
 
 `screen` and `state` are what goes in the address; the pictures in `shots/` and the frames in Figma carry the same two words (`pause--controller`, "Pause menu / A controller connected…").
 
-NOT WRITTEN YET: the table goes here. Until then the list is `SCREENS` in `kit.js` (8 screens, 43 states), and the State menu in the bar shows the same names.
+8 screens, 43 states; the list itself is `SCREENS` in `kit.js`, and the bar's State menu shows the same names. "Real game compared" is the result of `node tools/shot_ui.mjs game` (see the next section). "Figma" says which state is in the Figma file as layers. Besides these, `shots/` has eight phone pictures: `hud--touch`, `pause--touch`, `library--default` and `end--taken`, upright (390 × 844) and on their side (844 × 390).
+
+| Screen | `state` | What it shows | Still | Real game compared | Figma |
+| --- | --- | --- | --- | --- | --- |
+| Heads-up display (`hud`) | `opening` | A dive opens: the band’s title card and the first lesson | start | not compared | – |
+| Heads-up display (`hud`) | `nursery` | A first dive: the nursery, with Skip tutorial and a key prompt | nursery | not compared | – |
+| Heads-up display (`hud`) | `plain` | The plain view, nothing happening | ruins | marker 1 px off | editable |
+| Heads-up display (`hud`) | `toast-teach` | A message: a lesson | swarm | not compared | – |
+| Heads-up display (`hud`) | `toast-warn` | A message: a warning, with a title | keeper | not compared | – |
+| Heads-up display (`hud`) | `toast-shell` | A message: a shell taken | ruins | not compared | – |
+| Heads-up display (`hud`) | `toast-note` | A message: a note | ruins | not compared | – |
+| Heads-up display (`hud`) | `hunted` | Hunted: the stamina ring and a key prompt | deep | not compared | – |
+| Heads-up display (`hud`) | `low` | Nearly too short: the scale bar in alarm | end | not compared | – |
+| Heads-up display (`hud`) | `rift-toll` | Over an open rift: the toll marked on the scale bar | keeper | not compared | – |
+| Heads-up display (`hud`) | `shells` | Shells riding on the scale bar, food on the way | swarm | marker 1 px off | – |
+| Heads-up display (`hud`) | `flash-hurt` | Bitten: the flash round the edge | end | not compared | – |
+| Heads-up display (`hud`) | `flash-grow` | Grown: the flash round the edge | swarm | not compared | – |
+| Heads-up display (`hud`) | `full` | The full view: keys and tools on screen | ruins | same | – |
+| Heads-up display (`hud`) | `full-look` | The full view, adventure camera | ruins | marker 1 px off | – |
+| Heads-up display (`hud`) | `controller` | The full view, a controller in hand | ruins | not compared | – |
+| Heads-up display (`hud`) | `touch` | A touch screen: the four buttons at the right | ruins | not compared | – |
+| Tuning drawer (`drawer`) | `default` | The band playing, sliders for all depths | swarm | "Now:" line (sample) | editable |
+| Tuning drawer (`drawer`) | `this-depth` | Sliders set for this depth only | keeper | not compared | – |
+| Tuning drawer (`drawer`) | `muted` | Sound off | swarm | not compared | – |
+| Tuning drawer (`drawer`) | `silent` | Sound not started (seldom seen: the click that opens the drawer starts it) | swarm | not compared | – |
+| Pause menu (`pause`) | `default` | Keyboard and mouse, plain view | ruins | same | editable |
+| Pause menu (`pause`) | `lower` | The same, scrolled to the end | ruins | same | – |
+| Pause menu (`pause`) | `controller` | A controller connected (scrolled to the end, where it shows) | ruins | same | – |
+| Pause menu (`pause`) | `shells` | Three shells worn | swarm | same | – |
+| Pause menu (`pause`) | `look` | Adventure camera chosen | ruins | same | – |
+| Pause menu (`pause`) | `armed` | New dive pressed once | ruins | same | – |
+| Pause menu (`pause`) | `full` | With keys and tools on screen | ruins | same | – |
+| Pause menu (`pause`) | `tuning` | With the Tuning drawer open over it | keeper | not compared | – |
+| Pause menu (`pause`) | `touch` | On a touch screen | ruins | not compared | – |
+| Key bindings (`binds`) | `default` | The defaults | swarm | same | editable |
+| Key bindings (`binds`) | `waiting` | A slot waiting for a key | swarm | same | – |
+| Key bindings (`binds`) | `saved` | A saved set in use | swarm | not compared | – |
+| Leave feedback (`feedback`) | `empty` | Opened from the pause menu | deep | facts (sample) | editable |
+| Leave feedback (`feedback`) | `copied` | A note written and copied | deep | not compared | – |
+| Leave feedback (`feedback`) | `by-hand` | Copying blocked: the note shown to copy by hand | deep | not compared | – |
+| Leave feedback (`feedback`) | `share` | Where the device can share: a third button | deep | not compared | – |
+| Leave feedback (`feedback`) | `from-end` | Opened from the end of a dive | end | facts (sample) | – |
+| End of a dive (`end`) | `taken` | Taken by the deep | end | same | editable |
+| End of a dive (`end`) | `over` | The dive is over | surface | same | – |
+| Specimen library (`library`) | `default` | The Keeper on the stand | library | same | editable |
+| Specimen library (`library`) | `changed` | A colour and the size changed, and the changes copied out | library | not compared | – |
+| The dive could not start (`error`) | `default` | No WebGL, or the 3D library did not load | none | not compared | editable |
+
 
 Stills (`bg/`): `start` the nest, as a dive opens · `nursery` the first moment of a first dive · `ruins` open water among columns, first band · `swarm` a long body most of the way round the great swarm · `keeper` the Keeper come over to the fish, the mural behind, the veil over the rift · `deep` deep twilight, 800 m · `end` a short body and a tail-biter in the twilight zone, as it is when "Taken by the deep" comes up · `surface` the raft under an empty sky, as it is when "The dive is over" comes up · `library` the library's own stage with the Keeper on it. Each still has, in `bg/stills.js`, what the plate said at that moment, so the band's name, the length on the scale bar and the marker under a menu belong to the picture behind it.
 
@@ -333,7 +390,27 @@ Two things a still cannot be: the pictures behind "Over an open rift" and "Hunte
 
 ## How closely the copy matches the game
 
-NOT WRITTEN UP YET. See `HANDOVER.md` at the top of the repository for the numbers so far: in short, the pause menu in seven states, the key bindings in two, "The dive is over" and the library came out the same as the real game to the pixel; what differed elsewhere was sample numbers and the marker landing a pixel off from one run of the game to the next.
+`node tools/shot_ui.mjs game` takes the real game to the moment of a state's still (the same steps that took the still), opens the menu in it as a player would, puts the game's own picture away behind the very same still, and counts the pixels that differ from this page at 1920 × 1080. Each result is in `out/ui-compare/` as the game, the differences (marked red) and the copy, side by side.
+
+| States | Pixels that differ | What differs |
+| --- | --- | --- |
+| `pause--default`, `--lower`, `--controller`, `--shells`, `--look`, `--armed`, `--full` | 0 | nothing |
+| `binds--default`, `binds--waiting` | 0 | nothing |
+| `end--taken`, `end--over`, `library--default` | 0 | nothing |
+| `hud--full` | 0 | nothing |
+| `hud--plain`, `hud--full-look`, `hud--shells` | 500 to 720 (under 0.04%) | only the marker ("the rift · 76 m"): the game does not land it on the same pixel from one run to the next |
+| `drawer--default` | 722 | the "Now: …" line and the thin energy line: sample numbers here, live ones in the game |
+| `feedback--empty`, `feedback--from-end` | about 2,700 (0.13%) | the four lines of facts: sample numbers here |
+
+So wherever the two were compared, type, spacing and colours are the game's to the pixel, and what differs is numbers. **24 states were not compared** (all marked "not compared" in the table above): every message state, the title card, the nursery, hunted, low, over an open rift, the two flashes, the controller and touch views of the heads-up display, three drawer states, `pause--tuning`, `pause--touch`, `binds--saved`, three feedback states, `library--changed`, the error. They use the same copied styles and markup, so they should match as closely, but that has not been checked; to check one, add a line to `RECIPES` in the tool that takes the real game there.
+
+Where the copy knowingly differs from the game:
+
+- **Sample numbers**: the end card, the feedback facts, the "now playing" line and the band's energy line are made up (the words round them are the game's). The two end stills set the same numbers on the real dive, so those compare equal.
+- **The share button** on the feedback sheet only writes "Handed over. Thank you."; the game opens the device's share sheet.
+- **The library**: the panel changes with the list, but the picture behind stays the Keeper; and only the Keeper's panel has been looked at (the other 67 come from the same data).
+- **A touch screen** cannot be faked for the browser, so the bar's Touch setting applies a copy of the game's three touch rules (`kit.css`). Keep them in step with `menus.css`.
+- **Timers**: with `hold=1` nothing fades, throbs or times out; without it, messages time out and the pink scale bar throbs as in the game.
 
 ## Fonts
 
@@ -345,5 +422,7 @@ The game loads IM Fell English, IM Fell English SC and Alegreya Sans from Google
 - **The nest in `start` is a middling one** (a record of 16 segments, three shells found, one fragment), not an empty one: it is what a menu will stand over after a few dives.
 - **A phone size is offered**, upright and on its side, because the game has a touch layout and rules for narrow screens today.
 - **The stage sits in a frame** (the page loaded a second time inside itself) so that the width the menus feel is the width chosen in the bar, and the game's own rules for narrow screens apply.
-- **`shots/` is not committed** (34 MB; the limit given was about 30). The tool makes it again.
+- **`shots/` is not committed** (38 MB; the limit given was about 30). The tool makes it again.
+- **The main state of each screen** (the one put in Figma as layers) is the one a player sees first or most: the plain view for the heads-up display, and the first state of every other screen.
+- **The Figma layers were measured off the page, not rebuilt by hand**: every box and line of text where Chrome put it. This keeps them faithful and lets any state be added later, at the price of fixed positions instead of auto layout. No component library was used: the file's libraries (Material 3, Simple Design System, iOS) have nothing of the game's look.
 - **Sample numbers** on the end card, the feedback facts and the "now playing" line are made up to read like a real dive; the words round them are the game's.
