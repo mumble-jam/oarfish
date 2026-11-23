@@ -573,7 +573,7 @@ check('a fragment of the ruins is taken up by going round it, rides under the bo
 
 // ---- swarms with tempers: one bolts upward, one parts in two, one only bunches near light
 s = await ev(() => { const g = window.__game, T = window.T, out = {}, quiet = () => { g.run.safe = 1e9; for (const list of [g.foes.biters, g.foes.anglers || []]) for (const b of list) b.alive = false; g.sim(0.1, T.none()); };
-  out.kinds = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); out.kinds.push(g.world.schools.filter((x) => !x.of).map((x) => (x.kind || '.')[0]).join('')); }
+  out.kinds = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); out.kinds.push(g.world.schools.filter((x) => !x.of && !x.bloom).map((x) => (x.kind || '.')[0]).join('')); }
   // the one that bolts: come at level, it climbs; left alone it sinks back; come down on it and it holds, and is taken
   g.startRun(4242); quiet(); const b = g.world.schools.find((x) => x.kind === 'bolt'), rest = b.y;
   T.put(b.x + 7, b.y, b.z, -1.57); for (let i = 0; i < 36; i++) { const dx = b.x - g.rig.pos.x, dz = b.z - g.rig.pos.z, d = Math.hypot(dx, dz) || 1; g.sim(0.1, { ...T.none(), dir: { x: dx / d, y: 0, z: dz / d } }); }
