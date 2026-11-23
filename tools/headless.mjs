@@ -3,8 +3,9 @@
 //   const game = await load();                      the game as it is in this folder
 //   const game = await load({ ref: 'main' });       the game as it was at a commit: unpacked under out/headless/, which git ignores
 //   const b = game.build(4242, 0);                  { THREE, scene, world, size, spawn, wrap, solids, sites }
-// A world made before the size belonged to the world (world.size) is read through the module's own T and SPAWN, and one made before
-// `solids` and `sites` were handed out has them handed out in the unpacked copy; nothing else in an old copy is touched.
+// A world made before the size belonged to the world (world.size) is read through the module's own T and SPAWN. One made before `solids`,
+// `sites` and the turn and corners of each piece (`q`, `box` in world.pieces()) were handed out has them handed out in the unpacked copy:
+// two lines of its world.js are added to, and nothing that builds the world is touched.
 import fs from 'node:fs'; import path from 'node:path'; import { execFileSync } from 'node:child_process'; import { pathToFileURL } from 'node:url';
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -23,7 +24,9 @@ export async function load({ ref = null } = {}) {
       if (!/\bsolids\b/.test(src)) { // an older world: hand out what stands in the way and what ground is claimed, as the newer ones do
         const at = '  return { update, react, pushOut,';
         if (!src.includes(at)) throw new Error(`cannot read what is solid in the world of ${name}: its last line is not the one expected`);
-        fs.writeFileSync(file, src.replace(at, '  return { solids: colliders, sites, update, react, pushOut,'));
+        const piece = '    return sc.items.map((it) => ({ name, x: it.x,';
+        if (!src.includes(piece)) throw new Error(`cannot read how the pieces are turned in the world of ${name}: world.pieces() is not as expected`);
+        fs.writeFileSync(file, src.replace(at, '  return { solids: colliders, sites, update, react, pushOut,').replace(piece, '    return sc.items.map((it) => ({ q: [it.q.x, it.q.y, it.q.z, it.q.w], box: [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z], name, x: it.x,'));
       }
     }
   }

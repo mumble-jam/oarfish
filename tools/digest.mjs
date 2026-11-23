@@ -36,7 +36,7 @@ for (const seed of seeds) for (const band of bands) {
       meshes.push(bed.geometry.attributes.position.array.subarray(0, n), bed.geometry.attributes.color.array.subarray(0, n));
       scene.traverse((o) => { if (!o.isInstancedMesh) return; everything.push(new Float32Array([o.count]), o.instanceMatrix.array.slice()); if (o.instanceColor) everything.push(o.instanceColor.array.slice()); }); }
     out.bed = text(hs) + bytes(meshes); out.instances = bytes(everything); }
-  out.pieces = text(w.pieces());
+  out.pieces = text(w.pieces().map((p) => [p.name, p.x, p.y, p.z, p.sx, p.sy, p.sz, p.tilt])); // (how each is turned, and its tint, are in `instances`)
   out.solids = text(solids.map((c) => [c.x, c.y, c.z, c.r, c.top, !!c.off]));
   out.sites = text(sites);
   out.swarms = text(w.schools.map((s) => [s.tier, s.kind, s.n, s.hx, s.hz, s.hy, s.r, s.ph, s.clock, s.tone, s.ball, s.slack, s.tall, s.gap]));
