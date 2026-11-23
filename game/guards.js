@@ -494,5 +494,5 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     return SHOWN;
   }
   const fadeStrikes = (dt) => { for (let i = strikes.length - 1; i >= 0; i--) if ((strikes[i].life -= dt) <= 0) strikes.splice(i, 1); };
-  return { update, ram, pushOut, bend, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legAt, solids: () => SOL, body: () => BODY, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
+  return { update, ram, pushOut, bend, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legAt, solids: () => SOL, body: () => BODY, forget: () => { strikes.length = 0; }, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
 }
