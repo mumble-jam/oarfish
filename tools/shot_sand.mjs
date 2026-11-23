@@ -21,12 +21,12 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || un
 // each animal: how far off to stand on the stand, where to look (from the stand's middle), how long between the moments of a state, how many
 // moments, and for the close look: how near, and from where (yaw, pitch)
 const ALL = {
-  hermit: { far: 1.1, at: [0, -0.02, 0.02], gap: 0.7, n: 3, near: 0.55, nearAt: [0, -0.02, 0.06], yaw: 0.9, pitch: 0.35 },
-  trumpet: { far: 2.6, at: [0, 0, 0], gap: 0.5, n: 3, near: 0.9, nearAt: [0, 0, 0.25], yaw: 1.1, pitch: 0.25, nearState: 1 },
-  burrow: { far: 1.2, at: [0, 0.03, 0.03], gap: 1.9, n: 3, near: 0.6, nearAt: [0, 0.04, 0.05], yaw: 0.9, pitch: 0.4 },
+  hermit: { far: 1.0, at: [0, -0.02, 0.06], gap: 1.5, n: 4, near: 0.55, nearAt: [0, -0.02, 0.06], yaw: 0.9, pitch: 0.35 },
+  trumpet: { far: 2.4, at: [0, 0, 0], gap: 0.58, n: 4, near: 0.9, nearAt: [0, 0, 0.25], yaw: 1.1, pitch: 0.25, nearState: 1 },
+  burrow: { far: 0.95, at: [0, 0.03, 0.03], gap: 1.5, n: 4, near: 0.6, nearAt: [0, 0.04, 0.05], yaw: 0.9, pitch: 0.4 },
   gardeneel: { far: 3.2, at: [0, 0.3, 0], gap: 0.6, n: 3, near: 0.9, nearAt: [0, 0.45, 0], yaw: 0.8, pitch: 0.25 },
-  puffer: { far: 1.0, at: [0, 0, 0], gap: 0.4, n: 3, near: 0.55, nearAt: [0, 0, 0.04], yaw: 1.0, pitch: 0.3 },
-  sandcircle: { far: 5.2, at: [0, -0.2, 0], gap: 2, n: 1, near: 2.2, nearAt: [0, -0.3, 0], yaw: 0.7, pitch: 0.9 },
+  puffer: { far: 0.85, at: [0, 0, 0], gap: 0.8, n: 3, near: 0.55, nearAt: [0, 0, 0.04], yaw: 1.0, pitch: 0.3 },
+  sandcircle: { far: 5.2, at: [0, -0.2, 0], gap: 2, n: 1, near: 3.4, nearAt: [0, -0.3, 0], yaw: 0.7, pitch: 0.9 },
 };
 const args = process.argv.slice(2), prefix = args[0] && !ALL[args[0]] && !['lib', 'near', 'dive'].includes(args[0]) ? args.shift() : 'sand';
 const ids = args.filter((k) => ALL[k]), kinds = args.filter((k) => !ALL[k]), want = (k) => !kinds.length || kinds.includes(k), who = ids.length ? ids : Object.keys(ALL);

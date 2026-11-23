@@ -288,7 +288,7 @@ for (const spec of [
     states: [{ id: 'swim', name: 'Swimming on its fins', speed: 0.2 }, { id: 'plough', name: 'Ploughing a furrow, belly down', speed: 0.25 }, { id: 'stir', name: 'Stirring the middle', speed: 0 }, { id: 'carry', name: 'Carrying a shell to a peak', speed: 0.1 }, { id: 'puffed', name: 'Puffed up', speed: 0 }] },
   { ...SAND, id: 'sandcircle', name: 'A puffer’s sand circle', length: 2.9, material: { flatShading: true }, // (no light of its own: it is the bed, and has to be the bed's colour)
     about: 'The circle the white-spotted puffer builds: twenty-eight radial valleys and ridges round a flat middle of fine sand, with fragments of shell and coral set on the peaks. It can be shown at any stage: the first ring dug, the valleys ploughed rough, the ridges sharpened, finished, and left to flatten after the eggs. Made half as big again as the real one, 2.9 m across.',
-    palette: { sand: '#c8c9a6', sandDark: '#adaf8b', sandPale: '#dcdab6', fine: '#e2dfc2', bitA: '#fff6ea', bitB: '#ffb3a8' },
+    palette: { sand: '#c8c9a6', sandDark: '#adaf8b', sandPale: '#dcdab6', fine: '#e2dfc2', bitA: '#fffaf2', bitB: '#ff8f86' },
     build: (pal) => model.sandCircle(pal), assemble(a, pal) { circleRig(a, pal); },
     states: [{ id: 'build', name: 'Being built, from nothing', speed: 0 }, { id: 'ring', name: 'The first ring', speed: 0 }, { id: 'valleys', name: 'Valleys ploughed', speed: 0 }, { id: 'ridges', name: 'Ridges sharpened', speed: 0 }, { id: 'done', name: 'Finished, shells on the peaks', speed: 0 }, { id: 'left', name: 'Left, flattening', speed: 0 }] },
 ]) { NPCS.push(spec); NPC[spec.id] = spec; }

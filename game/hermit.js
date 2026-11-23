@@ -196,6 +196,7 @@ export function hermitRig(a, pal, { shellOf = null } = {}) {
       if (id === 'probe') { // it turns the empty shell over to look in it
         const turn = 0.6 * Math.sin(t * 0.9); lay_(sp, 'horn', 0, 0.15 * sc, Math.PI + turn, ground); }
     }
+    if (id !== 'wardrobe' && id !== 'change' && worn.mode === 'worn' && worn.kind !== 'snail') wear('snail'); // each pose in its own plain shell
     if (id !== 'probe' && id !== 'change') { stand.loop = -1; const sp = spare(); if (sp.mode !== 'off') { sp.mode = 'off'; sp.mesh.visible = false; } if (worn.mode !== 'worn' && worn.mode !== 'coming') wear(worn.kind); } // nothing left lying about from another state
     if (worn.mode === 'off' && !shells.some((x) => x.mode === 'coming')) wear(worn.kind);
     update(dt, { x: 0, z: 0, yaw, vx: 0, vz, treadmill: true, ground, time: t, in: inn, peer, act, look, at: atP });

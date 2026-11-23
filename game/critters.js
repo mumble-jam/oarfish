@@ -718,6 +718,7 @@ export function boxPiece(pal, def) {
 // A batch made for the sand flat of the first band, and one for the oarfish's long body. Each after a real animal: the sources, and the
 // one trait chosen for each, are at the top of its own file (hermit.js, trumpet.js, burrow.js, gardeneel.js, puffer.js). Models only, as
 // everything here is; the files named put them together and move them. Nothing in the dive asks for any of them.
+const denser = (B) => B.flatMap((r, i) => (i ? [r.map((v, k) => (v + B[i - 1][k]) / 2), r] : [r])); // a ring half way between every two
 const sandStrand = (side, long, root, way, n) => ({ side, long, root, way, cuts: Array.from({ length: n + 1 }, (_, i) => (long * i) / n) });
 // a tapered piece of a few sides from a to b, in bands of two colours: what a leg or a feeler is made of at this size
 const banded = (m, a, b, ra, rb, n, bands, c0, c1) => { for (let i = 0; i < bands; i++) { const t0 = i / bands, t1 = (i + 1) / bands, p = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; m.limb(p(t0), p(t1), ra + (rb - ra) * t0, ra + (rb - ra) * t1, n, i % 2 ? c1 : c0); } return m; };
@@ -874,20 +875,22 @@ export const TRUMPET = { length: 1, neck: 0.16, size: 1.4, // modelled at a metr
 };
 const trumpetAt = (z) => { const B = TRUMPET.body; let i = 0; while (i < B.length - 2 && B[i + 1][0] > z) i++; const a = B[i], b = B[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return a.map((v, k) => v + (b[k] - v) * t); };
 export function trumpet(pal) {
-  const m = mesher(), { back, flank, belly, mottle, streak, fin, bar, jawLine, eye } = pal, N = 8;
-  const paint = (i, k) => { const top = k === 0 || k === N - 1, low = k === 3 || k === 4; if (top) return i === 3 || i === 4 ? jawLine : back; if (low) return belly; if ((k === 2 || k === 5) && i > 3 && i < 7 && i % 2) return tint(flank, streak, 0.45); return i % 3 === 1 ? tint(flank, mottle, 0.35) : flank; };
-  m.skin(TRUMPET.body.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), paint);
-  m.cap(ringZ(0.5, 0.0075, 0.0075, 0.0075, -0.002, N), [0, 0, 1], '#2a1a1e', -0.004); // the little mouth at the end of the tube
+  const m = mesher(), { back, flank, belly, mottle, streak, fin, bar, jawLine, eye } = pal, N = 10, B = denser(TRUMPET.body);
+  const paint = (i, k) => { const top = k === 0 || k === N - 1, low = k === 4 || k === 5; if (top) return i >= 6 && i <= 8 ? jawLine : back; if (low) return k === 4 && i % 2 ? tint(belly, flank, 0.3) : belly; if ((k === 2 || k === 7) && i > 7 && i < 14 && i % 2) return tint(flank, streak, 0.45); if (k === 3 || k === 6) return tint(flank, belly, 0.35); return i % 3 === 1 ? tint(flank, mottle, 0.35) : flank; };
+  m.skin(B.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), paint);
+  m.cap(ringZ(0.5, 0.0075, 0.0075, 0.0075, -0.002, N), [0, 0, 1], '#2a1a1e', -0.004);
+  both((s) => { for (let j = 0; j < 4; j++) { const z0 = 0.17 - j * 0.012, [, w, up, dn, y] = trumpetAt(z0); m.quad([s * (w + 0.0008), y + up * (0.6 - 0.35 * j), z0], [s * (w + 0.0008), y + up * (0.6 - 0.35 * (j + 1)), z0 - 0.012], [s * (w + 0.0008), y + up * (0.6 - 0.35 * (j + 1)) - 0.003, z0 - 0.014], [s * (w + 0.0008), y + up * (0.6 - 0.35 * j) - 0.003, z0 - 0.002], tint(back, '#000000', 0.25)); } // the edge of the gill cover
+    const [, w, up, , y] = trumpetAt(0.245); m.limb([s * w * 0.7, y + up * 0.5, 0.245], [s * w * 1.25, y + up * 0.62, 0.25], 0.0022, 0.0016, 4, jawLine); }); // a nostril in front of each eye // the little mouth at the end of the tube
   // dark blotches down the flanks, and silvery streaks along the head
   let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 26; i++) { const z = 0.2 - 0.58 * rnd(), s = i % 2 ? 1 : -1, [, w, up, dn, y] = trumpetAt(z), v = (rnd() - 0.4) * 0.8, h = v > 0 ? up * v : dn * v, x = s * (w * Math.sqrt(Math.max(0, 1 - v * v)) + 0.0012), l = 0.008 + 0.01 * rnd();
+  for (let i = 0; i < 56; i++) { const z = 0.2 - 0.58 * rnd(), s = i % 2 ? 1 : -1, [, w, up, dn, y] = trumpetAt(z), v = (rnd() - 0.4) * 0.8, h = v > 0 ? up * v : dn * v, x = s * (w * Math.sqrt(Math.max(0, 1 - v * v)) + 0.0012), l = 0.008 + 0.01 * rnd();
     m.tri([x, y + h - 0.004, z - l], [x, y + h + 0.004, z], [x, y + h - 0.003, z + l], mottle); }
   both((s) => { for (const [z0, z1, dy] of [[0.36, 0.2, 0.004], [0.3, 0.17, -0.008]]) { const a = trumpetAt(z0), b = trumpetAt(z1); m.quad([s * (a[1] + 0.0008), a[4] + dy, z0], [s * (b[1] + 0.0008), b[4] + dy * 1.6, z1], [s * (b[1] + 0.0008), b[4] + dy * 1.6 + 0.003, z1], [s * (a[1] + 0.0008), a[4] + dy + 0.002, z0], streak); } });
   // the eyes, high on the head
   both((s) => { const [, w, up, , y] = trumpetAt(0.205); m.eye([s * w * 0.86, y + up * 0.42, 0.205], [s, 0.25, 0.05], 0.0085, { iris: eye, pupil: '#1a1420', rim: tint(back, '#000000', 0.4) }); });
   // the soft back fin and the fin under it: rays from the body out, a dark bar along the root, and the edge pale
   const finFrom = m.triangles, [z0, z1] = TRUMPET.soft;
-  for (const s of [1, -1]) { const root = [], tip = [], n = 7;
+  for (const s of [1, -1]) { const root = [], tip = [], n = 11;
     for (let i = 0; i <= n; i++) { const z = z0 + (z1 - z0) * (i / n), [, , up, dn, y] = trumpetAt(z), h = 0.052 * Math.sin(Math.PI * (0.15 + 0.85 * (i / n))) ** 0.6 + 0.004; root.push([0, y + s * (s > 0 ? up : dn) * 0.92, z]); tip.push([0, y + s * ((s > 0 ? up : dn) + h), z - 0.022]); }
     for (let i = 0; i < n; i++) { const mid = (a, b) => [0, a[1] + (b[1] - a[1]) * 0.28, a[2] + (b[2] - a[2]) * 0.28], r0 = root[i], r1 = root[i + 1], m0 = mid(r0, tip[i]), m1 = mid(r1, tip[i + 1]);
       m.quad(r0, r1, m1, m0, bar).quad(m0, m1, tip[i + 1], tip[i], [fin, fin, tint(fin, '#fff3e0', 0.4)]); } }
@@ -1056,7 +1059,7 @@ export function gardenEel(pal) {
   const rings = ys.map((y, j) => { const c = spine(y), c2 = spine(y + 0.01), d = new THREE.Vector3(c2[0] - c[0], c2[1] - c[1], c2[2] - c[2]).normalize(), u = new THREE.Vector3(1, 0, 0), v = new THREE.Vector3().crossVectors(d, u).normalize(), r = j === 0 ? 0.002 : R * Math.min(1, y / 0.25) ** 0.5 * (j === ys.length - 1 ? 0.55 : 1);
     return Array.from({ length: n }, (_, k) => { const a = (k / n) * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; return [c[0] + u.x * x + v.x * z, c[1] + u.y * x + v.y * z, c[2] + u.z * x + v.z * z]; }); });
   const big = [L - 0.16, L * 0.6, L * 0.38]; // the three big spots, by height
-  m.skin(rings, (j, k) => { const y = (ys[j] + ys[j + 1]) / 2; if (big.some((b) => Math.abs(y - b) < 0.05) && (k === 0 || k === 1 || k === 4)) return spot; return (j * 7 + k * 3) % 13 === 0 ? dot : skin; });
+  m.skin(rings, (j, k) => { const y = (ys[j] + ys[j + 1]) / 2; if (big.some((b) => Math.abs(y - b) < 0.05) && (k === 1 || k === 3)) return spot; return (j * 7 + k * 3) % 13 === 0 ? dot : skin; });
   const tip = rings[rings.length - 1], c = spine(top + 0.07); m.cap(tip, [0, 0.3, 1], skin, 0.02); // the snout
   both((s) => { const e = spine(top + 0.02); m.eye([s * R * 0.92, e[1] + 0.005, e[2]], [s, 0.35, 0.35], 0.0105, { iris: eye, pupil: '#121018', rim: dot }); }); // big eyes
   m.tri([-0.008, c[1] - 0.012, c[2] + 0.012], [0.008, c[1] - 0.012, c[2] + 0.012], [0, c[1] - 0.022, c[2] - 0.004], dot); // the mouth, under the snout
@@ -1091,18 +1094,21 @@ export const PUFFER = { length: 0.3,
 export const CIRCLE = { R: 1.45, middle: 0.62, ridges: 28 }; // the outer edge, the edge of the flat middle, and how many ridges round it (made half as big again as the real one)
 const pufferAt = (z) => { const B = PUFFER.body; let i = 0; while (i < B.length - 2 && B[i + 1][0] > z) i++; const a = B[i], b = B[i + 1], t = Math.min(1, Math.max(0, (a[0] - z) / (a[0] - b[0]))); return a.map((v, k) => v + (b[k] - v) * t); };
 export function puffer(pal) {
-  const m = mesher(), { back, flank, belly, spot, eye, beak } = pal, N = 10;
-  m.skin(PUFFER.body.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), (i, k) => (k === 0 || k === N - 1 ? back : k === 4 || k === 5 ? belly : k === 3 || k === 6 ? tint(flank, belly, 0.55) : flank));
+  const m = mesher(), { back, flank, belly, spot, eye, beak } = pal, N = 14, B = denser(PUFFER.body);
+  m.skin(B.map(([z, w, up, dn, y]) => ringZ(z, w, up, dn, y, N)), (i, k) => (k <= 1 || k >= N - 2 ? (k === 0 || k === N - 1 ? back : tint(back, flank, 0.5)) : k >= 6 && k <= 7 ? belly : k === 5 || k === 8 ? tint(flank, belly, 0.6) : k === 4 || k === 9 ? tint(flank, belly, 0.25) : flank));
   m.cap(ringZ(0.13, 0.022, 0.02, 0.018, -0.004, N), [0, 0, 1], beak, 0.006).cap(ringZ(-0.12, 0.013, 0.015, 0.012, 0, N), [0, 0, -1], back, 0.004);
+  both((s) => { const [, w, up, , y] = pufferAt(0.04); m.quad([s * (w + 0.001), y + up * 0.15, 0.045], [s * (w + 0.001), y + up * 0.55, 0.04], [s * (w + 0.001), y + up * 0.55, 0.034], [s * (w + 0.001), y + up * 0.15, 0.039], dim(back, 0.55)); // the gill opening, a dark slit before the pectoral
+    const [, w2, up2, , y2] = pufferAt(0.105); m.limb([s * w2 * 0.45, y2 + up2 * 0.75, 0.105], [s * w2 * 0.6, y2 + up2 * 0.95, 0.11], 0.0035, 0.003, 4, flank); // a nostril
+    m.limb([s * 0.012, -0.006, 0.13], [s * 0.018, -0.006, 0.122], 0.004, 0.003, 4, tint(beak, flank, 0.3)); }); // the corners of the mouth
   m.quad([-0.006, -0.004, 0.137], [0.006, -0.004, 0.137], [0.006, 0.001, 0.137], [-0.006, 0.001, 0.137], '#fffdf2'); // the beak's four teeth, as two pale plates
   // white spots over the back and flanks, and on the belly
   let seed = 9; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 34; i++) { const z = 0.1 - 0.19 * rnd(), [, w, up, dn, y] = pufferAt(z), a = (rnd() * 2 - 1) * 2.2, x = Math.sin(a) * w * 1.03, h = y + (Math.cos(a) >= 0 ? up : dn) * Math.cos(a) * 1.03, r = 0.0055 + 0.002 * rnd(), n = [Math.sin(a), Math.cos(a), 0];
+  for (let i = 0; i < 64; i++) { const z = 0.1 - 0.19 * rnd(), [, w, up, dn, y] = pufferAt(z), a = (rnd() * 2 - 1) * 2.2, x = Math.sin(a) * w * 1.03, h = y + (Math.cos(a) >= 0 ? up : dn) * Math.cos(a) * 1.03, r = 0.0055 + 0.002 * rnd(), n = [Math.sin(a), Math.cos(a), 0];
     const u = [Math.cos(a), -Math.sin(a), 0]; m.quad([x + u[0] * r, h + u[1] * r, z], [x + n[0] * 0.0005, h, z + r], [x - u[0] * r, h - u[1] * r, z], [x, h, z - r], Math.abs(a) > 1.9 ? '#ffffff' : spot); }
   both((s) => { const [, w, up, , y] = pufferAt(0.075); m.eye([s * w * 0.78, y + up * 0.5, 0.075], [s, 0.45, 0.15], 0.0105, { iris: eye, pupil: '#151219', rim: dim(back, 0.6) }); });
   // small spines over the belly, lying flat; they stand when it puffs up
   const spineFrom = m.triangles;
-  for (let i = 0; i < 16; i++) { const z = 0.08 - 0.13 * ((i * 0.618) % 1), a = Math.PI + (((i * 0.37) % 1) - 0.5) * 2.2, [, w, , dn, y] = pufferAt(z), x = Math.sin(a) * w, h = y + Math.cos(a) * dn; m.tri([x - 0.003, h, z + 0.003], [x + 0.003, h, z + 0.003], [x, h - 0.0012, z - 0.008], [belly, belly, tint(belly, back, 0.4)]); }
+  for (let i = 0; i < 30; i++) { const z = 0.08 - 0.13 * ((i * 0.618) % 1), a = Math.PI + (((i * 0.37) % 1) - 0.5) * 2.2, [, w, , dn, y] = pufferAt(z), x = Math.sin(a) * w, h = y + Math.cos(a) * dn; m.tri([x - 0.003, h, z + 0.003], [x + 0.003, h, z + 0.003], [x, h - 0.0012, z - 0.008], [belly, belly, tint(belly, back, 0.4)]); }
   const g = m.geometry(), P = g.attributes.position, F = new Float32Array(P.count * 4), C = PUFFER.ball, V = new THREE.Vector3();
   for (let i = 0; i < P.count; i++) { V.set(P.getX(i) - C[0], P.getY(i) - C[1], (P.getZ(i) - C[2]) * 0.85); const d = V.length() || 1, k = PUFFER.puff / d, spine = i >= spineFrom * 3 && (i - spineFrom * 3) % 3 === 2 ? 1.4 : 1; // a spine's point stands out of the ball
     F[i * 4] = (V.x * k * spine - V.x); F[i * 4 + 1] = (V.y * k * spine - V.y); F[i * 4 + 2] = (V.z * k * spine - V.z) / 0.85 * 0.6; }
@@ -1112,9 +1118,9 @@ export function puffer(pal) {
 // a fin: 'dorsal' and 'anal' stand from a root along -z (anal turned under by puffer.js), 'pectoral' fans out to +x, 'tail' fans back
 export function pufferFin(pal, kind) {
   const m = mesher(), { fin, back } = pal, edge = tint(fin, '#ffffff', 0.45), root = [], tip = [];
-  if (kind === 'dorsal' || kind === 'anal') for (let i = 0; i <= 4; i++) { root.push([0, 0, -0.006 * i]); tip.push([0, 0.032 - 0.004 * i, -0.012 - 0.008 * i]); }
-  else if (kind === 'pectoral') for (let i = 0; i <= 4; i++) { const a = -0.2 - i * 0.4; root.push([0, 0.008 - 0.004 * i, 0]); tip.push([Math.cos(a) * 0.03, 0.012 - 0.008 * i, Math.sin(a) * 0.022]); }
-  else for (let i = 0; i <= 6; i++) { const a = -0.8 + (1.6 * i) / 6; root.push([0, a * 0.009, 0]); tip.push([0, Math.sin(a) * 0.034, -Math.cos(a) * 0.042 + (i % 2 ? 0.004 : 0)]); }
+  if (kind === 'dorsal' || kind === 'anal') for (let i = 0; i <= 7; i++) { root.push([0, 0, -0.0034 * i]); tip.push([0, 0.032 - 0.0023 * i, -0.012 - 0.0046 * i]); }
+  else if (kind === 'pectoral') for (let i = 0; i <= 7; i++) { const a = -0.2 - i * 0.23; root.push([0, 0.008 - 0.0023 * i, 0]); tip.push([Math.cos(a) * 0.03 * (i % 2 ? 0.94 : 1), 0.012 - 0.0046 * i, Math.sin(a) * 0.022]); }
+  else for (let i = 0; i <= 10; i++) { const a = -0.8 + (1.6 * i) / 10; root.push([0, a * 0.009, 0]); tip.push([0, Math.sin(a) * 0.034, -Math.cos(a) * 0.042 + (i % 2 ? 0.004 : 0)]); }
   for (let i = 0; i + 1 < root.length; i++) m.quad(root[i], root[i + 1], tip[i + 1], tip[i], [kind === 'tail' ? tint(fin, back, 0.3) : fin, fin, edge]);
   return m.geometry();
 }
@@ -1137,7 +1143,7 @@ export function sandCircle(pal) {
   // the skirt round the edge, which hides what lies under it on the stand
   const edge = Array.from({ length: 24 }, (_, i) => P(R + 0.55, (i / 24) * Math.PI * 2)), foot = edge.map(([x, , z]) => [x, -0.3, z]), before = m.triangles; m.skin([edge, foot], sandDark).cap(foot, [0, -1, 0], sandDark); for (let i = before; i < m.triangles; i++) C.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   // fragments of shell and coral, one on every other peak in the outer half, set there last
-  for (let i = 0; i < K; i += 2) { const a = ((i + 0.0) / K) * Math.PI * 2, r = 0.92 + 0.42 * ((i * 0.618) % 1), x = Math.cos(a) * r, z = Math.sin(a) * r, [h] = cut(r, a), s = 0.025 + 0.012 * ((i * 0.37) % 1), at = 0.86 + 0.12 * ((i * 0.53) % 1), col = i % 6 === 0 ? bitB : bitA;
+  for (let i = 0; i < K; i += 2) { const a = ((i + 0.0) / K) * Math.PI * 2, r = 0.92 + 0.42 * ((i * 0.618) % 1), x = Math.cos(a) * r, z = Math.sin(a) * r, [h] = cut(r, a), s = 0.045 + 0.02 * ((i * 0.37) % 1), at = 0.86 + 0.12 * ((i * 0.53) % 1), col = i % 6 === 0 ? bitB : bitA;
     const t0 = [x - s, 0.002, z - s * 0.4], t1 = [x + s * 0.8, 0.004, z - s * 0.6], t2 = [x + s * 0.2, 0.003, z + s], t3 = [x, s * 0.7, z], c = [h, h * 0.7, 0, at]; for (const [p0, p1, p2] of [[t0, t1, t3], [t1, t2, t3], [t2, t0, t3]]) { m.tri(p0, p1, p2, [col, col, tint(col, '#ffffff', 0.4)]); C.push(...c, ...c, ...c); } }
   const g = m.geometry(); g.setAttribute('cut', new THREE.Float32BufferAttribute(new Float32Array(C), 4)); return g;
 }

@@ -58,7 +58,7 @@ export function gardenEelRig(a, pal) {
   // on the stand in the library
   const stand = { time: 0 };
   function show(dt, state) {
-    stand.time += dt; const id = state.id, t = stand.time, X = -3 + ((t * 1.1) % 7.5); // what passes, in the wave, goes across at a little over a metre a second
+    stand.time += dt; const id = state.id, t = stand.time, X = -2.6 + ((t * 1.2) % 5.2); // what passes, in the wave, goes across at a little over a metre a second
     const want = id === 'heads' ? () => 0.06 : id === 'down' ? () => 0 : id === 'current' ? () => 1 : id === 'wave' ? (i, e) => (Math.hypot(e.x - X, e.z * 0.3) < 1.3 ? 0 : 1) : () => 1;
     update(dt, { time: t, want, flow: id === 'current' ? 1 : 0.25, pick: id === 'current' ? 0.25 : 1, yaw: 0.6 });
   }

@@ -33,7 +33,7 @@ const vis = (sel) => ev((s) => { const el = document.querySelector(s); return !!
 // ---- opening it from the pause menu
 await page.keyboard.press('KeyP'); await page.waitForTimeout(200); await page.click('#btn-library'); await frame();
 let s = await ev(() => ({ open: window.__game.lib.isOpen, paused: window.__game.paused, list: [...document.querySelectorAll('#lib-list button')].map((b) => b.dataset.id), groups: [...document.querySelectorAll('#lib-list h3')].map((h) => h.textContent), name: document.getElementById('lib-name').textContent, hash: location.hash }));
-check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 68 && s.groups.join() === 'The oarfish,Swarms,Company,Hunters,Keepers of the rifts,The Sum,Not yet in the dive,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
+check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 74 && s.groups.join() === 'The oarfish,Swarms,Company,Hunters,Keepers of the rifts,The Sum,Not yet in the dive,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
 await snap('l-oarfish');
 
 // ---- one playground: the biter
@@ -151,8 +151,8 @@ s = await ev(async () => { const g = window.__game, L = g.lib, N = await import(
   // in the dive: every band, and not one of them; then brought by the testing tool, where they live beside the fish and are taken away again
   L.close(); g.setPaused(false); out.dive = 0; const count = () => { let n = 0; g.scene.traverse((x) => { if (x.name.startsWith('jelly-') || x.name === 'squid') n++; }); return n; };
   for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); g.sim(0.2); out.dive += count(); }
-  g.startRun(4242); g.run.safe = 1e9; g.sim(0.5); const buttons = [...document.querySelectorAll('#dev-bring button')], segs = g.run.segs; out.tool = { buttons: buttons.map((b) => b.textContent).join(), each: {} };
-  for (const b of buttons) { const id = b.dataset.bring; b.click(); const list = g.pets[id].list, from = list.map((x) => x.pos.clone()), e = out.tool.each[id] = { n: list.length, here: count(), pressed: b.getAttribute('aria-pressed'), msg: document.getElementById('dev-msg').textContent };
+  g.startRun(4242); g.run.safe = 1e9; g.sim(0.5); const SANDP = (await import('/game/sandpets.js')).SAND_PETS, buttons = [...document.querySelectorAll('#dev-bring button')], segs = g.run.segs; out.tool = { buttons: buttons.map((b) => b.textContent).join(), each: {} };
+  for (const b of buttons.filter((x) => !SANDP[x.dataset.bring])) { /* (the sand flat's creatures are checked further down) */ const id = b.dataset.bring; b.click(); const list = g.pets[id].list, from = list.map((x) => x.pos.clone()), e = out.tool.each[id] = { n: list.length, here: count(), pressed: b.getAttribute('aria-pressed'), msg: document.getElementById('dev-msg').textContent };
     let near = 0, low = 9, beat = 0, path = 0; const at = list[0].pos.clone(); for (let i = 0; i < 40; i++) { g.sim(0.5); path += list[0].pos.distanceTo(at); at.copy(list[0].pos); for (const x of list) { near = Math.max(near, Math.hypot(x.pos.x - g.rig.pos.x, x.pos.z - g.rig.pos.z)); low = Math.min(low, x.pos.y - g.world.height(x.pos.x, x.pos.z)); if (x.a.rig.pose.thrust > 0.3) beat++; } }
     e.went = Math.min(...list.map((x, i) => x.pos.distanceTo(from[i]))); e.near = near; e.low = low; e.beat = beat; e.path = path; b.click(); e.gone = count() === 0 && !g.pets[id] && b.getAttribute('aria-pressed') === 'false'; }
   // left far behind, it is there again beside the fish
@@ -172,9 +172,46 @@ s = await ev(async () => { const g = window.__game, L = g.lib, N = await import(
     JSON.stringify({ moon: m.rest, nettle: { pulse: n.pulse, fish: n.fish, turn: n.turn }, helmet: { drift: h.drift, pulse: h.pulse, lit: h.lit, reach: h.reach, dark: h.dark }, box: { pulse: b.pulse, turn: b.turn, fish: b.fish } }, (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)));
   const e = t.each;
   check('no band has a jellyfish. The pause menu’s testing tools bring each creature that is not in the dive, and take it away again: six moon jellies, one of each other; brought, they beat, move by their beating, keep off the bed and near the fish, and do it no harm',
-    J.dive === 0 && t.buttons === 'Squid,Moon jelly,Sea nettle,Helmet jelly,Box jelly' && e.squid.n === 1 && e.moonjelly.n === 6 && e.nettle.n === 1 && e.helmetjelly.n === 1 && e.boxjelly.n === 1
+    J.dive === 0 && t.buttons.startsWith('Squid,Moon jelly,Sea nettle,Helmet jelly,Box jelly') && e.squid.n === 1 && e.moonjelly.n === 6 && e.nettle.n === 1 && e.helmetjelly.n === 1 && e.boxjelly.n === 1
     && Object.entries(e).every(([id, x]) => x.here === x.n && x.pressed === 'true' && x.gone && x.near < 30 && /only to look at/.test(x.msg) && (id === 'squid' || (x.went > 0.25 && x.low > 1 && x.beat > 3)))
     && /6 moon jellies/.test(e.moonjelly.msg) && e.boxjelly.path > 3 * e.helmetjelly.path && t.back < 12 && t.segs && t.squid, JSON.stringify({ dive: J.dive, tool: t }, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v))); }
+// ---- the sand flat's batch: models to look at, like the squid. Each is read off its own rig, run through its states as the stand runs them
+s = await ev(async () => { const g = window.__game, L = g.lib, N = await import('/game/npc.js'), P = await import('/game/sandpets.js'), M = await import('/game/music.js'), out = {};
+  const IDS = ['hermit', 'trumpet', 'burrow', 'gardeneel', 'puffer', 'sandcircle'];
+  g.setPaused(true); if (!L.isOpen) g.openLibrary('hermit');
+  for (const id of IDS) { L.pick(id); L.frame(0.3); const btn = document.querySelector(`#lib-list [data-id="${id}"]`); let head = btn.previousElementSibling; while (head && head.tagName !== 'H3') head = head.previousElementSibling;
+    out[id] = { group: head?.textContent, where: document.getElementById('lib-where').textContent, tris: parseInt(document.getElementById('lib-tris').textContent, 10), states: N.NPC[id].states.length, bands: N.NPC[id].bands.length, cast: !!M.CAST[id] }; }
+  const run = (a, id, st, secs, each) => { const S = N.NPC[id].states.find((x) => x.id === st); for (let i = 0; i < Math.round(secs * 30); i++) { a.rig.show(1 / 30, S, S.speed || 0); each?.(); } };
+  { const a = N.make('hermit'), R = a.rig, o = out.hermit; let steps = R.walker.body.steps; run(a, 'hermit', 'walk', 4); o.steps = R.walker.body.steps - steps; // it walks on its own legs
+    run(a, 'hermit', 'in', 2); o.in = R.pose.in; o.legsHidden = R.legs.every((l) => !l.upper.visible); run(a, 'hermit', 'walk', 3); o.out = R.pose.in;
+    const kinds = new Set(); let naked = 0; run(a, 'hermit', 'change', 19, () => { kinds.add(R.worn.kind); if (R.tail.visible) naked++; }); o.kinds = kinds.size; o.naked = naked; // out of its shell and into others, its soft half showing between
+    let tris = 0; for (const k of ['snail', 'spire', 'fan', 'coil', 'ring', 'horn', 'cap', 'spine', 'lamp', 'tusk', 'pearl']) { R.wear(k); run(a, 'hermit', 'walk', 0.1); tris = Math.max(tris, R.triangles); } o.most = tris; a.dispose(); }
+  { const a = N.make('trumpet'), R = a.rig, o = out.trumpet; run(a, 'trumpet', 'hang', 2); o.hang = a.object.rotation.x; run(a, 'trumpet', 'shadow', 6); let curve = 0, gape = 0, spines = 0; run(a, 'trumpet', 'shadow', 8, () => { curve = Math.max(curve, Math.abs(R.pose.curve)); });
+    run(a, 'trumpet', 'strike', 6, () => { gape = Math.max(gape, R.pose.gape); spines = Math.max(spines, R.pose.spines); }); Object.assign(o, { curve, gape, spines, pieces: R.spines.length + R.fins.length }); a.dispose(); }
+  { const a = N.make('burrow'), R = a.rig, o = out.burrow; let low = 9, pitch = 0, far = 0, touch = 9; run(a, 'burrow', 'gone', 7, () => { if (R.goby.position.y < low) { low = R.goby.position.y; pitch = R.goby.rotation.x; } });
+    run(a, 'burrow', 'work', 6, () => { far = Math.max(far, Math.hypot(R.shrimp.position.x, R.shrimp.position.z)); const f = R.feelers.find((x) => x.long > 0.1 && x.side > 0).st, tip = f.local[f.n].clone().applyMatrix4(R.shrimp.matrix); touch = Math.min(touch, tip.distanceTo(R.contact)); });
+    let flick = 0; run(a, 'burrow', 'flick', 2, () => { flick = Math.max(flick, R.pose.flick); }); let cock = 0; run(a, 'burrow', 'snap', 2.4, () => { cock = Math.max(cock, R.pose.cock); }); Object.assign(o, { low, pitch, far, touch, flick, cock }); a.dispose(); }
+  { const a = N.make('gardeneel'), R = a.rig, o = out.gardeneel, mean = () => R.eels.reduce((t, e) => t + e.out, 0) / R.eels.length; run(a, 'gardeneel', 'feed', 8); o.feed = mean(); run(a, 'gardeneel', 'down', 2); o.down = Math.max(...R.eels.map((e) => e.out));
+    let lo = 9, hi = 0; run(a, 'gardeneel', 'feed', 8); run(a, 'gardeneel', 'wave', 6, () => { const v = R.eels.map((e) => e.out); lo = Math.min(lo, Math.min(...v)); hi = Math.max(hi, Math.max(...v)); }); Object.assign(o, { lo, hi, one: R.one, n: R.eels.length, instanced: R.mesh.isInstancedMesh }); a.dispose(); }
+  { const a = N.make('puffer'), o = out.puffer; run(a, 'puffer', 'swim', 1); o.flat = a.rig.pose.puff; run(a, 'puffer', 'puffed', 3); o.puff = a.rig.pose.puff; a.dispose(); }
+  // and in the dive: no band has any of them; the testing tool brings each, beside the fish, and takes it away
+  L.close(); g.setPaused(false); const names = ['hermit', 'trumpet', 'burrow', 'gardeneels', 'puffer', 'sandcircle'], count = () => { let n = 0; g.scene.traverse((x) => { if (names.includes(x.name)) n++; }); return n; };
+  out.dive = 0; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); g.sim(0.2); out.dive += count(); }
+  g.startRun(4242); g.run.safe = 1e9; g.sim(0.5); out.tool = {};
+  for (const id of IDS) { const b = document.querySelector(`#dev-bring [data-bring="${id}"]`); if (!b) { out.tool[id] = null; continue; } b.click(); const pet = g.pets[id], e = out.tool[id] = { here: count(), msg: document.getElementById('dev-msg').textContent, pressed: b.getAttribute('aria-pressed'), n: pet?.list.length };
+    g.sim(4); e.near = Math.hypot(pet.centre.x - g.rig.pos.x, pet.centre.z - g.rig.pos.z); b.click(); e.gone = count() === 0 && !g.pets[id] && b.getAttribute('aria-pressed') === 'false'; }
+  return out; });
+{ const S = s, h = S.hermit, t = S.trumpet, b = S.burrow, e = S.gardeneel, f = S.puffer, T = S.tool, all = ['hermit', 'trumpet', 'burrow', 'gardeneel', 'puffer', 'sandcircle'];
+  check('the sand flat’s batch is in the library under Not yet in the dive, in no band and with no instrument: a hermit crab, a trumpetfish, a goby with its pistol shrimp, garden eels, a white-spotted puffer and its sand circle, each with its poses',
+    all.every((id) => S[id].group === 'Not yet in the dive' && /In no band yet/.test(S[id].where) && S[id].bands === 0 && !S[id].cast && S[id].states >= 5)
+    && h.tris > 800 && h.tris < 2000 && t.tris > 400 && t.tris < 1500 && b.tris > 800 && b.tris < 2000 && f.tris > 300 && f.tris < 1200 && e.one < 250, JSON.stringify(Object.fromEntries(all.map((id) => [id, { tris: S[id].tris, states: S[id].states }]))));
+  check('each has the parts that move by themselves: the hermit crab walks on its legs, draws right in, and climbs out of its shell into others, its soft half showing; the trumpetfish hangs head down, bends along a body, and strikes with its mouth open and spines up; the goby goes down the hole head first and flicks, while the shrimp works out of the hole with a feeler on it and cocks its claw; the eels rise, go down, and sink and rise as something passes; the puffer blows up',
+    h.steps > 4 && h.in > 0.95 && h.legsHidden && h.out < 0.3 && h.kinds >= 2 && h.naked > 10 && h.most < 2000
+    && t.hang > 1 && t.curve > 0.1 && t.gape > 0.8 && t.spines > 0.9 && t.pieces === 14
+    && b.low < -0.2 && b.pitch > 1 && b.far > 0.15 && b.touch < 0.12 && b.flick > 0.8 && b.cock > 0.9
+    && e.feed > 0.5 && e.down < 0.05 && e.lo < 0.1 && e.hi > 0.5 && e.instanced && e.n === 20 && f.flat < 0.05 && f.puff > 0.9, JSON.stringify({ h, t, b, e, f }, (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)));
+  check('no band has any of them; the pause menu’s testing tool brings each into the water beside the fish (four hermit crabs in a line, three circles) and takes it away again',
+    S.dive === 0 && all.every((id) => T[id] && T[id].here >= 1 && T[id].pressed === 'true' && T[id].gone && T[id].near < 15 && /only to look at/.test(T[id].msg)) && T.hermit.n === 4 && T.sandcircle.n === 3, JSON.stringify({ dive: S.dive, tool: T }, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v))); }
 console.log(failures ? `${failures} check(s) failed` : 'all library checks passed');
 await browser.close(); server.close();
 process.exit(failures ? 1 : 0);
