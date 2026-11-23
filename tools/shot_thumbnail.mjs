@@ -41,7 +41,7 @@ const at = await page.evaluate(async (o) => {
   window.__hold = true;
   const g = window.__game, none = { dir: null, amount: 1, vertical: 0, sprint: false };
   g.startRun(4242); g.run.segs = o.segs; g.buildFish(o.segs); g.enterFloor(o.band, false); g.run.safe = 1e9; g.sim(3.8, none);
-  const w = g.world, x = o.x ?? 72, z = o.z ?? 72;
+  const w = g.world, x = o.x ?? w.spawn.x, z = o.z ?? w.spawn.z;
   g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + o.up, z), o.yaw);
   // swim a slow S so the body lies in a curve, as on the plate
   let yaw = o.yaw;

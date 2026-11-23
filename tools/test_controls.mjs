@@ -40,6 +40,7 @@ await ev(() => {
   const g = window.__game;
   window.T = {
     put(x, y, z, yaw = 0) { g.rig.reset(g.rig.pos.clone().set(x, y, z), yaw); g.snap(); },
+    start(lift, yaw = 0) { const s = g.world.spawn; this.put(s.x, g.world.height(s.x, s.z) + lift, s.z, yaw); }, // at the start, which is the middle of the band however wide the band is, `lift` over the bed
     away() { const c = g.camera.position, f = g.rig.pos; const dx = f.x - c.x, dz = f.z - c.z, d = Math.hypot(dx, dz); return { x: dx / d, z: dz / d }; }, // from the camera to the fish, flat
     moved(seconds) { const a = g.rig.pos.clone(); g.sim(seconds); const b = g.rig.pos; const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1; return { x: dx / d, z: dz / d, d, dy: b.y - a.y }; },
   };
@@ -52,7 +53,7 @@ await ev(() => window.__game.sim(0.5)); await snap('c-point');
 
 // ---- the mouse on the plate: the left button turns the view, the right one swims to the pointer, both swim where the view points
 { const G = (fn, a) => ev(fn, a), here = () => G(() => { const g = window.__game; g.cam.ease = null; return { yaw: g.cam.yaw, pitch: g.cam.pitch, x: g.rig.pos.x, y: g.rig.pos.y, z: g.rig.pos.z }; });
-  const reset = () => G(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 4, 72, 0.62 + Math.PI); g.cam.ease = null; g.cam.yaw = 0.62; g.cam.pitch = 0.56; g.run.safe = 1e9; g.sim(0.3); }); // the fish facing away from the viewer, as the view has it
+  const reset = () => G(() => { const g = window.__game; window.T.start(4, 0.62 + Math.PI); g.cam.ease = null; g.cam.yaw = 0.62; g.cam.pitch = 0.56; g.run.safe = 1e9; g.sim(0.3); }); // the fish facing away from the viewer, as the view has it
   const sim = (t) => G((t) => window.__game.sim(t), t), turn = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   // left: drag, and the view turns; the fish stays where it is
   await reset(); await page.mouse.move(700, 420); let a = await here(); await page.mouse.down({ button: 'left' }); await page.mouse.move(800, 470, { steps: 10 }); await sim(0.8); let b = await here();
@@ -94,11 +95,11 @@ await page.keyboard.up('KeyD');
 check('D swims to the right of the view', s.right > 0.6, JSON.stringify(s));
 // the adventure camera also aims the fish up and down: W goes where the view points
 await page.keyboard.down('KeyW');
-s = await ev(() => { const g = window.__game, T = window.T; const go = (pitch) => { T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = pitch; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); return g.rig.pos.y - y0; };
+s = await ev(() => { const g = window.__game, T = window.T; const go = (pitch) => { T.start(4); g.cam.ease = null; g.cam.pitch = pitch; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); return g.rig.pos.y - y0; };
   const level = go(0.34), nearly = go(0.42), up = go(-0.2), down = go(0.95); g.cam.pitch = 0.34; return { level, nearly, up, down }; });
 await page.keyboard.up('KeyW');
 await page.keyboard.down('KeyS');
-s.back = await ev(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = 0.95; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = 0.34; return g.rig.pos.y - y0; });
+s.back = await ev(() => { const g = window.__game; window.T.start(4); g.cam.ease = null; g.cam.pitch = 0.95; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = 0.34; return g.rig.pos.y - y0; });
 await page.keyboard.up('KeyS');
 check('in the adventure camera W swims where the view points: up when it looks up, down when it looks down, level in between, and S the other way', Math.abs(s.level) < 0.1 && Math.abs(s.nearly) < 0.1 && s.up > 0.4 && s.down < -0.4 && s.back > 0.4, JSON.stringify(s));
 
@@ -169,7 +170,7 @@ await unlock(); // P took the mouse back on resuming; a captured mouse cannot re
 await page.keyboard.press('KeyV');
 check('V goes back to point-and-swim', (await ev(() => window.__game.feel.mode)) === 'point');
 await page.keyboard.down('KeyW');
-s = await ev(() => { const g = window.__game, was = g.cam.pitch, ease = g.cam.ease; window.T.put(72, g.world.height(72, 72) + 4, 72, 0); g.cam.ease = null; g.cam.pitch = 1.2; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = was; g.cam.ease = ease; return g.rig.pos.y - y0; });
+s = await ev(() => { const g = window.__game, was = g.cam.pitch, ease = g.cam.ease; window.T.start(4); g.cam.ease = null; g.cam.pitch = 1.2; g.sim(0.2); const y0 = g.rig.pos.y; g.sim(1.2); g.cam.pitch = was; g.cam.ease = ease; return g.rig.pos.y - y0; });
 await page.keyboard.up('KeyW');
 check('...where the view looks down from above and W stays level', Math.abs(s) < 0.1, String(s));
 await page.click('#btn-pause'); await page.waitForTimeout(450);
@@ -230,7 +231,7 @@ s = await ev(() => { const g = window.__game, pad = window.fakePad; g.cam.ease =
   g.cam.yaw += 2; window.tap(11); g.sim(1.5); const off = Math.atan2(Math.sin(g.cam.yaw - g.rig.yaw - Math.PI), Math.cos(g.cam.yaw - g.rig.yaw - Math.PI));
   return { dyaw, dpitch, zoom, off, p0, mode: g.feel.mode }; });
 check('the right stick turns the view, the D-pad zooms, R3 brings the view behind', Math.abs(s.dyaw + 1.3) < 0.15 && s.dpitch < -0.15 && s.zoom < 0.7 && Math.abs(s.off) < 0.15, JSON.stringify(s));
-s = await ev(() => { const g = window.__game; window.T.put(72, g.world.height(72, 72) + 3, 72, 0); g.sim(0.3); const y0 = g.rig.pos.y; window.B(5, 1); g.sim(1); window.B(5, 0); const up = g.rig.pos.y - y0; const y1 = g.rig.pos.y; window.B(4, 1); g.sim(1); window.B(4, 0); return { up, down: g.rig.pos.y - y1 }; });
+s = await ev(() => { const g = window.__game; window.T.start(3); g.sim(0.3); const y0 = g.rig.pos.y; window.B(5, 1); g.sim(1); window.B(5, 0); const up = g.rig.pos.y - y0; const y1 = g.rig.pos.y; window.B(4, 1); g.sim(1); window.B(4, 0); return { up, down: g.rig.pos.y - y1 }; });
 check('R1 rises and L1 dives', s.up > 0.4 && s.down < -0.3, JSON.stringify(s));
 // L2 wraps the nearest swarm, choosing its own side
 s = await ev(() => { const g = window.__game, T = window.T; g.sim(0.05); const out = [];

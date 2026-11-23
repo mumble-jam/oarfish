@@ -43,6 +43,8 @@ await page.evaluate(() => {
   window.T = {
     none,
     put(x, y, z, yaw = 0) { g.rig.reset(g.rig.pos.clone().set(x, y, z), yaw); g.snap(); },
+    // put down `dx`, `dz` metres from the start and `lift` over the bed there. The start is the middle of the band, and a band says how wide it is (world.size), so no check holds a bare 72 or 144
+    from(dx, dz, lift, yaw = 0) { const s = g.world.spawn, x = s.x + dx, z = s.z + dz; this.put(x, g.world.height(x, z) + lift, z, yaw); },
     // park the fish so that a coil to the left is centred on (cx, cz)
     aroundPoint(cx, y, cz, yaw = 0) { const r = (g.rig.length + 0.8) / (Math.PI * 2); this.put(cx - Math.cos(yaw) * r, y, cz + Math.sin(yaw) * r, yaw); },
     coil(seconds, tight = false) { g.sim(seconds, { ...none(), coil: 1, tight }); },
@@ -111,7 +113,7 @@ s = await ev(() => { const g = window.__game, T = window.T; T.idle(9); g.run.saf
 check('a biter inside a closed loop is caught', s.found && s.alive === false && s.gained >= 3, JSON.stringify(s));
 
 // 6. hooks
-s = await ev(() => { const g = window.__game, T = window.T; g.run.safe = 0; const h = g.foes.hooks[0]; const y = g.world.height(100, 40) + 3.2; T.put(100, y, 40, 0); T.idle(0.5); g.run.safe = 0;
+s = await ev(() => { const g = window.__game, T = window.T; g.run.safe = 0; const h = g.foes.hooks[0]; T.from(28, -32, 3.2); T.idle(0.5); g.run.safe = 0;
   const J = g.rig.joints[5]; const t = g.world.time.value; h.x = J.x - Math.sin(t * 0.23 + h.ph * 2) * 1.4; h.z = J.z - Math.cos(t * 0.19 + h.ph) * 1.4; h.y0 = J.y - Math.sin(t * 0.55 + h.ph) * 1.3; h.state = 'idle'; h.lift = 0; const before = g.run.segs; T.idle(0.3);
   return { before, after: g.run.segs, hook: h.state }; });
 check('a hook that touches the body takes two segments and reels in', s.after === s.before - 2 && s.hook === 'reel', JSON.stringify(s));
@@ -152,7 +154,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 14; g.b
   return { emptyAt, fast: +fast.toFixed(2), hunted, held, back: +(g.run.time - t1).toFixed(2), stamina: +g.run.stamina.toFixed(2), biter: b.state }; });
 check('hunted, a sprint empties the bar in about five seconds, and the fish swims at the ordinary pace until some of it is back', s.hunted && s.emptyAt > 4.6 && s.emptyAt < 5.6 && s.fast > 6 && s.held.winded && s.held.speed < 4.3 && /on/.test(s.held.ring) && /low/.test(s.held.ring) && s.back > 1.3 && s.back < 2.1 && s.stamina >= 0.3, JSON.stringify(s));
 await ev(() => { const g = window.__game; g.cam.zoom = 0.7; g.snap(); }); await snap(page, 'g-stamina'); await ev(() => { window.__game.cam.zoom = 1; });
-s = await ev(() => { const g = window.__game, T = window.T; g.startRun(11); T.idle(0.5); T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3);
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(11); T.idle(0.5); T.from(0, -22, 3); T.idle(0.3);
   const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }, tap = { ...fwd, dashNow: true }; g.sim(1.5, fwd);
   const p0 = g.rig.pos.z; g.sim(1 / 60, tap); const v0 = g.rig.speed; g.sim(0.5, fwd); const dashed = g.rig.pos.z - p0;
   g.sim(1.5, fwd); const p1 = g.rig.pos.z; g.sim(0.5 + 1 / 60, fwd); const swum = g.rig.pos.z - p1;
@@ -160,7 +162,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(11); T.id
   return { v0, extra: +(dashed - swum).toFixed(2), early, late: +late.toFixed(2), stamina: g.run.stamina }; });
 check('a dash is an instant lunge a few metres long, with a short cooldown, and free when nothing hunts', s.v0 >= 12.9 && s.extra > 2 && s.extra < 5 && s.early === 0 && s.late > 0 && s.stamina === 1, JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 14; g.buildFish(14); g.enterFloor(1, false); T.idle(1.6); g.run.safe = 0; for (const h of g.foes.hooks) h.pos.y += 500;
-  T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); const b = g.foes.biters[0]; b.pos.copy(g.rig.snout); b.pos.z += 2.2; b.state = 'roam'; b.cool = 9; b.t = 9;
+  T.from(0, -22, 3); T.idle(0.3); const b = g.foes.biters[0]; b.pos.copy(g.rig.snout); b.pos.z += 2.2; b.state = 'roam'; b.cool = 9; b.t = 9;
   const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; const caught = g.run.caught; g.run.hunted = 5; g.run.stamina = 0.5; g.run.dashCool = 0;
   g.sim(1 / 60, { ...fwd, dashNow: true }); const paid = +g.run.stamina.toFixed(2); g.sim(0.25, fwd); const after = { stamina: +g.run.stamina.toFixed(2), cool: g.run.dashCool, alive: b.alive }; g.sim(0.8, fwd);
   // the front of the body cannot be bitten mid-dash; the tail can
@@ -175,7 +177,7 @@ check('a dash into an angler stuns it for a few seconds and costs nothing', s.st
 // 8c. the bait: it shows what it pulls, anglers take it, and hunters at it are worth breaking
 s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 16; g.buildFish(16); g.enterFloor(2, false); T.idle(1.6); for (const h of g.foes.hooks) h.pos.y += 500;
   const bs = g.foes.biters.slice(0, 3); for (const o of g.foes.biters) if (!bs.includes(o)) { o.alive = false; o.mesh.visible = false; } for (const o of g.foes.anglers) { o.alive = false; o.group.visible = false; }
-  T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; const J = g.rig.joints, tail = J[J.length - 1].clone();
+  T.from(0, -22, 3); T.idle(0.3); g.run.safe = 0; const J = g.rig.joints, tail = J[J.length - 1].clone();
   bs.forEach((b, i) => { b.pos.copy(tail); b.pos.x += 7 + i; b.cool = 9; b.state = 'roam'; b.t = 9; });
   const before = g.run.segs, caught = g.run.caught; g.shed(); const cost = before - g.run.segs; const swim = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; let threads = 0; for (let i = 0; i < 26; i++) { g.sim(0.1, swim); threads = Math.max(threads, g.foes.state.lured); }
   const bait = g.foes.pieces.find((p) => p.kind === 'decoy'), lured = bs.filter((b) => b.lured === bait).length, marks = bs.filter((b) => b.mark.visible).length, life = +bait.life.toFixed(1);
@@ -183,7 +185,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 16; g.b
   return { cost, lured, marks, threads, life, dead: bs.filter((b) => !b.alive).length, gained: g.run.caught - caught }; });
 check('a shed tail calls the biters to it, shows a thread to each, and a dash through them breaks them for double', s.cost === 3 && s.lured === 3 && s.marks === 3 && s.threads === 3 && s.life > 3 && s.dead >= 2 && s.gained === s.dead * 2, JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 16; g.buildFish(16); g.enterFloor(2, false); T.idle(1.6); for (const h of g.foes.hooks) h.pos.y += 500; for (const o of g.foes.biters) { o.alive = false; o.mesh.visible = false; }
-  const a = g.foes.anglers[0]; for (const o of g.foes.anglers) if (o !== a) o.alive = false; T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; const J = g.rig.joints, tail = J[J.length - 1];
+  const a = g.foes.anglers[0]; for (const o of g.foes.anglers) if (o !== a) o.alive = false; T.from(0, -22, 3); T.idle(0.3); g.run.safe = 0; const J = g.rig.joints, tail = J[J.length - 1];
   a.home.copy(tail); a.home.x += 4.5; a.pos.copy(a.home); a.state = 'lurk'; const before = g.run.segs; g.shed(); const swim = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; const seen = []; let fed = 0;
   for (let i = 0; i < 40; i++) { g.sim(0.05, swim); if (seen[seen.length - 1] !== a.state) seen.push(a.state); const b = g.foes.pieces.find((p) => p.kind === 'decoy'); if (b) fed = Math.max(fed, b.fed); }
   return { seen, fed, lost: before - g.run.segs, danger: g.foes.state.flared }; });
@@ -191,7 +193,7 @@ check('an angler takes a bait within its reach and leaves the fish alone', s.see
 
 // 8d. shells: they lie about each band, ride on a segment, change what the fish can do, and go with a bitten or shed tail
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.idle(0.4); const f = g.field.items, it = f[0];
-  const lay = { n: f.length, kinds: new Set(f.map((x) => x.type)).size, firstNear: +Math.hypot(it.x - 72, it.z - 72).toFixed(1) };
+  const lay = { n: f.length, kinds: new Set(f.map((x) => x.type)).size, firstNear: +Math.hypot(it.x - g.world.spawn.x, it.z - g.world.spawn.z).toFixed(1) };
   T.put(it.x, it.y + 0.4, it.z, 0); T.idle(0.2);
   const took = { worn: g.run.shells.map((x) => `${x.type}@${x.seg}`), taken: it.taken, dots: document.querySelectorAll('#scale-shells i').length, onBone: g.rig.spine[8].children.some((c) => c.isMesh), hint: document.getElementById('hint').textContent.slice(0, 40), list: document.getElementById('shell-list').textContent.length };
   const more = [g.giveShell('fan'), g.giveShell('pearl'), g.giveShell('ring')], segsOf = g.run.shells.map((x) => x.seg).sort((a, b) => a - b).join();
@@ -203,7 +205,7 @@ await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.idle(0
 check('every third segment carries one shell, worn shells change the rules, and a bite takes the shell with the segment', JSON.stringify(s.more) === '[true,true,false]' && s.segsOf === '3,6,9' && s.m.stamina === 1.5 && s.m.food === 0.8 && s.grew === 1 && s.segs === 8 && s.lost === 1 && s.left === '3,6', JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); g.run.segs = 12; g.buildFish(12); g.enterFloor(1, false); T.idle(1.6); for (const h of g.foes.hooks) h.pos.y += 500;
   const bs = g.foes.biters.slice(0, 3); for (const o of g.foes.biters) if (!bs.includes(o)) { o.alive = false; o.mesh.visible = false; }
-  T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; g.giveShell('spire'); const at = g.run.shells[0].seg;
+  T.from(0, -22, 3); T.idle(0.3); g.run.safe = 0; g.giveShell('spire'); const at = g.run.shells[0].seg;
   const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; g.sim(1 / 60, { ...fwd, dashNow: true }); const dashT = +g.rig.dashT.toFixed(2); g.sim(1, fwd);
   const tail = g.rig.joints[g.rig.joints.length - 1].clone(); bs.forEach((b, i) => { b.pos.copy(tail); b.pos.x += 6 + i * 0.6; b.cool = 9; b.state = 'roam'; b.t = 9; });
   const caught = g.run.caught; g.shed(); const bait = g.foes.pieces.find((p) => p.kind === 'decoy'), fx = bait.fx, worn = g.run.shells.length; for (let i = 0; i < 30; i++) g.sim(0.1, fwd);
@@ -314,7 +316,7 @@ await ev(() => { const g = window.__game, T = window.T; g.startRun(31); g.enterF
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(41); g.run.segs = 14; g.buildFish(14); g.enterFloor(2, false); for (const it of g.field.items) g.field.take(it); T.idle(1.6);
   for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const a of g.foes.anglers) { a.alive = false; a.group.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500; g.guard.debug.fall();
   const counts = { mines: g.foes.mines.length, leeches: g.foes.leeches.length }; for (const l of g.foes.leeches) l.cool = 99;
-  T.put(72, g.world.height(72, 50) + 3, 50, 0); T.idle(0.3); g.run.safe = 0; const m = g.foes.mines[0], m2 = g.foes.mines[1], J = g.rig.joints;
+  T.from(0, -22, 3); T.idle(0.3); g.run.safe = 0; const m = g.foes.mines[0], m2 = g.foes.mines[1], J = g.rig.joints;
   const segs = g.run.segs; g.run.safe = 1; m.home.copy(J[6]); T.idle(0.02); m.home.add(J[6]).sub(m.pos); g.run.safe = 0; T.idle(0.2); const brushed = { lost: segs - g.run.segs, alive: m.alive }; // a drifter wanders a metre and more round its home: put the drifter itself on the body, not its home
   T.idle(1.6); g.run.safe = 0; const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } }; m2.home.copy(g.rig.snout); m2.home.z += 2.4; m2.ph = 0; T.idle(0.05); m2.home.z += g.rig.snout.z + 2.4 - m2.pos.z; m2.home.x += g.rig.snout.x - m2.pos.x; m2.home.y += g.rig.snout.y - m2.pos.y;
   const segs2 = g.run.segs, caught = g.run.caught; g.sim(1 / 60, { ...fwd, dashNow: true }); g.sim(0.3, fwd); T.idle(0.9);
@@ -337,7 +339,7 @@ s = await ev(() => { const g = window.__game, T = window.T; const out = [];
 check('every band runs for a while with hunters, guard, shells and bait all live, without an error', s.length === 5, s.join(' '));
 
 // 9. the palace
-s = await ev(() => { const g = window.__game, T = window.T; g.enterFloor(4, false); T.idle(1); const w = g.world.goal; const d = Math.hypot(w.x - 72, w.z - 72), ux = (w.x - 72) / d, uz = (w.z - 72) / d; T.put(w.x - ux * 17, g.world.height(w.x - ux * 17, w.z - uz * 17) + 3, w.z - uz * 17, Math.atan2(ux, uz)); g.cam.pitch = 0.3; T.idle(0.5); return { kind: w.kind, state: g.run.state, anglers: g.foes.anglers.length }; });
+s = await ev(() => { const g = window.__game, T = window.T; g.enterFloor(4, false); T.idle(1); const w = g.world.goal, s0 = g.world.spawn; const d = Math.hypot(w.x - s0.x, w.z - s0.z), ux = (w.x - s0.x) / d, uz = (w.z - s0.z) / d; T.put(w.x - ux * 17, g.world.height(w.x - ux * 17, w.z - uz * 17) + 3, w.z - uz * 17, Math.atan2(ux, uz)); g.cam.pitch = 0.3; T.idle(0.5); return { kind: w.kind, state: g.run.state, anglers: g.foes.anglers.length }; });
 await snap(page, 'g-palace');
 s = await ev(() => { const g = window.__game, T = window.T; const w = g.world.goal; T.put(w.x, w.y, w.z, 0); T.idle(0.4); return { state: g.run.state, sum: !!g.sum, hall: !!g.world.hall }; });
 check('the palace gate no longer ends the dive: it leads into the hall of the Sum (see test_boss.mjs)', s.state === 'play' && s.sum && s.hall, JSON.stringify(s));
@@ -363,10 +365,10 @@ console.log('      story census:', JSON.stringify(s));
 check('each band is dressed and the hunters are seated', s[0].penned >= 4 && s[1].biterAtStall === true && s[1].hookOverFloor === true && s[2].anglerOnPlinth === true && s[3].biterAtStall === true, '');
 if (shots) {
   const look = async (name, floor, fn) => { await ev(([f, body]) => { const g = window.__game, T = window.T; g.startRun(3); g.enterFloor(f, false); T.idle(0.3); new Function('g', 'T', body)(g, T); T.idle(0.4); g.snap(); }, [floor, fn]); await snap(page, name); };
-  await look('s-gardens', 0, "const w = g.world; const a = Math.atan2(w.goal.x - 72, w.goal.z - 72) + 0.5; const x = 72 + Math.sin(a) * 26, z = 72 + Math.cos(a) * 26; T.put(x - 17, w.height(x - 17, z) + 5, z + 4, 1.4); g.cam.pitch = 0.5; g.cam.zoom = 1.9;");
-  await look('s-market', 1, "const w = g.world; const a = Math.atan2(w.goal.x - 72, w.goal.z - 72); const x = 72 + Math.sin(a) * 24, z = 72 + Math.cos(a) * 24; T.put(x, w.height(x, z) + 3.4, z, a); g.cam.pitch = 0.5; g.cam.zoom = 1.7; g.cam.yaw = a + 2.5;");
-  await look('s-temple', 2, "const w = g.world; const a = Math.atan2(w.goal.x - 72, w.goal.z - 72) + 1.25; const x = 72 + Math.sin(a) * 30, z = 72 + Math.cos(a) * 30; T.put(x - 13, w.height(x - 13, z) + 4, z, 1.57); g.cam.pitch = 0.45; g.cam.zoom = 1.7;");
-  await look('s-narrowing', 3, "const w = g.world; const a = Math.atan2(w.goal.x - 72, w.goal.z - 72); const x = 72 + Math.sin(a) * 24, z = 72 + Math.cos(a) * 24; T.put(x, w.height(x, z) + 3.4, z, a); g.cam.pitch = 0.5; g.cam.zoom = 1.8; g.cam.yaw = a + 2.6;");
+  await look('s-gardens', 0, "const w = g.world, s0 = w.spawn; const a = Math.atan2(w.goal.x - s0.x, w.goal.z - s0.z) + 0.5; const x = s0.x + Math.sin(a) * 26, z = s0.z + Math.cos(a) * 26; T.put(x - 17, w.height(x - 17, z) + 5, z + 4, 1.4); g.cam.pitch = 0.5; g.cam.zoom = 1.9;");
+  await look('s-market', 1, "const w = g.world, s0 = w.spawn; const a = Math.atan2(w.goal.x - s0.x, w.goal.z - s0.z); const x = s0.x + Math.sin(a) * 24, z = s0.z + Math.cos(a) * 24; T.put(x, w.height(x, z) + 3.4, z, a); g.cam.pitch = 0.5; g.cam.zoom = 1.7; g.cam.yaw = a + 2.5;");
+  await look('s-temple', 2, "const w = g.world, s0 = w.spawn; const a = Math.atan2(w.goal.x - s0.x, w.goal.z - s0.z) + 1.25; const x = s0.x + Math.sin(a) * 30, z = s0.z + Math.cos(a) * 30; T.put(x - 13, w.height(x - 13, z) + 4, z, 1.57); g.cam.pitch = 0.45; g.cam.zoom = 1.7;");
+  await look('s-narrowing', 3, "const w = g.world, s0 = w.spawn; const a = Math.atan2(w.goal.x - s0.x, w.goal.z - s0.z); const x = s0.x + Math.sin(a) * 24, z = s0.z + Math.cos(a) * 24; T.put(x, w.height(x, z) + 3.4, z, a); g.cam.pitch = 0.5; g.cam.zoom = 1.8; g.cam.yaw = a + 2.6;");
   await ev(() => { const g = window.__game; g.cam.pitch = 0.56; g.cam.zoom = 1; g.cam.yaw = 0.62; g.startRun(7); });
 }
 
@@ -690,7 +692,7 @@ check('four kinds of shell have to be won: until then none of them lies about in
     rows.every((r) => r.looked > 300 && r.n === 0) && lip.shelf < 0.001 && lip.drawn < 0.3 && lip.off < 2, JSON.stringify({ rows: rows.filter((r) => r.n).slice(0, 3), lip })); }
 
 // ---- the keepers do not get stuck in the stonework: dropped into every column near their ground, and between every two that stand close, they come home
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, none = { ...T.none(), amount: 0 }, W = (d) => d - 144 * Math.round(d / 144), far = (a, b) => Math.hypot(W(a.x - b.x), W(a.z - b.z));
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, none = { ...T.none(), amount: 0 }, W = (d) => g.world.wrap(d), far = (a, b) => Math.hypot(W(a.x - b.x), W(a.z - b.z)); // the shortest way round, in whichever band the check is standing
   for (const [band, back, round, lift, wait] of [[0, 24, 8.6, 0.9, 60], [1, 0, 11, 1.5, 30]]) { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false;
     const w = g.world, r = w.rift, G = g.guard, P = G.pos, home = { x: r.x - r.nx * back, z: r.z - r.nz * back }, o = { kind: G.kind };
     const inStone = () => { const q = P.clone(); if (band) w.pushOut(q, 0.5); else { q.y = w.height(q.x, q.z) + 0.6; w.steer(q, 0.3); } return Math.hypot(q.x - P.x, q.z - P.z) > 1e-4; }; // the crab walks: only what it cannot step over counts
@@ -713,7 +715,8 @@ check('the Keeper and the Shearer, put down in every column near their ground an
   s.keeper.tried > 4 && s.keeper.home === s.keeper.tried && s.keeper.inside === 0 && s.shearer.tried > 8 && s.shearer.home === s.shearer.tried && s.shearer.inside === 0 && s.shearer.worst < 20
   && s.shearer.charge.state === 'tired' && !s.shearer.charge.passed && s.shearer.charge.stone === 0 && s.shearer.charge.short > 1 && s.shearer.charge.short < 3, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
-s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, open = (a) => Math.min(...g.world.solids.map((c) => Math.hypot(c.x - a.x, c.z - a.z) - c.r)),
+    A = R.grown.anemone.reduce((a, b) => (open(b) > open(a) ? b : a)); // the anemone with the most room round it: they grow by the reefs, and one against a big rock has the fish turned aside before it is over it
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake
   const pull = (x, y, z, tall = 0.6) => Math.max(...R.wake.value.map((w) => { const dy = w.y - Math.min(Math.max(w.y, y), y + tall), d = Math.hypot(w.x - x, dy, w.z - z), k = Math.min(1, Math.max(0, (d - 0.7) / 1.9)); return w.w * (1 - k * k * (3 - 2 * k)); }));
   T.put(A.x + 30, A.y + 3, A.z); T.idle(0.3); const far = pull(A.x, A.y, A.z);
@@ -724,9 +727,10 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.
 check('an anemone shuts as the fish goes over, stays shut for its whole length and a moment more, and opens again', s.far === 0 && s.over > 0.7 && s.under > 0.5 && s.tail > 0.1 && s.gone === 0 && /anemone/.test(s.kinds) && /kelp/.test(s.kinds) && /seagrass/.test(s.kinds) && /clam/.test(s.kinds), JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f = R.pilots[0], h = (x, z) => g.world.height(x, z);
   const yaw = Math.atan2(g.world.goal.x - f.hx, g.world.goal.z - f.hz), dx = Math.sin(yaw), dz = Math.cos(yaw), x0 = f.hx - dx * 14 + dz * 9, z0 = f.hz - dz * 14 - dx * 9;
+  const vents = R.puzzles.filter((p) => p.kind === 'vent'); for (const p of vents) p.puff = 1e9; T.idle(2.2); // a vent within 45 m breathes silt of its own, which is not what is counted here: it holds its breath meanwhile
   T.put(x0, h(x0, z0) + 5, z0, yaw); T.idle(0.2); const p0 = R.puffed; g.sim(2.5, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); const high = R.puffed - p0, clearHigh = g.rig.pos.y - h(g.rig.pos.x, g.rig.pos.z);
   T.put(x0, h(x0, z0) + 1.5, z0, yaw); T.idle(0.1); const p1 = R.puffed; g.sim(2.5, { ...T.none(), dir: { x: dx, y: 0, z: dz }, vertical: -1 }); const low = R.puffed - p1, live = R.puffs, clearLow = g.rig.pos.y - h(g.rig.pos.x, g.rig.pos.z);
-  T.idle(4); return { high, low, live, after: R.puffs, clearHigh: +clearHigh.toFixed(2), clearLow: +clearLow.toFixed(2) }; });
+  T.idle(4); const after = R.puffs; for (const p of vents) p.puff = 0; return { high, low, live, after, clearHigh: +clearHigh.toFixed(2), clearLow: +clearLow.toFixed(2) }; });
 check('a fish held down against the bed raises silt behind it, one swimming free raises none, and the silt settles', s.high === 0 && s.low >= 8 && s.live >= 4 && s.after === 0 && s.clearHigh > 3 && s.clearLow < 1.8, JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f = R.pilots[0], h = (x, z) => g.world.height(x, z), near = () => Math.min(...g.rig.joints.map((j) => j.distanceTo(f.p)));
   const yaw = Math.atan2(g.world.goal.x - f.hx, g.world.goal.z - f.hz), dx = Math.sin(yaw), dz = Math.cos(yaw), food = g.world.schools.reduce((a, sc) => a + sc.left, 0), segs = g.run.segs;
@@ -737,7 +741,7 @@ s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, f
   return { n: R.pilots.length, waiting, riding, beside: +beside.toFixed(2), moved: +moved.toFixed(1), resting, left, stays, food: g.world.schools.reduce((a, sc) => a + sc.left, 0) === food, segs: g.run.segs === segs }; });
 check('a pilot fish waits on the way, falls in beside the body as it passes and stays by it; left far behind, it waits where it is', s.n === 5 && s.waiting && s.riding && s.beside < 1.6 && s.moved > 4 && s.resting && s.left && s.stays && s.food && s.segs, JSON.stringify(s));
 s = await ev(() => { const g = window.__game, T = window.T, R = g.world.react, h = (x, z) => g.world.height(x, z), r = g.world.rift;
-  const cs = R.chimes.reduce((a, c) => (Math.hypot(c.x - g.rig.pos.x, c.z - g.rig.pos.z) < Math.hypot(a.x - g.rig.pos.x, a.z - g.rig.pos.z) ? c : a)), long = cs.bars.reduce((a, b) => (b.len > a.len ? b : a));
+  const apart = (c) => Math.hypot(c.bars[1].x - c.bars[0].x, c.bars[1].z - c.bars[0].z), cs = R.chimes.reduce((a, c) => (apart(c) > apart(a) + 1e-6 ? c : a)), long = cs.bars.reduce((a, b) => (b.len > a.len ? b : a)); // the set whose bars hang widest apart (under a lintel): between two columns of a small ring they hang so close that a body through one brushes all of them
   const yaw = 2 * Math.atan2(cs.q.y, cs.q.w) + Math.PI / 2, dx = Math.sin(yaw), dz = Math.cos(yaw), y = long.y - long.len * 0.8;
   T.put(long.x - dx * 7, y, long.z - dz * 7, yaw); T.idle(0.3); const before = R.rings, x0 = g.rig.pos.x, z0 = g.rig.pos.z;
   let swung = 0; for (let i = 0; i < 40; i++) { g.sim(0.1, { ...T.none(), dir: { x: dx, y: 0, z: dz } }); swung = Math.max(swung, Math.hypot(long.ox, long.oz)); }
@@ -799,6 +803,42 @@ s = await ev(async () => { const g = window.__game, box = document.getElementByI
 check('the lighter picture is off until it is asked for, and is kept when it is (one pixel to a point, a shadow map of half the size); a dive nobody touches has the fish swim figures about where it was left, bitten by nothing and not blinking, until it is touched',
   s.first.box === false && s.first.on === false && s.first.map === 2048 && s.on.on === true && s.on.map === 1024 && s.on.ratio === 1 && s.on.kept === true && s.off.on === false && s.off.map === 2048 && s.off.kept === false
   && s.began && s.turned > 6 && s.far < 16 && s.bitten === false && s.blinking === false && s.lost === 0 && s.back === false && s.state === 'play', JSON.stringify(s));
+
+// The size of a band is its world's own (world.size, world.spawn, world.wrap), and the first band is wider than the others.
+s = await ev(() => { const g = window.__game, T = window.T, out = { sizes: [], mids: [], laps: [] }; g.startRun(4242);
+  for (let f = 0; f < 5; f++) { if (f) g.enterFloor(f, false); const w = g.world, c = w.spawn; out.sizes.push(w.size);
+    out.mids.push(c.x === w.size / 2 && c.z === w.size / 2 && Math.hypot(g.rig.pos.x - c.x, g.rig.pos.z - c.z) < 0.5 && w.wrap(w.size * 0.75) === -w.size * 0.25 && w.wrap(-w.size) === 0);
+    out.laps.push(Math.max(...[[3, 7], [50, 91], [120, 33]].map(([x, z]) => Math.abs(w.height(x + w.size, z - w.size) - w.height(x, z)))) < 1e-6 && Math.abs(w.height(3, 7) - w.height(3 + 144, 7)) > 1e-6 === (w.size !== 144)); }
+  // the first band, a whole lap away from where it was built: everything that is moved to the copy of the world nearest the fish has to come too, each by this world's size
+  g.startRun(4242); g.run.safe = 1e9; const w = g.world, c = w.spawn, r = w.rift, L = w.size, here = () => ({ sw: Math.hypot(w.schools[0].x - g.rig.pos.x, w.schools[0].z - g.rig.pos.z), shell: Math.hypot(g.field.items[0].group.position.x - g.rig.pos.x, g.field.items[0].group.position.z - g.rig.pos.z),
+    hook: Math.max(...g.foes.hooks.map((h) => Math.max(Math.abs(h.pos.x - g.rig.pos.x), Math.abs(h.pos.z - g.rig.pos.z)))), keeper: Math.hypot(g.guard.pos.x - g.rig.pos.x, g.guard.pos.z - g.rig.pos.z), shown: w.tally().shown, veil: g.guard.mesh.parent.children.find((o) => o.isMesh && o.material.blending === 2).position.x });
+  T.from(0, 0, 3); T.idle(0.4); const near = here(); T.from(L, -L, 3); T.idle(0.4); const far = here();
+  Object.assign(out, { goal: +Math.hypot(w.goal.x - c.x, w.goal.z - c.z).toFixed(1), keeperHome: +Math.hypot(r.x - r.nx * 24 - c.x, r.z - r.nz * 24 - c.z).toFixed(1), near: Object.fromEntries(Object.entries(near).map(([k, v]) => [k, +v.toFixed(1)])), far: Object.fromEntries(Object.entries(far).map(([k, v]) => [k, +v.toFixed(1)])) });
+  return out; });
+check('bands 2 to 5 are 144 m across and the first band 204, each world saying so itself; the first band\'s rift lies 100 m from the start; and a whole lap from where it was built, its swarms, shells, hooks, keeper, veil and stonework have all come round with it',
+  s.sizes.join() === '204,144,144,144,144' && s.mids.every(Boolean) && s.laps.every(Boolean) && s.goal === 100 && s.keeperHome === 76
+  && Math.abs(s.near.sw - s.far.sw) < 1.5 && s.near.sw < 22 && Math.abs(s.near.shell - s.far.shell) < 0.5 && s.far.shell < 19 && s.far.hook <= 102.1 && Math.abs(s.near.keeper - s.far.keeper) < 3 && s.far.keeper < 95 && s.near.shown > 2000 && Math.abs(s.near.shown - s.far.shown) < 6 && s.near.veil === 0 && s.far.veil === 204, JSON.stringify(s));
+
+// The first band at its new size: nothing stands outside the square or in the rift, it is as thickly grown as it was, and its food is no further from the nest.
+s = await ev(() => { const g = window.__game, out = [], NATURAL = /^(rock|kelp|table|tuft|pebble|star|urchin|clam|brain|seaFan|sponge|anemone)$/;
+  for (const seed of [4242, 3, 11]) { g.startRun(seed); g.sim(0.1); const w = g.world, c = w.spawn, r = w.rift, L = w.size, P = w.pieces(), wild = P.filter((p) => NATURAL.test(p.name));
+    const past = (x, z) => Math.max(-x, x - L, -z, z - L, 0), aside = (o) => Math.max(Math.abs(o.x - c.x), Math.abs(o.z - c.z));
+    const set = [...w.schools.map((sc) => ({ x: sc.hx, z: sc.hz })), ...w.react.puzzles, ...w.react.puzzles.map((p) => p.cache), ...w.react.fragments, w.react.mural, ...w.urns, ...g.field.items, ...g.foes.hooks].filter(Boolean); // what is set down one at a time
+    const q4 = [0, 0, 0, 0]; for (const p of wild) q4[(w.wrap(p.x - c.x) < 0 ? 0 : 1) + (w.wrap(p.z - c.z) < 0 ? 0 : 2)]++;
+    out.push({ seed, size: L, pieces: P.length, outside: [...P, ...w.solids, ...set].filter((o) => past(o.x, o.z) > 10).length, worst: +Math.max(...[...P, ...w.solids, ...set].map((o) => past(o.x, o.z))).toFixed(1), // a clump may lie across the seam, no further than a reef reaches
+      inRift: wild.filter((p) => r.in(p.x, p.z) > 1).length + set.filter((o) => r.in(o.x, o.z) > 0).length, // (pebbles may lie on the flat lip, which begins a metre inside the rift's line)
+      perKm2: Math.round(wild.length / (L * L / 1000)), least: +(Math.min(...q4) / wild.length).toFixed(2), swarms: w.schools.length, fish: w.schools.reduce((a, sc) => a + sc.n, 0),
+      foodOut: +Math.max(...w.schools.map((sc) => aside({ x: sc.hx, z: sc.hz }))).toFixed(1), hooksOut: +Math.max(...g.foes.hooks.map(aside)).toFixed(1), mural: !!w.react.mural, puzzles: w.react.puzzles.length, fragments: w.react.fragments.length, shells: g.field.items.length }); }
+  return out; });
+check('in the first band nothing stands outside the square or in the rift; it is as thickly grown as it was at 144 m (about 150 pieces of natural dressing to a thousand square metres, in every quarter); and its nine swarms and its hooks live no further from the start than they did',
+  s.every((o) => o.size === 204 && o.outside === 0 && o.inRift === 0 && o.perKm2 > 135 && o.perKm2 < 165 && o.least > 0.1 && o.swarms === 9 && o.fish === 182 && o.foodOut <= 72 && o.hooksOut <= 72 && o.mural && o.puzzles === 3 && o.fragments === 2 && o.shells === 3), JSON.stringify(s));
+
+// Every rift has its mural. These are worlds, in each band that has a rift, where the ground it is first looked for on is all taken and the search has to go wider; until it did, they had none.
+s = await ev(() => { const g = window.__game, out = [];
+  for (const [seed, band] of [[2, 0], [130, 0], [245, 0], [777, 1], [86, 1], [66, 2], [162, 2], [19, 3], [20, 3]]) { g.startRun(seed); if (band) g.enterFloor(band, false); const w = g.world, m = w.react.mural, r = w.rift;
+    out.push({ seed, band, mural: !!m, clear: !!m && r.in(m.x, m.z) < -2.6 && (band > 0 || Math.hypot(m.x - (r.x - r.nx * 24), m.z - (r.z - r.nz * 24)) > 14), back: m ? +(-((m.x - r.x) * r.nx + (m.z - r.z) * r.nz)).toFixed(1) : null }); }
+  g.startRun(4242); return out; });
+check('every rift has its mural, on the near side of it, out of the rift and off the Keeper\'s ground, in worlds where its usual ground is all taken', s.every((o) => o.mural && o.clear && o.back > 19 && o.back < 46), JSON.stringify(s));
 
 await page.close();
 
