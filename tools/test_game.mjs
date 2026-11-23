@@ -2,6 +2,7 @@
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright';
 import { audit } from './audit_fn.mjs';
+import { execFileSync } from 'node:child_process';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript' };
 const server = http.createServer((req, res) => {
@@ -640,7 +641,7 @@ check('every rift has a mural with three carvings, dark at first: the band\u2019
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 
 // ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign).length;
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom).length; // (the squid's stones, bloom.js, are checked with the bloom)
   Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
   out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
   Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());
@@ -827,8 +828,8 @@ s = await ev(() => { const g = window.__game, out = [], NATURAL = /^(rock|kelp|t
     const q4 = [0, 0, 0, 0]; for (const p of wild) q4[(w.wrap(p.x - c.x) < 0 ? 0 : 1) + (w.wrap(p.z - c.z) < 0 ? 0 : 2)]++;
     out.push({ seed, size: L, pieces: P.length, outside: [...P, ...w.solids, ...set].filter((o) => past(o.x, o.z) > 10).length, worst: +Math.max(...[...P, ...w.solids, ...set].map((o) => past(o.x, o.z))).toFixed(1), // a clump may lie across the seam, no further than a reef reaches
       inRift: wild.filter((p) => r.in(p.x, p.z) > 1).length + set.filter((o) => r.in(o.x, o.z) > 0).length, // (pebbles may lie on the flat lip, which begins a metre inside the rift's line)
-      perKm2: Math.round(wild.length / (L * L / 1000)), least: +(Math.min(...q4) / wild.length).toFixed(2), swarms: w.schools.length, fish: w.schools.reduce((a, sc) => a + sc.n, 0),
-      foodOut: +Math.max(...w.schools.map((sc) => aside({ x: sc.hx, z: sc.hz }))).toFixed(1), hooksOut: +Math.max(...g.foes.hooks.map(aside)).toFixed(1), mural: !!w.react.mural, puzzles: w.react.puzzles.length, fragments: w.react.fragments.length, shells: g.field.items.length }); }
+      perKm2: Math.round(wild.length / (L * L / 1000)), least: +(Math.min(...q4) / wild.length).toFixed(2), swarms: w.schools.filter((sc) => !sc.bloom).length, fish: w.schools.filter((sc) => !sc.bloom).reduce((a, sc) => a + sc.n, 0), // (the fry under the bells are the bloom water's, below)
+      foodOut: +Math.max(...w.schools.filter((sc) => !sc.bloom).map((sc) => aside({ x: sc.hx, z: sc.hz }))).toFixed(1), hooksOut: +Math.max(...g.foes.hooks.map(aside)).toFixed(1), mural: !!w.react.mural, puzzles: w.react.puzzles.length, fragments: w.react.fragments.length, shells: g.field.items.length }); }
   return out; });
 check('in the first band nothing stands outside the square or in the rift; it is as thickly grown as it was at 144 m (about 150 pieces of natural dressing to a thousand square metres, in every quarter); and its nine swarms and its hooks live no further from the start than they did',
   s.every((o) => o.size === 204 && o.outside === 0 && o.inRift === 0 && o.perKm2 > 135 && o.perKm2 < 165 && o.least > 0.1 && o.swarms === 9 && o.fish === 182 && o.foodOut <= 72 && o.hooksOut <= 72 && o.mural && o.puzzles === 3 && o.fragments === 2 && o.shells === 3), JSON.stringify(s));
@@ -840,8 +841,115 @@ s = await ev(() => { const g = window.__game, out = [];
   g.startRun(4242); return out; });
 check('every rift has its mural, on the near side of it, out of the rift and off the Keeper\'s ground, in worlds where its usual ground is all taken', s.every((o) => o.mural && o.clear && o.back > 19 && o.back < 46), JSON.stringify(s));
 
+
+// ---- the bloom water (bloom.js): the first new place, and its three rules
+// where it is: in the first band only, beside the way to the rift and not on it, clear of everything placed before it, with nothing natural left standing in it
+s = await ev(() => { const g = window.__game, out = [];
+  for (const seed of [4242, 3, 11, 777, 2]) { g.startRun(seed); g.sim(0.1); const w = g.world, b = w.bloom, c = w.spawn, r = w.rift, way = Math.atan2(w.goal.x - c.x, w.goal.z - c.z), at = Math.atan2(b.x - c.x, b.z - c.z);
+    const NATURAL = /^(rock|kelp|finger|table|tuft|pebble|star|urchin|clam|brain|seaFan|sponge|anemone|lily)$/, keeper = { x: r.x - r.nx * 24, z: r.z - r.nz * 24 };
+    out.push({ seed, dist: +Math.hypot(b.x - c.x, b.z - c.z).toFixed(1), off: +Math.abs(Math.atan2(Math.sin(at - way), Math.cos(at - way))).toFixed(2), bells: b.bells.length, nettles: b.nettles.length, squid: g.bloom.squid.length,
+      inRift: b.bells.filter((q) => r.in(q.x, q.z) > -2).length, keeper: +Math.hypot(b.x - keeper.x, b.z - keeper.z).toFixed(1), mural: +Math.hypot(b.x - w.react.mural.x, b.z - w.react.mural.z).toFixed(1),
+      others: w.sites.filter(([x, z, rad, what]) => what !== 'bloom' && Math.hypot(w.wrap(x - b.x), w.wrap(z - b.z)) < rad + b.R * 0.6).length,
+      wild: w.pieces().filter((p) => NATURAL.test(p.name) && Math.hypot(w.wrap(p.x - b.x), w.wrap(p.z - b.z)) < b.R * 0.8).length, fry: w.schools.filter((sc) => sc.bloom).length }); }
+  const deeper = []; for (let f = 1; f < 5; f++) { g.enterFloor(f, false); deeper.push(!!g.world.bloom || !!g.bloom); }
+  g.startRun(4242); return { out, deeper }; });
+check('the bloom water lies in the first band only, 60 to 80 m from the start and off to one side of the way to the rift, clear of the rift, the Keeper\'s ground, the mural and every place before it; seventy moon jellies, three nettles, five squid and one swarm of fry; nothing natural stands in it',
+  s.out.every((o) => o.dist >= 60 && o.dist <= 80 && o.off >= 0.45 && o.bells === 70 && o.nettles === 3 && o.squid === 5 && o.fry === 1 && o.inRift === 0 && o.keeper > 30 && o.mural > 16 && o.others === 0 && o.wild === 0) && s.deeper.every((x) => !x), JSON.stringify(s));
+
+// the fry cannot be taken from outside the bloom: a body coiling at its edge does not corner them; in among the bells it does, and takes them whole
+s = await ev(() => { const g = window.__game, T = window.T, out = {}; g.startRun(4242); g.run.safe = 1e9; const b = g.bloom, P = b.plan, fry = g.world.schools.find((sc) => sc.bloom); g.sim(0.3, T.none());
+  const o = b.debug.off, u = { x: g.world.spawn.x - P.x, z: g.world.spawn.z - P.z }, d = Math.hypot(u.x, u.z); u.x /= d; u.z /= d;
+  const ex = P.x + u.x * (P.R + 1.5) + o.x, ez = P.z + u.z * (P.R + 1.5) + o.z; T.aroundPoint(ex, fry.hy, ez, 0); let threat = 0, prog = 0, ring = false; const left = fry.left;
+  for (let i = 0; i < 60; i++) { T.coil(0.1); threat = Math.max(threat, fry.threat); prog = Math.max(prog, fry.progress); ring = ring || fry.ring.visible; }
+  out.outside = { threat, prog, ring, left: fry.left, was: left, inside: Math.hypot(g.rig.snout.x - o.x - P.x, g.rig.snout.z - o.z - P.z) / P.R };
+  out.away = +Math.hypot(fry.x - ex, fry.z - ez).toFixed(1); // (from outside they draw in deeper, away from the head)
+  // in among the bells: round them, as round any swarm
+  g.sim(0.1, T.none()); T.aroundPoint(fry.x, fry.y, fry.z, 0.5); T.idle(0.5); let t = 0, prog2 = 0; while (fry.left > 0 && t < 10) { T.coil(0.1); t += 0.1; prog2 = Math.max(prog2, fry.progress); } T.idle(1.5);
+  out.inside = { left: fry.left, t: +t.toFixed(1), prog: prog2, caught: g.run.caught };
+  // the bells give way round the body and come back behind it
+  const near = P.bells.filter((q) => q.touched).length, pushed = Math.max(...P.bells.map((q) => Math.hypot(q.ox, q.oz))); T.from(0, 0, 3); T.idle(6); const back = Math.max(...P.bells.map((q) => Math.hypot(q.ox, q.oy, q.oz)));
+  out.bells = { touched: near, pushed: +pushed.toFixed(2), back: +back.toFixed(3), segs: g.run.segs };
+  return out; });
+check('the fry under the bells cannot be taken from outside the bloom: a body coiling just outside it never corners them; in among the bells they are taken whole like any swarm; the bells it went through gave way and came back, and touching them cost nothing',
+  s.outside.threat < 0.3 && !s.outside.ring && s.outside.prog === 0 && s.outside.left === s.outside.was && s.outside.inside > 1 && s.inside.left === 0 && s.inside.caught >= 8 && s.bells.touched > 0 && s.bells.pushed > 0.2 && s.bells.back < 0.05, JSON.stringify(s));
+
+// a nettle: the bell is the safe end, the train stings; a body across the train pays one segment, one lying along it two, and a body already short pays nothing
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, B = g.BLOOM.nettle;
+  const pass = (how, segs = 12) => { g.startRun(4242); g.run.segs = segs; g.buildFish(segs); g.run.safe = 1e9; const b = g.bloom, P = b.plan; g.sim(0.3, T.none()); const n = b.nettles[1], o = b.debug.off, side = { x: P.cur.z, z: -P.cur.x }, cur = P.cur;
+    if (how === 'along') { const yaw = Math.atan2(-cur.x, -cur.z), k = (B.bell + 0.4); T.put(n.A.x + (n.B.x - n.A.x) * 0.25 + o.x + (n.B.x - n.A.x) * 0 , (n.A.y + n.B.y) / 2, n.A.z + (n.B.z - n.A.z) * 0.25 + o.z, yaw); void k; }
+    else { const k = how === 'train' ? 0.55 : 0, back = how === 'bell' ? 1.2 : 0, px = n.A.x + (n.B.x - n.A.x) * k - cur.x * back, py = n.A.y + (n.B.y - n.A.y) * k, pz = n.A.z + (n.B.z - n.A.z) * k - cur.z * back; T.put(px - side.x * 6 + o.x, py, pz - side.z * 6 + o.z, Math.atan2(side.x, side.z)); }
+    g.sim(0.05, T.none()); g.run.safe = 0; g.run.hush = 0; const was = g.run.segs, stings = P.stings || 0;
+    if (how === 'along') { const yaw = Math.atan2(-cur.x, -cur.z); g.sim(1, { ...T.none(), dir: { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) }, gentle: true }); } else g.sim(4, { ...T.none(), dir: { x: side.x, y: 0, z: side.z }, amount: 1 });
+    return { lost: was - g.run.segs, stings: (P.stings || 0) - stings, across: P.lastSting ? P.lastSting.count : 0 }; };
+  out.bell = pass('bell'); out.train = pass('train'); out.along = pass('along'); out.short = pass('train', B.keep);
+  // the train is where the nettle's tentacles are: their tips lie in it, as the world sees them
+  g.startRun(4242); g.run.safe = 1e9; const b = g.bloom, n = b.nettles[0], o = b.debug.off; T.put(n.pos.x + o.x + 6, n.pos.y, n.pos.z + o.z + 6, 0); g.sim(4, T.none());
+  const seg = (p) => { const a = n.A, c = n.B, ab = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z }, L = ab.x ** 2 + ab.y ** 2 + ab.z ** 2, t = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z) / L)); return Math.hypot(p.x - a.x - ab.x * t, p.y - a.y - ab.y * t, p.z - a.z - ab.z * t); };
+  const tips = n.a.rig.strands.filter((x) => x.def.kind === 't').map((x) => { const p = x.st.joints[x.st.n]; return { x: p.x - o.x, y: p.y, z: p.z - o.z }; });
+  out.tips = { inside: tips.filter((p) => seg(p) < B.reach + 0.5).length, of: tips.length };
+  // it never comes after the fish: left beside one for ten seconds, it is where it was, give or take its drift
+  const at = n.pos.clone(); T.put(n.pos.x + o.x + 2.5, n.pos.y, n.pos.z + o.z, 0); g.run.safe = 1e9; g.sim(10, T.none()); out.chased = +Math.hypot(n.pos.x - at.x, n.pos.z - at.z).toFixed(2);
+  return out; });
+check('a sea nettle\'s bell is the safe end and its train stings: going by up-current of the bell costs nothing; across the train, one segment; lying along it, two; a body already down to six segments is stung and loses nothing; the train is drawn where it stings, and the nettle never comes after the fish',
+  s.bell.lost === 0 && s.bell.stings === 0 && s.train.lost === 1 && s.train.stings === 1 && s.along.lost === 2 && s.short.lost === 0 && s.short.stings === 1 && s.tips.inside >= s.tips.of * 0.7 && s.chased < 4.2, JSON.stringify(s));
+
+// the squid hunt: the shoal goes to a swarm (the fry, here) and takes its fish one at a time, while the fish watches from out of their sight
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const b = g.bloom, P = b.plan, fry = g.world.schools.find((sc) => sc.bloom); g.sim(0.3, T.none());
+  const o = b.debug.off; T.put(P.x + o.x + P.cur.z * 20, fry.hy + 2, P.z + o.z - P.cur.x * 20, 0); /* to one side: out of the squid's sight, and off the nettles' side */ b.debug.shoal.t = 0; const left = fry.left, took = P.squidTook || 0; let strike = 0, raid = 0;
+  for (let i = 0; i < 300; i++) { g.sim(0.1, T.none()); if (b.squid.some((q) => q.mood === 'strike')) strike++; if (b.debug.shoal.mode === 'raid') raid++; }
+  const quiet = { took: P.squidTook || 0 }; // and with the fish far away, they do not go raiding at all
+  g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); g.bloom.debug.shoal.t = 0; T.from(0, 0, 3); g.sim(20, T.none());
+  return { left, after: fry.left, took: (P.squidTook || 0) - took, strike, raid, away: g.bloom.debug.shoal.mode, awayTook: g.bloom.plan.squidTook || 0, quiet }; });
+check('the squid are rivals for the fish\'s food: the shoal goes to a swarm, takes aim and strikes, one fish at a time, and leaves it the thinner (six to a raid); with the fish far away they stay at home',
+  s.took >= 4 && s.took <= 7 && s.after === s.left - s.took && s.strike > 0 && s.raid > 30 && s.away === 'rest' && s.awayTook === 0, JSON.stringify(s));
+
+// pressure in steps: come on gently and they bluff and give ground; come on hard (a dash) and one leaves an ink copy of itself and the whole shoal scatters, to gather again later
+s = await ev(() => { const g = window.__game, T = window.T, out = {};
+  const meet = () => { g.startRun(4242); g.run.safe = 1e9; const b = g.bloom, P = b.plan; g.sim(0.3, T.none()); const L = b.squid[0], o = b.debug.off, dx = L.pos.x - P.x, dz = L.pos.z - P.z, d = Math.hypot(dx, dz);
+    T.put(L.pos.x + dx / d * 13 + o.x, L.pos.y, L.pos.z + dz / d * 13 + o.z, Math.atan2(-dx, -dz)); g.sim(0.2, T.none()); g.run.safe = 0; g.run.hush = 0; return { b, L, o }; };
+  { const { b, L, o } = meet(); let bluffs = 0, gave = 0; const was = b.squid.map((q) => q.pos.clone());
+    for (let t = 0; t < 7; t += 0.1) { const tx = L.pos.x + o.x - g.rig.pos.x, tz = L.pos.z + o.z - g.rig.pos.z, td = Math.hypot(tx, tz); g.sim(0.1, td > 5 ? { ...T.none(), dir: { x: tx / td, y: 0, z: tz / td }, amount: 0.25 } : T.none()); bluffs = Math.max(bluffs, b.squid.filter((q) => q.step === 'bluff').length);
+      gave = Math.max(gave, ...b.squid.map((q, i) => (q.step === 'bluff' ? Math.hypot(q.pos.x - was[i].x, q.pos.z - was[i].z) : 0))); } /* gave: how far a bluffing one has backed off */
+    out.gentle = { bluffs, mood: L.mood, inks: b.debug.inks.length, shoal: b.debug.shoal.mode, gave: +gave.toFixed(2), segs: g.run.segs }; }
+  { const { b, L, o } = meet(); const home = b.squid.map((q) => q.pos.clone()); let t = 0;
+    for (; t < 6 && !b.debug.inks.length; t += 0.05) { const tx = L.pos.x + o.x - g.rig.pos.x, tz = L.pos.z + o.z - g.rig.pos.z, td = Math.hypot(tx, tz); g.sim(0.05, { ...T.none(), dir: { x: tx / td, y: 0, z: tz / td }, amount: 1, dashNow: td < 5.5 && !out.dashed }); if (td < 5.5) out.dashed = true; }
+    const inked = b.debug.inks.length, copy = b.debug.inks[0] && b.debug.inks[0].m.geometry === L.a.body.geometry; g.sim(1.5, T.none());
+    const spread = b.squid.map((q, i) => Math.hypot(q.pos.x - home[i].x, q.pos.z - home[i].z)), apart = Math.min(...b.squid.flatMap((q, i) => b.squid.slice(i + 1).map((r) => Math.hypot(q.pos.x - r.pos.x, q.pos.z - r.pos.z))));
+    out.hard = { inked, copy, shoal: b.debug.shoal.mode, steps: b.squid.map((q) => q.step).join(), moved: +Math.min(...spread).toFixed(1), apart: +apart.toFixed(1), pale: +Math.max(...b.squid.map((q) => q.a.rig.pose.blanch)).toFixed(2) };
+    T.from(0, 0, 3); g.sim(g.BLOOM.squid.scatter.regroup + 2, T.none()); g.sim(10, T.none()); out.later = { shoal: b.debug.shoal.mode, inks: b.debug.inks.length, home: +Math.max(...b.squid.map((q) => Math.hypot(q.pos.x - b.plan.home.x, q.pos.z - b.plan.home.z))).toFixed(1) }; }
+  return out; });
+check('the squid answer pressure in steps: come on gently and they make themselves big and dark and give ground, and nothing more; dash at them and one leaves a copy of itself in ink while every one of them jets off pale, each its own way; the ink fades, and later the shoal is together at home again',
+  s.gentle.bluffs >= 1 && s.gentle.inks === 0 && s.gentle.shoal !== 'scatter' && s.gentle.gave > 0.5
+  && s.hard.inked === 1 && s.hard.copy && s.hard.shoal === 'scatter' && /^(scatter,){4}scatter$/.test(s.hard.steps) && s.hard.moved > 3 && s.hard.apart > 2 && s.hard.pale > 0.5 && s.later.shoal === 'rest' && s.later.inks === 0 && s.later.home < 8, JSON.stringify(s));
+
+// the mini-game: settle the shoal by coming close slowly enough. Its best is kept in the nest, shown there as lit stones, and the shoal raids no more in that dive
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest);
+  Object.assign(g.nest, { squid: null }); g.startRun(4242); g.run.safe = 1e9; let b = g.bloom, N = g.world.react.nest; g.sim(0.3, T.none());
+  out.before = { grade: b.debug.mark.userData.grade, lit: b.debug.mark.children.filter((c) => c.userData.lit).length, stones: b.debug.mark.children.length };
+  const P = b.plan, L = b.squid[0], o = b.debug.off, dx = L.pos.x - P.x, dz = L.pos.z - P.z, d = Math.hypot(dx, dz);
+  T.put(L.pos.x + dx / d * 14 + o.x, L.pos.y, L.pos.z + dz / d * 14 + o.z, Math.atan2(-dx, -dz)); g.sim(0.2, T.none()); g.run.safe = 0; g.run.hush = 0; let t = 0, turned = 0;
+  for (; t < 70 && !b.state.settled; t += 0.1) { const tx = L.pos.x + o.x - g.rig.pos.x, tz = L.pos.z + o.z - g.rig.pos.z, td = Math.hypot(tx, tz), wary = b.squid.some((q) => q.fright > 0.12);
+    g.sim(0.1, !wary && td > 2.6 ? { ...T.none(), dir: { x: tx / td, y: 0, z: tz / td }, gentle: true, amount: 0, vertical: Math.max(-1, Math.min(1, L.pos.y - g.rig.pos.y)) } : T.none()); turned = Math.max(turned, b.debug.tryNow.turned || 0); }
+  out.won = { settled: b.state.settled, run: g.run.settled, saved: JSON.parse(localStorage.getItem('oarfish.nest')).squid, mark: b.debug.mark.userData.grade, lit: b.debug.mark.children.filter((c) => c.userData.lit).length, turned };
+  b.debug.shoal.t = 0; g.sim(15, T.none()); out.tame = { shoal: b.debug.shoal.mode, segs: g.run.segs };
+  // a worse try, in a later dive, does not take the best away; the nest shows it from the start of every dive
+  g.startRun(4242); b = g.bloom; out.next = { grade: b.debug.mark.userData.grade, lit: b.debug.mark.children.filter((c) => c.userData.lit).length, inNest: g.world.react.nest.group.children.includes(b.debug.mark) };
+  // rushed: a dash at them is ink, and the try is lost, and nothing is kept for it
+  const before = JSON.stringify(g.nest.squid); g.run.safe = 1e9; g.sim(0.3, T.none()); const L2 = b.squid[0], o2 = b.debug.off; T.put(L2.pos.x + o2.x + 4, L2.pos.y, L2.pos.z + o2.z, -Math.PI / 2); g.run.safe = 0; g.run.hush = 0; g.sim(0.3, T.none());
+  g.sim(0.5, { ...T.none(), dir: { x: -1, y: 0, z: 0 }, amount: 1, dashNow: true }); out.rushed = { settled: b.state.settled, failed: b.plan.failed || 0, kept: JSON.stringify(g.nest.squid) === before };
+  // emptied, the nest forgets it
+  document.getElementById('dev-forget').click(); out.forgot = JSON.parse(localStorage.getItem('oarfish.nest')).squid ?? null;
+  Object.assign(g.nest, JSON.parse(kept)); localStorage.setItem('oarfish.nest', kept); g.startRun(4242); g.run.safe = 0; return out; });
+check('the squid\'s mini-game: a fish that comes close slowly, and waits when they bluff, is let stay beside them (they turn to it one by one); the time and a grade are kept in the nest as a best and shown there as lit stones in every dive after; a settled shoal raids no more that dive; a rushed try is lost and changes nothing; Empty the nest forgets it',
+  s.before.grade === 0 && s.before.lit === 0 && s.before.stones === 5 && s.won.settled && s.won.run.grade >= 1 && s.won.saved && s.won.saved.grade === s.won.run.grade && s.won.saved.time === s.won.run.time && s.won.mark === s.won.run.grade && s.won.lit === s.won.run.grade && s.won.turned >= 3
+  && s.tame.shoal === 'rest' && s.next.grade === s.won.run.grade && s.next.lit === s.won.run.grade && s.next.inNest && !s.rushed.settled && s.rushed.kept && s.forgot === null, JSON.stringify(s));
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }
+// the bloom moved nothing in bands 2 to 5: their fingerprints are the same to the letter as at the commit the bloom was built on (tools/digest.mjs)
+{ const run = (...a) => execFileSync('node', [path.join(import.meta.dirname, 'digest.mjs'), ...a, '1,2,3,777,4242', '1,2,3,4'], { cwd: ROOT, maxBuffer: 1 << 24 }).toString().split('\n').filter((l) => l.startsWith('seed')).join('\n');
+  let before = '', now = ''; try { before = run('--ref', '2c586ca'); now = run(); } catch (e) { before = `could not be read: ${e.message}`; }
+  check('the bloom water moved nothing in bands 2 to 5: twenty worlds fingerprint the same as before it was built (commit 2c586ca)', before === now && now.split('\n').length === 20, before === now ? '' : `before:\n${before}\nnow:\n${now}`); }
 await browser.close(); server.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
