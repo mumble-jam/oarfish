@@ -14,6 +14,7 @@ import { createSurface, SKY } from './surface.js';
 import { createGuard, KEEPER_FIGHT, SHEARER_FIGHT } from './guards.js';
 import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
 import { clamp, damp, lerp, glowTexture } from './geo.js';
+import { createBloom, BLOOM } from './bloom.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
 const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
@@ -259,7 +260,7 @@ export async function start(saved = {}) {
   const run = { seed: 1, floor: 0, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, cleaned: 0, caught: 0, longest: START_SEGS, time: 0, state: 'play', stateT: 0, safe: 0,
     stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 };
   let mods = shellMods([]), field = null; // what the worn shells add up to; the shells lying about this band
-  let world = null, foes = null;
+  let world = null, foes = null, bloom = null; // bloom: what lives at the bloom water, in the first band (bloom.js)
   const wrapD = (d) => (world ? world.wrap(d) : d); // the shortest way round the world the dive is in: each band says how far across it is
   let sum = null, arena = null, guard = null; // guard: what keeps this band's rift // the last band's boss, and the band's collisions with the boss's body added
   // how the dive ends, once the Sum is dealt with: 'open' (its head ringed) or 'close' (its gap filled)
@@ -294,6 +295,10 @@ export async function start(saved = {}) {
     },
   };
   const bodyMetres = () => rig.length + 0.5;
+  // what the bloom water's creatures may do to the dive (bloom.js): a nettle stings in length, as a bite does; the squid's try is kept in the nest
+  const bloomHooks = { rig, safe: () => game.safe(), bite: (n, joint, from) => game.bite(n, joint, from, 'sting'), hurt: () => { pulse('hurt'); moment('bite'); }, segs: () => run.segs, playing: () => run.state === 'play',
+    moment: (k, v) => moment(k, v), gulp: (i, n, v) => music.gulp(i, n, v), say: (id, text) => say(id, text, 8, 'warn'), get best() { return nest.squid; },
+    settled(r) { run.settled = r; moment('cache'); buzz(0.2, 0.4, 200); if (r.best) { nest.squid = r.kept; store.set('oarfish.nest', nest); tell(`${r.time} seconds${r.bluffs ? '' : ', and not one of them bluffed'}.`, 6, { kind: 'note', kick: 'A new best', title: 'The squid let you stay' }); } } };
 
   function applyLook(F) {
     scene.background.set(F.water); scene.fog.color.set(F.water);
@@ -317,6 +322,7 @@ export async function start(saved = {}) {
     nestShells.length = 0; // the shells the nest has to show, each over its own place (the world made the places; the shells are this file's to make)
     if (world.react?.nest) for (const p of world.react.nest.places) if (p.found) { const m = kit.mesh(p.type, 0.95); m.position.set(p.x, p.y, p.z); world.react.nest.group.add(m); nestShells.push({ m, p, ph: nestShells.length * 1.7 }); }
     foes = createFoes(scene, world, { seed: run.seed }, game);
+    bloom?.dispose(); bloom = world.bloom ? createBloom(scene, world, bloomHooks) : null;
     field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3, types: run.pool || SHELL_TYPES });
     Object.assign(tut, { on: !!world.nursery, step: 0, stall: 0, told: false, was: 0, prize: null });
     if (tut.on && field.items[0]) { const it = field.items[0]; it.taken = true; it.group.visible = false; tut.prize = it.type; } // the band's first shell waits in the sealed jar
@@ -636,7 +642,7 @@ export async function start(saved = {}) {
   function fade(on, colour = '', seconds = 0) { if (on) fadeEl.style.background = colour; fadeEl.style.transitionDuration = seconds ? `${seconds}s` : ''; fadeEl.classList.toggle('on', on); }
   function riseInto(index) { // up out of the rift it once went down
     sum?.dispose(); sum = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
-    world.dispose(); foes.dispose();
+    world.dispose(); foes.dispose(); bloom?.dispose(); bloom = null;
     run.floor = index;
     world = createWorld(scene, { seed: run.seed, floor: index, calm });
     foes = createFoes(scene, world, { seed: run.seed }, game);
@@ -650,7 +656,7 @@ export async function start(saved = {}) {
     music.setScene(index, FLOORS.length);
   }
   function surface() { // under an empty sky
-    world.dispose(); foes.dispose(); field?.dispose(); field = null; guard?.dispose(); guard = null;
+    world.dispose(); foes.dispose(); bloom?.dispose(); bloom = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
     const at = { x: rig.pos.x, z: rig.pos.z };
     world = createSurface(scene, at, { x: at.x - Math.sin(cam.yaw) * 10, z: at.z - Math.cos(cam.yaw) * 10 }); // the raft lies beyond the fish, in view
     foes = NO_FOES; arena = world; run.floor = 0;
@@ -814,6 +820,7 @@ export async function start(saved = {}) {
     for (const h of foes.hooks) most('hook', nearBy(h, 14));
     if (guard && !guard.done) most(guard.kind, nearBy(guard.pos, 30));
     if (sum) most('sum', sum.state.awake ? 1 : 0.35 * nearBy(world.hall, 40));
+    bloom?.cast(most, nearBy);
     return c;
   }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
@@ -932,7 +939,7 @@ export async function start(saved = {}) {
   // tool (the pause menu), there so that a model can be seen where it would live. Each is brought and taken away by its own button; none harms or is harmed.
   // The squid hovers, turning to watch the fish; every few seconds it jets, mantle first, to another place near by; crowded, it blanches and goes.
   // A jellyfish simply lives: it beats, and each beat really moves it; it sinks a little between beats, wanders, and keeps near the fish.
-  const pets = {}, BRING = inOrder().filter((n) => n.group === 'Not yet in the dive');
+  const pets = {}, BRING = inOrder().filter((n) => n.bring); // the detailed creatures (npc.js marks them), those not in the dive and those that are
   // how each jelly lives. n: how many are brought; ring: how far from the fish it may wander before it turns back; push, drag: what a stroke gives it and what the
   // water takes; sink: how fast it sinks, left to itself; turn: how fast it comes round (radians a second), leg: how long it holds a heading, veer: how far it then turns;
   // high: the heights over the bed it keeps between; lean: how far its bell lies over when it climbs and when it lets itself down; moods: what it does, and for how long
@@ -1396,7 +1403,10 @@ export async function start(saved = {}) {
   $('dev-bands').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || ended()) return; enterFloor(+b.dataset.band, false); setPaused(false); if (e.isTrusted) grab(true); });
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
   $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
-  $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {} }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked. It shows from the next dive.'); });
+  $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {}, squid: null }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked, no best with the squid. It shows from the next dive.'); });
+  $('dev-bloom').addEventListener('click', (e) => { if (ended()) return; if (run.floor !== 0) enterFloor(0, false); const b = world.bloom; if (!b) return; // to the edge of the bloom water, on the side toward the start, facing in
+    const dx = b.x - world.spawn.x, dz = b.z - world.spawn.z, d = Math.hypot(dx, dz), x = b.x - (dx / d) * (b.R + 9), z = b.z - (dz / d) * (b.R + 9);
+    rig.reset(new THREE.Vector3(x, world.height(x, z) + 3.3, z), Math.atan2(dx, dz)); focus.copy(rig.joints[0]); run.safe = 1.5; setPaused(false); if (e.isTrusted) grab(true); });
   $('dev-bring').innerHTML = BRING.map((n) => `<button type="button" data-bring="${n.id}"${n.id === 'squid' ? ' id="dev-squid"' : ''} aria-pressed="false">${n.name}</button>`).join('');
   $('dev-bring').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const id = b.dataset.bring, on = !pets[id], name = NPC[id].name.toLowerCase(), many = LIVES[id]?.n > 1; bring(id, on); b.setAttribute('aria-pressed', String(on));
     showDev(on ? (many ? `${LIVES[id].n} ${name === 'moon jelly' ? 'moon jellies' : `${name}s`} are in the water just ahead of you. They are only to look at.` : `A ${name} is in the water just ahead of you. It is only to look at.`) : many ? 'They are gone.' : `The ${name} is gone.`); });
@@ -1867,6 +1877,7 @@ export async function start(saved = {}) {
       ctx.truce = st ? { x: st.cx, y: st.top + 0.9, z: st.cz, r: lerp(CLEAN.ring[0], CLEAN.ring[1], st.k), call: CLEAN.call, most: CLEAN.most, grace: CLEAN.grace } : null; }
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
     foes.update(dt, ctx);
+    bloom?.update(dt, camera);
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {
@@ -1981,7 +1992,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
