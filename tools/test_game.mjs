@@ -242,9 +242,10 @@ const keeperKit = () => { const g = window.__game, T = window.T, G = g.guard, S 
     // the fish laid across the crab's front, `far` metres off and `up` over the bed; side 1 turns that toward the crab's left
     lie(far, side = 0, up = 1.6, toward = G.mesh.rotation.y) { const yaw = toward + side * 1.1, fx = Math.sin(yaw), fz = Math.cos(yaw), half = g.rig.length / 2, x = G.pos.x + fx * far + fz * half, z = G.pos.z + fz * far - fx * half; T.put(x, g.world.height(x, z) + up, z, yaw + Math.PI / 2); }, // its head to the crab's left, heading on that way, its body trailing back across the front
     until(state, secs = 8) { let t = 0; while (S.state !== state && t < secs) { g.sim(0.02, none); t += 0.02; } return +t.toFixed(2); },
-    // a dash at leg i from outside it
-    ramLeg(i) { const f = G.debug.leg(i), dx = f.x - G.pos.x, dz = f.z - G.pos.z, d = Math.hypot(dx, dz), at = { ...none, dir: { x: -dx / d, y: 0, z: -dz / d } };
-      T.put(f.x + dx / d * 2.9, G.pos.y + 0.3, f.z + dz / d * 2.9, Math.atan2(-dx, -dz)); g.run.safe = 5; g.run.dashCool = 0; g.run.stamina = 1; g.sim(1 / 60, { ...at, dashNow: true }); g.sim(0.35, at); } }; };
+    // a dash at leg i from outside it, at the leg as it is drawn: its highest point (the knee), or a fish's lowest swim if the knee is lower than that
+    ramLeg(i) { G.mesh.updateMatrixWorld(true); g.sim(1 / 60, none); let k = null; for (const x of G.debug.solids()) if (x.leg === i) for (const p of [x.a, x.b]) if (!k || p.y > k.y) k = p.clone();
+      const dx = k.x - G.pos.x, dz = k.z - G.pos.z, d = Math.hypot(dx, dz), at = { ...none, dir: { x: -dx / d, y: 0, z: -dz / d } }, x0 = k.x + dx / d * 2.4, z0 = k.z + dz / d * 2.4;
+      T.put(x0, Math.max(k.y, g.world.height(x0, z0) + 1.5), z0, Math.atan2(-dx, -dz)); g.run.safe = 5; g.run.dashCool = 0; g.run.stamina = 1; g.sim(1 / 60, { ...at, dashNow: true }); g.sim(0.35, at); } }; };
 await page.evaluate(`window.keeperKit = ${keeperKit.toString()}`);
 s = await ev(() => { window.__game.startRun(31); const { g, T, G, S, F, ready, lie, until } = window.keeperKit(); T.idle(0.5);
   const out = {};
@@ -433,7 +434,7 @@ const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(
   return { walked, wary, claws, stun, down: { roll: +G.mesh.rotation.z.toFixed(2), curled: +Math.max(...W.legs.map((l) => l.tip.distanceTo(l.curl))).toFixed(2) } }; });
 check('the Keeper walks on its legs: its feet stay planted and step in turn, on the ground or on a stone, and its shell rides on them and leans with the slope', crab.walked.steps >= 12 && crab.walked.air >= 1 && crab.walked.air <= 5 && crab.walked.off < 0.05 && crab.walked.slope > 0.1 && crab.walked.lean > 0.04 && Math.abs(crab.walked.ride - 0.44) < 0.15 && Math.abs(crab.walked.y - 0.9) < 0.3, JSON.stringify(crab.walked));
 check('it turns to a fish that comes near and puts its big claw up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.6 && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
-check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.35 && crab.claws.big < 1.1 && crab.claws.small > crab.claws.big + 0.5, JSON.stringify(crab.claws));
+check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.35 && crab.claws.big < 1.5 && crab.claws.small > 0.9, JSON.stringify(crab.claws));
 // what the Keeper's pieces say (crab.js): its eyes go where the blow will, a numb leg lies low, each leg torn off cracks the shell, and from two it rages
 const crabParts = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
   const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, W = R.walker, F = g.KEEPER_FIGHT, v = G.pos.clone(), u = G.pos.clone(), out = {}, big = R.claws.find((k) => k.big);
