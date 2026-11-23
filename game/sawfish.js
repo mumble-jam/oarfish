@@ -19,7 +19,7 @@ import { clamp, damp } from './geo.js';
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a)), ease = (t) => t * t * (3 - 2 * t);
 
 // a: the creature as npc.js makes it (a.body is the whole fish, in its swimming material). Returns the rig.
-export function sawfishRig(a) {
+export function sawfishRig(a, pal) {
   const body = a.body, mat = bendy(body.material, { neck: SHEARER.neck }), beat = a.spec.beat;
   const p = { roll: 0, pitch: 0, turn: 0, yawWas: null, hy: 0, hp: 0, curve: 0, glow: 0.4, t: 0, mood: '', whip: 0, swing: 0 }, to = new THREE.Vector3(); // whip: how hard the saw is being swung, and swing: where in the swing it is
   body.rotation.order = 'YXZ';
@@ -44,11 +44,12 @@ export function sawfishRig(a) {
     else if (mood === 'charge' && pin) { pitch = 1.15; hy = 0.1 * Math.sin(t * 34); glow = 2.3; swim = 2.2; quick = 30; bodyQuick = 14; }
     else if (mood === 'charge') { glow = 2.3; swim = 2.2; } // the saw is whipped across: see below
     else if (mood === 'tired') { hy = 0.16 * Math.sin(p.t * 0.9); hp = -0.42; roll += 0.14 * Math.sin(p.t * 0.7); pitch = 0.12; glow = 0.1; swim = 0.45; quick = 3; }
+    else if (mood === 'jammed') { hy = 0.1 * Math.sin(t * 13); hp = 0.05; curve = 0.07 * Math.sin(t * 9); roll = 0.2 * Math.sin(t * 9); glow = 0.1; swim = 3; quick = 16; bodyQuick = 9; } // its saw in a column: it thrashes to get it out
     else if (mood === 'stuck') { pitch = 0.78 + 0.05 * Math.sin(t * 11); hp = 0.42; hy = 0.07 * Math.sin(t * 11); curve = 0.06 * Math.sin(t * 11); roll = 0.16 * Math.sin(t * 9); glow = 0.1; swim = 3; quick = 16; bodyQuick = 9; }
     else if (mood === 'stun') { roll = 0.35 * Math.sin(t * 16); hy = 0.25 * Math.sin(t * 13); hp = -0.2; glow = 0.6 + 0.6 * Math.sin(t * 40); swim = 0.3; quick = 20; bodyQuick = 30; }
     else if (mood === 'down') { roll = 2.7; pitch = 0.18; hy = 0.12; hp = -0.3; curve = 0.03; glow = 0; swim = 0.27; quick = 2; bodyQuick = 2.4; }
     // the slash: from where it was cocked, across and back, three times a second, as a sawfish swipes; it swings on a moment after the blow has landed
-    if (mood === 'charge' && !pin) { if (p.mood !== 'charge') p.swing = 0; p.whip = 1; } else p.whip *= Math.exp(-5 * dt);
+    if ((mood === 'charge' && !pin) || mood === 'swipe') { if (p.mood !== mood) p.swing = 0; p.whip = 1; glow = 2.3; } else p.whip *= Math.exp(-5 * dt);
     p.swing += dt * 18.85; p.mood = mood;
     if (p.whip > 0.02) { const w = Math.cos(p.swing) * p.whip; hy = hy * (1 - p.whip) - 0.9 * side * w; roll += 0.3 * side * w; quick = 40; }
     p.roll = damp(p.roll, roll, bodyQuick, dt); p.pitch = damp(p.pitch, pitch, bodyQuick, dt); p.curve = damp(p.curve, curve, bodyQuick, dt);
@@ -63,12 +64,17 @@ export function sawfishRig(a) {
     stand.time += dt;
     const sc = body.scale.x, id = state.id, loop = (secs) => (stand.time % secs) / secs, pin = id === 'pin' || id === 'stuck';
     stand.look.set(Math.sin(stand.time * 0.6) * 5 * sc, -1 * sc, 6 * sc);
-    let mood = id === 'idle' ? 'search' : id === 'pin' ? 'aim' : id, k = 0, y = 0;
+    let mood = id === 'idle' ? 'search' : id === 'pin' ? 'aim' : id === 'gapped' || id === 'snapped' ? 'tired' : id, k = 0, y = 0;
+    wear(id === 'gapped' ? 2 : id === 'snapped' ? 3 : 0, id === 'snapped');
+    if (id === 'swipe') { const u = loop(1.6); mood = u < 0.3 ? 'aim' : u < 0.62 ? 'swipe' : 'tired'; k = u < 0.3 ? u / 0.3 : 0; }
     if (id === 'aim') k = Math.min(1, loop(2.2) * 1.6);
     if (id === 'charge') { const u = loop(2.4); mood = u < 0.35 ? 'aim' : u < 0.7 ? 'charge' : 'tired'; k = u < 0.35 ? u / 0.35 : (u - 0.35) / 0.35; }
     if (id === 'pin') { const u = loop(2.8); mood = u < 0.4 ? 'aim' : u < 0.52 ? 'charge' : 'stuck'; k = u < 0.4 ? u / 0.4 : 1; y = (u < 0.4 ? 1.6 * ease(u / 0.4) : u < 0.52 ? 1.6 * (1 - (u - 0.4) / 0.12) : 0) * sc; }
     update(dt, { x: 0, y, z: 0, yaw: 0, speed: speed * sc, climb: 0, mood, mode: pin ? 'pin' : 'slash', side: 1, k, look: stand.look, time: stand.time });
   }
-  a.rig = { update, show, pose: p, get head() { return mat.userData.head; }, get glow() { return mat.userData.glow.value; } };
+  // the saw as it now is: rows of teeth knocked out, and the blade itself snapped short. Each is its own model, made when it is first wanted
+  const worn = new Map([['0|false', body.geometry]]); let wearing = '0|false';
+  function wear(lost, snapped) { const key = `${lost}|${!!snapped}`; if (key === wearing || !pal) return; if (!worn.has(key)) { const g = a.spec.build(pal, { lost, snapped: !!snapped }); worn.set(key, g); a.owned.push(g); } body.geometry = worn.get(key); wearing = key; }
+  a.rig = { update, show, wear, get worn() { return wearing; }, pose: p, get head() { return mat.userData.head; }, get glow() { return mat.userData.glow.value; } };
   return a.rig;
 }

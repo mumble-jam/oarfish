@@ -214,8 +214,8 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); g.ru
   g.run.safe = 0; const b2 = g.foes.biters[1]; g.bite(2, g.rig.spine.length, b2.pos, 'biter'); return { first, afterCap, segs, after: g.run.segs, biter2: b2.alive }; });
 check('a Cap takes one bite and breaks; a Spine kills the biter that bites', s.first === true && s.afterCap.segs === s.segs && s.afterCap.worn === 'spine' && s.afterCap.biter === false && s.after === s.segs - 2 && s.biter2 === false, JSON.stringify(s));
 
-// 8e. the guards of the three lower rifts: each attacks in its own way, and each can be beaten by rams alone (the Keeper, whose fight is its own, comes after)
-for (const f of [1, 2, 3]) {
+// 8e. the guards of the two lowest rifts: each attacks in its own way, and each can be beaten by rams alone (the Keeper and the Shearer, whose fights are their own, come after)
+for (const f of [2, 3]) {
   s = await ev((f) => { const g = window.__game, T = window.T; g.startRun(31); g.run.segs = 14; g.buildFish(14); g.enterFloor(f, false); T.idle(0.6);
     for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const a of g.foes.anglers) { a.alive = false; a.group.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500;
     const G = g.guard, S = G.state, w = g.world.goal, kind = G.kind, shells0 = g.field.items.length;
@@ -227,7 +227,7 @@ for (const f of [1, 2, 3]) {
     let rams = 0; const fwd = { ...T.none(), dir: { x: 0, y: 0, z: 1 } };
     while (!G.done && rams < 9) { S.stun = 0; S.flash = 0; if (kind === 'shearer') G.debug.set('tired', 3); if (kind === 'lamplighter') G.debug.set('dim', 4);
       T.put(G.pos.x, G.pos.y, G.pos.z - 2.9, 0); g.run.safe = 5; g.run.dashCool = 0; g.sim(1 / 60, { ...fwd, dashNow: true }); g.sim(0.35, fwd); rams++; }
-    const hp = { shearer: 3, lamplighter: 3, warden: 4 }[kind];
+    const hp = { lamplighter: 3, warden: 4 }[kind];
     g.sim(0.5, T.none()); const y = g.world.height(w.x, w.z) + 1; T.put(w.x - 1, y, w.z, 0); g.run.safe = 0; T.idle(0.2);
     return { kind, attack, rams, hp, done: G.done, dropped: g.field.items.length - shells0, state: g.run.state }; }, f);
   check(`band ${f + 1}: the ${s.kind} bites a fish left in its reach, falls to ${s.hp} rams, leaves a shell, and the rift opens`, s.attack.bites >= 1 && s.attack.lost >= 2 && s.done && s.rams === s.hp && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
@@ -274,6 +274,40 @@ s = await ev(() => { window.__game.startRun(31); const { g, T, G, S, F, ready, l
   return { ...out, done: G.done, hp: S.hp, dropped: g.field.items.length - shells0, state: g.run.state }; });
 check('the Keeper’s shell turns a ram and so does a leg it stands on; open, a ram numbs a leg and a second takes it off; a body drawn round a numb leg takes that one off; with two gone it digs, cannot be reached under the sand, and comes up under the body; with four gone it is done, leaves a shell, and the rift opens',
   s.turned.hits === 0 && s.turned.leg === 0 && s.turned.hp === 4 && s.numbed.leg === 1 && s.numbed.hits === 1 && s.numbed.hp === 4 && s.torn.leg === 2 && s.torn.hp === 3 && s.torn.walking === true && s.wrapped.lost === 2 && s.wrapped.rage && s.dug && s.under.sink === 1 && s.under.ram === null && s.up === 3 && s.sink === 0 && s.done && s.hp === 0 && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
+// 8g. the Shearer's fight (SHEARER_FIGHT in guards.js): lines, and holding still
+const shearerKit = () => { const g = window.__game, T = window.T; g.startRun(31); g.run.segs = 16; g.buildFish(16); g.enterFloor(1, false); T.idle(0.6);
+  for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; } for (const a of g.foes.anglers) { a.alive = false; a.group.visible = false; } for (const h of g.foes.hooks) h.pos.y += 500;
+  const G = g.guard, S = G.state, w = g.world.goal, none = T.none();
+  return { g, T, G, S, w, none, Z: g.SHEARER_FIGHT, spent: () => S.state === 'tired',
+    fresh(o = {}) { G.debug.set('idle'); Object.assign(S, { cool: 0, stun: 0, flash: 0, swipeT: 9, chain: 0, baited: false }, o); g.run.segs = 16; g.buildFish(16); T.put(w.x + 14, w.y + 2.5, w.z, Math.PI / 2); g.run.safe = 0; },
+    go(secs, input, stop) { let t = 0; while (t < secs && !(stop && stop())) { g.sim(1 / 60, input); t += 1 / 60; } return +t.toFixed(2); },
+    // a dash at it from `ang` round from dead ahead of it
+    ramFrom(ang) { const a = G.yaw + ang, dx = Math.sin(a), dz = Math.cos(a), far = ang === 0 ? 5.8 : 3.2, at = { ...none, dir: { x: -dx, y: 0, z: -dz } };
+      T.put(G.pos.x + dx * far, G.pos.y, G.pos.z + dz * far, a + Math.PI); g.run.safe = 5; g.run.dashCool = 0; g.run.stamina = 1; g.sim(1 / 60, { ...at, dashNow: true }); g.sim(0.35, at); } }; };
+await page.evaluate(`window.shearerKit = ${shearerKit.toString()}`);
+s = await ev(() => { const { g, T, G, S, w, none, Z, spent, fresh, go } = window.shearerKit(), out = {};
+  fresh(); go(9, none, spent); out.still = { lost: 16 - g.run.segs, slid: +S.slid.toFixed(1) }; // it never feels where the tail is: its line slides off, and the saw goes by
+  fresh(); go(9, { ...none, dir: { x: 0, y: 0, z: 1 } }, spent); out.swum = { lost: 16 - g.run.segs, cut: S.cut }; // swimming steadily on: it aims ahead, and takes the tip
+  // the cut: the body lying still along x, the saw sent across it through its middle, and through its tip
+  for (const [name, j] of [['middle', 8], ['tip', 15]]) { fresh({ cool: 99 }); const at = g.rig.joints[j]; G.pos.set(at.x, at.y, at.z - 7); G.debug.charge(at.x, at.y, at.z + 2); go(1.2, none, spent); out[name] = { lost: 16 - g.run.segs, stone: S.stuck === 'stone' }; }
+  // by its head: two swipes, and one of them lands (the other finds a fish just bitten, which nothing can bite)
+  fresh({ swipeT: 0 }); T.put(G.pos.x + Math.sin(G.yaw) * 2.6, G.pos.y, G.pos.z + Math.cos(G.yaw) * 2.6, G.yaw); g.run.safe = 0; let swiped = false; go(4, none, () => { swiped = swiped || S.state === 'swipe'; return spent(); }); out.swipe = { swiped, lost: 16 - g.run.segs };
+  // a shed tail: it stoops on that, and its saw is in the bed
+  fresh(); T.put(G.pos.x + 7, G.pos.y, G.pos.z, 0); g.run.safe = 0; g.shed(); go(9, none, () => spent() && S.stuck === true); out.bait = { stuck: S.stuck, lost: 16 - g.run.segs, left: +S.t.toFixed(1) };
+  return out; });
+check('the Shearer’s line slides off a fish that holds still and the saw goes by; a fish swimming steadily on is met and loses its tip; the saw cuts where it crosses the body, five from the middle of one lying across its line and no more than three from its tip; by its head it swipes, for one; and a shed tail has it stoop and stick its saw in the bed',
+  s.still.lost === 0 && s.still.slid > 1 && s.swum.lost >= 1 && s.swum.lost === s.swum.cut && !s.middle.stone && s.middle.lost === 5 && !s.tip.stone && s.tip.lost >= 1 && s.tip.lost <= 3 && s.swipe.swiped && s.swipe.lost === 1 && s.bait.stuck === true && s.bait.lost === 3 && s.bait.left > 2, JSON.stringify(s));
+s = await ev(() => { const { g, T, G, S, w, none, Z, spent, fresh, go, ramFrom } = window.shearerKit(), out = {}, shells0 = g.field.items.length, open = () => { S.stun = 0; S.flash = 0; G.debug.set('tired', 30); T.idle(0.05); };
+  fresh(); open(); ramFrom(0); out.front = { hp: S.hp, lost: S.lost }; // the saw turns it
+  open(); ramFrom(Math.PI / 2); out.flank = { hp: S.hp, lost: S.lost, saw: G.rig.worn };
+  S.stun = 0; S.flash = 0; G.debug.set('idle'); S.cool = 99; T.idle(0.05); ramFrom(Math.PI / 2); out.wary = { hp: S.hp }; // not spent: its flank turns it too
+  open(); T.aroundPoint(G.pos.x, G.pos.y, G.pos.z, 0.4); g.run.safe = 1e9; let t = 0; while (!S.snapped && t < 12) { S.t = 30; g.sim(0.1, { ...none, coil: 1 }); t += 0.1; } out.snap = { snapped: S.snapped, hp: S.hp, saw: G.rig.worn, t: +t.toFixed(1) };
+  // raging: down its line, and round, and down it again
+  fresh({ stun: 0 }); let wheeled = false; go(14, { ...none, dir: { x: 0, y: 0, z: 1 } }, () => { wheeled = wheeled || S.state === 'wheel'; return wheeled && spent(); }); out.rage = { wheeled, chain: S.chain };
+  open(); ramFrom(Math.PI / 2); g.sim(0.5, none); const y = g.world.height(w.x, w.z) + 1; T.put(w.x - 1, y, w.z, 0); g.run.safe = 0; T.idle(0.2);
+  return { ...out, done: G.done, hp: S.hp, dropped: g.field.items.length - shells0, state: g.run.state }; });
+check('the Shearer’s saw turns a ram from ahead, and its flank turns one while it has its wits about it; spent, a ram in the flank takes a row of teeth, which shows on the saw; a body drawn round it snaps the saw, two rows more; then it rages, and comes back down its line; the last row gone, it is done, leaves a shell, and the rift opens',
+  s.front.hp === 4 && s.flank.hp === 3 && s.flank.saw === '1|false' && s.wary.hp === 3 && s.snap.snapped && s.snap.hp === 1 && s.snap.saw === '3|true' && s.rage.wheeled && s.done && s.hp === 0 && s.dropped === 1 && s.state === 'descend', JSON.stringify(s));
 await ev(() => { const g = window.__game, T = window.T; g.startRun(31); g.enterFloor(3, false); T.idle(0.5); const w = g.world.goal; T.put(w.x + 13, w.y + 3.2, w.z + 3, -1.4); g.cam.pitch = 0.42; g.cam.zoom = 0.9; g.snap(); T.idle(0.4); }); await snap(page, 'g-well');
 
 // 8f. two more kinds of trouble: spined drifters and leeches
@@ -419,12 +453,13 @@ const saw = await ev(() => { const g = window.__game, T = window.T; g.startRun(4
       if (S.state === 'charge') swung(); }
     for (let i = 0; i < 12; i++) { T.idle(0.04); swung(); } g.run.safe = 1e9; // the saw swings on a moment after the blow
     return { seen: seen.join('>'), mode: S.mode, stuck: S.stuck, lost: segs - g.run.segs, felt: +o.felt.toFixed(2), swing: +o.swing.toFixed(2), swipes: o.swipes, rose: +o.rose.toFixed(1), nose: +o.nose.toFixed(2), tail: +R.pose.pitch.toFixed(2), off: +(G.pos.y - Math.max(w.height(G.pos.x, G.pos.z), r.ledgeY)).toFixed(2), dark: +R.glow.toFixed(2), t: +t.toFixed(1) }; };
-  const slash = blow(3.2); g.run.segs = 14; g.buildFish(14); const pin = blow(0.5);
+  const A = g.SHEARER_FIGHT.aim, slide = A.slide; A.slide = 0; // (these two are about how its blows look: the fish lies still, so for them its line is kept from sliding off a still fish)
+  const slash = blow(3.2); g.run.segs = 14; g.buildFish(14); const pin = blow(0.5); A.slide = slide;
   G.debug.fall(); T.idle(2.5);
   return { search, slash, pin, down: +R.pose.roll.toFixed(2) }; });
 check('the Shearer sweeps its saw as it searches, tilted down, and lights its teeth when it feels a fish', saw.search.state === 'idle' && saw.search.sides && saw.search.sweep > 0.5 && saw.search.nod < -0.15 && Math.abs(saw.search.lean) > 0.03 && saw.search.glow < 0.6 && saw.slash.felt > 1.2 && /sense>aim>charge>tired/.test(saw.slash.seen), JSON.stringify(saw.search) + ' ' + saw.slash.seen);
-check('a tail up in the water gets the slash: the saw whipped from side to side on the way through, and the Shearer spent after it', saw.slash.mode === 'slash' && !saw.slash.stuck && saw.slash.swing > 0.6 && saw.slash.swipes >= 1 && saw.slash.lost >= 2 && saw.slash.dark < 0.4, JSON.stringify(saw.slash));
-check('a tail along the bed gets the stoop: it climbs over it, comes down nose first, and its saw sticks in the bed', saw.pin.mode === 'pin' && saw.pin.stuck && saw.pin.rose > 2.2 && saw.pin.nose > 0.6 && saw.pin.lost >= 2 && saw.pin.off > 1 && saw.pin.off < 2.4 && saw.pin.tail > 0.5 && saw.down > 2, JSON.stringify(saw.pin) + ' down ' + saw.down);
+check('a tail up in the water gets the slash: the saw whipped from side to side on the way through, and the Shearer spent after it', saw.slash.mode === 'slash' && !saw.slash.stuck && saw.slash.swing > 0.6 && saw.slash.swipes >= 1 && saw.slash.lost >= 1 && saw.slash.dark < 0.4, JSON.stringify(saw.slash));
+check('a tail along the bed gets the stoop: it climbs over it, comes down nose first, and its saw sticks in the bed', saw.pin.mode === 'pin' && saw.pin.stuck && saw.pin.rose > 2.2 && saw.pin.nose > 0.6 && saw.pin.lost >= 1 && saw.pin.off > 1 && saw.pin.off < 2.4 && saw.pin.tail > 0.5 && saw.down > 2, JSON.stringify(saw.pin) + ' down ' + saw.down);
 const cast = await ev(() => { const g = window.__game, m = g.music, quiet = { speed: 0, coil: 0, danger: 0, low: false, alive: true };
   const feed = (c, sec) => { for (let t = 0; t < sec; t += 0.1) m.update(0.1, { ...quiet, cast: c }); return m.state.sitting.join(); };
   const none = feed({}, 12), one = feed({ biter: 0.9 }, 4), many = feed({ biter: 0.9, angler: 0.8, hook: 0.7, drifter: 0.6, warden: 0.3 }, 6), names = (m.describe() || { sitting: [] }).sitting.join();

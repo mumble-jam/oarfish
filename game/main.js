@@ -11,7 +11,7 @@ import { createMusic } from './music.js';
 import { createPad, BTN } from './pad.js';
 import { createSum } from './boss.js';
 import { createSurface, SKY } from './surface.js';
-import { createGuard, KEEPER_FIGHT } from './guards.js';
+import { createGuard, KEEPER_FIGHT, SHEARER_FIGHT } from './guards.js';
 import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 
@@ -597,7 +597,11 @@ export async function start(saved = {}) {
       else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
       else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7);
       else if (kind === 'tear') { moment('kill'); pulse('grow'); run.freeze = Math.max(run.freeze, 0.1); cam.shake = Math.max(cam.shake, 0.5); }
-      else if (kind === 'rage') { cam.shake = Math.max(cam.shake, 0.7); say('keeper-rage', 'It is quicker now, and it digs. Watch the sand.', 6, 'warn'); }
+      else if (kind === 'rage') { cam.shake = Math.max(cam.shake, 0.7); if (guard?.kind === 'keeper') say('keeper-rage', 'It is quicker now, and it digs. Watch the sand.', 6, 'warn'); else say('shearer-rage', 'It is quicker now, and comes back down its line. Watch the silt.', 6, 'warn'); }
+      else if (kind === 'aimed') say('shearer-still', 'It feels the water you move. Hold still and its line slides off you.', 7);
+      else if (kind === 'sawturned') say('shearer-saw', 'Its saw turns a ram. Come at its side when it is spent, or when the saw is stuck.', 7);
+      else if (kind === 'tooth') { moment('kill'); pulse('grow'); run.freeze = Math.max(run.freeze, 0.08); cam.shake = Math.max(cam.shake, 0.4); }
+      else if (kind === 'snap') { cam.shake = Math.max(cam.shake, 0.6); moment('burst'); }
       else if (kind === 'down') {
         moment('kill'); pulse('grow'); run.kick = 1; world.react?.earn('guard'); feat('guard');
         const spare = run.pool.filter((t) => !run.shells.some((s) => s.type === t));
@@ -1911,7 +1915,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

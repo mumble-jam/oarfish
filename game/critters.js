@@ -223,7 +223,9 @@ export function keeperClaw(pal, c) {
 // underneath, and from the tail-root back a shark's two fins and uneven tail. The saw is a quarter of its length. Its teeth are lit
 // from within and take the district's colour: sawfish.js brightens them when it feels a fish. One model; it bends in its shader.
 export const SHEARER = { neck: 1.5, nose: 3.75, length: 6.9, teeth: 12 }; // neck: where the head turns on the body (z); nose: the saw's tip
-export function shearer(pal) {
+// wear: how the saw has fared in its fight. lost: rows of teeth knocked out, 0 to 4 (every fourth tooth is a row, so the saw goes gap-toothed, and a stump is left
+// where each was); snapped: the blade broken off short, ragged and dark at the break
+export function shearer(pal, { lost = 0, snapped = false } = {}) {
   const m = mesher(), { tone, back, flank, belly, saw: pale } = pal, shade = dim(tone, 0.8), dark = '#241833', mottle = '#4a375e';
   const secs = [[1.95, 0.3, 0.1, 0.08, -0.18], [1.55, 0.58, 0.26, 0.14, -0.12], [1.05, 0.8, 0.4, 0.17, -0.05], [0.35, 0.74, 0.5, 0.2, 0], [-0.45, 0.5, 0.46, 0.2, 0], [-1.25, 0.3, 0.33, 0.17, 0.02], [-1.95, 0.15, 0.2, 0.11, 0.04], [-2.45, 0.07, 0.11, 0.07, 0.06]];
   hull(m, secs, (i, k, n) => (k === 0 || k === n - 1 ? back : k === n / 2 - 1 || k === n / 2 ? belly : (i + k) % 3 === 0 ? mottle : flank), 8);
@@ -232,10 +234,13 @@ export function shearer(pal) {
     return y0 + (y1 - y0) * t - d + d * 0.293 * Math.min(1, Math.abs(x) / (0.707 * w)) - 0.012; };
   const mark = (x0, z0, x1, z1, wide, colour) => { const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, nx = (-dz / l) * wide, nz = (dx / l) * wide; m.quad([x0 - nx, under(x0 - nx, z0 - nz), z0 - nz], [x0 + nx, under(x0 + nx, z0 + nz), z0 + nz], [x1 + nx, under(x1 + nx, z1 + nz), z1 + nz], [x1 - nx, under(x1 - nx, z1 - nz), z1 - nz], colour); };
   // the saw: a flat blade, and a row of teeth down each edge
-  const base = ringZ(1.9, 0.29, 0.07, 0.07, -0.18, 4), tip = ringZ(SHEARER.nose, 0.14, 0.03, 0.03, -0.18, 4);
-  m.skin([base, tip], [pale, CREAM]).cap(tip, [0, 0, 1], pale);
+  const end = snapped ? 2.82 : SHEARER.nose, endW = snapped ? 0.215 : 0.14;
+  const base = ringZ(1.9, 0.29, 0.07, 0.07, -0.18, 4), tip = ringZ(end, endW, snapped ? 0.05 : 0.03, snapped ? 0.05 : 0.03, -0.18, 4);
+  m.skin([base, tip], [pale, CREAM]).cap(tip, [0, 0, 1], snapped ? dark : pale);
+  if (snapped) for (const [x, l] of [[-0.14, 0.2], [0.02, 0.11], [0.13, 0.26]]) m.limb([x, -0.18, end - 0.02], [x * 0.8, -0.18, end + l], 0.05, 0.004, 3, [pale, dark], true); // splinters, where it broke
   both((s) => {
-    for (let i = 0; i < SHEARER.teeth; i++) { const t = (i + 0.5) / SHEARER.teeth, z = 2.02 + t * (SHEARER.nose - 2.1), w = 0.285 - t * 0.14; m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.24 - t * 0.05), -0.18, z + 0.035], 0.045, 0.002, 3, [tone, shade], true); }
+    for (let i = 0; i < SHEARER.teeth; i++) { const t = (i + 0.5) / SHEARER.teeth, z = 2.02 + t * (SHEARER.nose - 2.1), w = 0.285 - t * 0.14, gone = (i + (s > 0 ? 0 : 2)) % 4 < lost; if (z > end - 0.05) continue; // (the two edges lose different teeth)
+      if (gone) m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.05), -0.18, z + 0.01], 0.04, 0.02, 3, [shade, dark], true); else m.limb([s * (w - 0.03), -0.18, z], [s * (w + 0.24 - t * 0.05), -0.18, z + 0.035], 0.045, 0.002, 3, [tone, shade], true); }
     m.fin([[s * 0.55, -0.1, 1.55], [s * 0.8, -0.1, 0.75], [s * 0.62, -0.1, -0.25]], [[s * 1.15, -0.14, 1.1], [s * 1.95, -0.24, 0.2], [s * 1.0, -0.16, -0.55]], [flank, back]); // the wings, grown onto the head
     m.fin([[s * 0.42, -0.18, -0.75], [s * 0.32, -0.16, -1.2]], [[s * 0.85, -0.28, -1.15], [s * 0.42, -0.2, -1.45]], flank);
     m.eye([s * 0.56, 0.3, 1.22], [s * 0.7, 0.7, 0.2], 0.12, { iris: pal.eye, glow: true, slit: true });

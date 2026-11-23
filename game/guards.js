@@ -1,7 +1,7 @@
 // The keeper of a rift. Each band's rift is kept by one creature, and the way down stays shut until it has
 // been dealt with. The four differ, and each is a place to use one of the fish's tools:
 //   band 1  the Keeper       armoured; a fight to be read, blow by blow          ram a leg while it is open, then ram it again or go round it; four legs
-//   band 2  the Shearer      charges the tail in a straight line, then tires     ram or wrap it while it is tired
+//   band 2  the Shearer      a fight of lines and stillness                       ram its flank while it is spent or stuck (a row of teeth each); wrap the saw to snap it
 //   band 3  the Lamplighter  hangs over the rift and lunges; takes a bait first  ram or wrap it while its lamp is out
 //   band 4  the Warden       an eel circling the mouth that tightens on a fish   ram its head, or bait the head out and wrap it
 // Any of them can be beaten by rams alone, so a short body is never stuck.
@@ -30,6 +30,23 @@ export const KEEPER_FIGHT = {
 };
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+// The Shearer's fight. Where the Keeper's is about where a body lies round it, this one is about lines, and about holding still.
+// It feels the water a fish moves. Winding up, its line (drawn on the water) follows a tail that is moving, and slides off one that is not: hold still and
+// it loses you, move and it has you again, until the line locks. Then it goes down the line, and the saw cuts where it crosses the body: everything behind
+// the cut is lost, up to `most`. So a body trailing along its line loses a tip, and one lying across it loses the most there is to lose.
+// Its saw turns a ram from ahead. From the side or behind, while it is spent, stuck, or in the middle of a blow, a ram takes a row of its teeth, which do not
+// come back (and each row gone, the saw reaches less); a body drawn round it while it is spent snaps the saw, once, which is two rows. `rows` gone and it is done;
+// at `rage` left it is quicker, flies low, raising silt, and comes back down its line a second and a third time.
+// It sticks its saw in the bed when it stoops, and in a column it is led into; a shed tail it stoops on at once. Near its head it swipes, twice, for one each.
+export const SHEARER_FIGHT = {
+  rows: 4, rage: 2, haste: 0.8, still: 0.6, // still: a tail slower than this, in metres a second, it cannot feel
+  aim: { slash: 0.9, pin: 1.1, lock: 0.7, slide: 2.4, most: 3.5 }, // lock: the part of the wind-up it can still follow for; slide: how fast its line leaves a still fish, and how far
+  cut: { speed: [10.5, 12.5], reach: 0.85, less: 0.1, most: 5 },
+  swipe: { near: 3.0, tell: 0.45, time: 0.5, reach: 3.4, cost: 1, every: 4.5, rest: 1.1 },
+  tired: { slash: 2.2, pin: 2.6, stone: 2.8, bait: 3.2 }, chain: 2, wheel: 0.7,
+  bait: 10, front: 1.0, stun: 1.5, snap: 2, // front: how far round from dead ahead, in radians, the saw still turns a ram
+};
+
 export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const kind = KINDS[floor], tint = paintOf(floor);
   const rand = rng(seed * 61 + floor * 311 + 7), rr = (a, b) => a + (b - a) * rand();
@@ -48,7 +65,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const lid = new THREE.Mesh(keep(rift.veil()), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   lid.frustumCulled = false; root.add(lid);
   // what it has left, as beads over its back
-  const F = KEEPER_FIGHT, HP = { keeper: F.legs, shearer: 3, lamplighter: 3, warden: 4 }[kind];
+  const F = KEEPER_FIGHT, Z = SHEARER_FIGHT, HP = { keeper: F.legs, shearer: Z.rows, lamplighter: 3, warden: 4 }[kind];
   const beadGeo = keep(new THREE.SphereGeometry(0.16, 6, 5)), beadMat = keep(new THREE.MeshBasicMaterial({ color: '#f2faf7', fog: false }));
   const beads = Array.from({ length: HP }, () => { const b = new THREE.Mesh(beadGeo, beadMat); root.add(b); return b; });
   // the warden's body
@@ -77,9 +94,14 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (S.hp <= 0) fall();
   }
   if (kind === 'keeper') Object.assign(S, { leg: new Array(8).fill(0), legT: new Array(8).fill(0), lost: 0, open: false, sink: 0, jabT: 0, chargeT: 4, digT: 0, once: false, dir: 0, last: '', jabbed: 0, wrapLeg: -1, puffT: 0 }); // leg: 0 sound, 1 numb, 2 gone
-  const mark = kind === 'keeper' ? sprite('#ffe2a8', 1) : null, fallen = [], hip = new THREE.Vector3(), near = new THREE.Vector3(); // mark: where a blow that is on its way will land
-  const vulnerable = () => !S.done && (kind === 'warden' || S.state === 'tired' || S.state === 'dim' || (kind === 'shearer' && (S.state === 'aim' || S.state === 'charge')));
-  const wrappable = () => !S.done && (S.state === 'tired' || S.state === 'dim' || S.state === 'feed' || S.stun > 0);
+  if (kind === 'shearer') Object.assign(S, { lost: 0, snapped: false, chain: 0, swipeT: 3, baited: false, slid: 0, locked: false, cut: 0, puffT: 0, hit2: 0 });
+  // the Shearer's line: where it means to go, laid on the water while it winds up
+  const line = kind === 'shearer' ? new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)), keep(new THREE.MeshBasicMaterial({ color: '#ffc2cf', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }))) : null;
+  if (line) { line.rotation.order = 'YXZ'; line.frustumCulled = false; root.add(line); }
+  const tailWas = new THREE.Vector3(), tailV = new THREE.Vector3(), sawP = new THREE.Vector3();
+  const mark = kind === 'keeper' || kind === 'shearer' ? sprite('#ffe2a8', 1) : null, fallen = [], hip = new THREE.Vector3(), near = new THREE.Vector3(); // mark: where a blow that is on its way will land
+  const vulnerable = () => !S.done && (kind === 'warden' || S.state === 'tired' || S.state === 'dim');
+  const wrappable = () => !S.done && !(kind === 'shearer' && S.snapped) && (S.state === 'tired' || S.state === 'dim' || S.state === 'feed' || S.stun > 0);
   // a dash that reaches it
   // The Keeper's legs. Which one a point is at (the leg from a quarter of the way down it to the foot: nearer the hip than that is shell), and what a blow does to one.
   // (Seen from above, as the dive is: a leg arches up from the shell and down to its foot, and a fish that cannot get lower than a metre and a half off the bed still reaches it.)
@@ -102,13 +124,28 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     for (let b = 0; b < power && !S.done && S.leg[i] !== 2; b++) { if (S.leg[i] === 0) numb(i); else tear(i, false); }
     return { kind: 'guard', pos: pos.clone(), food: 0 };
   }
+  // The Shearer's teeth. A row gone: it shows on the saw, the saw reaches less, and at `rage` left the fight changes
+  const wear = () => { rig.wear?.(Math.min(S.lost, Z.rows), S.snapped); };
+  function tooth(n, stun) { for (let i = 0; i < n && S.hp > 0; i++) { S.hp--; S.lost++; S.hits++; } S.flash = 1; S.stun = stun; S.chain = 0; wear(); set('tired', Math.max(stun, 1.6)); vel.multiplyScalar(0.2);
+    game.event('hit', pos); game.event('tooth', pos); if (S.hp <= 0) fall(); else if (S.hp <= Z.rage && S.hp + n > Z.rage) game.event('rage', pos); }
+  function ramShearer(snout, power) {
+    if (S.done) return null;
+    sawP.set(pos.x + Math.sin(yaw) * 2.2, pos.y, pos.z + Math.cos(yaw) * 2.2);
+    if (snout.distanceTo(pos) > 1.7 && snout.distanceTo(sawP) > 1.4) return null;
+    if (S.stun > 0.3 && S.flash > 0.2) return null; // one ram, one blow
+    const ahead = Math.abs(wrapPi(Math.atan2(snout.x - pos.x, snout.z - pos.z) - yaw)) < Z.front, st = S.state;
+    if (ahead || !(st === 'tired' || S.stun > 0 || st === 'aim' || st === 'charge' || st === 'cock' || st === 'swipe')) { // the saw, or a flank it has its wits about
+      S.flash = 0.5; game.event('clang', pos); if (ahead) game.event('sawturned', pos); return { kind: 'guard', pos: pos.clone(), food: 0, bounced: true }; }
+    tooth(power, Z.stun);
+    return { kind: 'guard', pos: pos.clone(), food: 0 };
+  }
   function ram(snout, power = 1) { // power: how many blows this one counts for
     if (kind === 'keeper') return ramKeeper(snout, power);
+    if (kind === 'shearer') return ramShearer(snout, power);
     if (S.done || snout.distanceTo(pos) > { keeper: 2.1, shearer: 1.5, lamplighter: 1.9, warden: 1.3 }[kind]) return null;
     if (S.stun > 0.3 && S.flash > 0.2) return null; // one ram, one blow
     if (!vulnerable()) { S.stun = 0.4; S.flash = 0.5; game.event('clang', pos); return { kind: 'guard', pos: pos.clone(), food: 0, bounced: true }; } // lit, the Lamplighter shrugs it off
     if (kind === 'warden') S.spin *= -1;
-    if (kind === 'shearer') set('tired', 2.2);
     for (let i = 0; i < power && !S.done; i++) hurt({ keeper: 1.6, shearer: 1.5, lamplighter: 1.2, warden: 1.3 }[kind]);
     return { kind: 'guard', pos: pos.clone(), food: 0 };
   }
@@ -138,6 +175,9 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const turnTo = (dt, a, rate) => { yaw += clamp(wrapPi(a - yaw), -rate * dt, rate * dt); };
   const struckAt = (ctx, test) => { const J = ctx.joints; for (let j = J.length - 1; j >= 0; j--) if (test(J[j])) return j; return -1; }; // whatever part of the body is in a blow's way: the part nearest the tail
   const silt = (at, n, push = 1.6) => { if (world.puff) for (let i = 0; i < n; i++) { const a = rand() * 6.28, r = 0.3 + rand() * 0.9; world.puff(at.x + Math.sin(a) * r, world.height(at.x, at.z) + 0.15, at.z + Math.cos(a) * r, Math.sin(a) * push, 0.5 + rand() * 0.9, Math.cos(a) * push, 0.3 + rand() * 0.35, 1 + rand()); } };
+  const lineTo = (to, locked) => { v2.subVectors(to, pos); const d = v2.length() || 1, far = d + 5; v2.multiplyScalar(1 / d); // from the Shearer, through where it is aimed, and on
+    line.visible = true; line.material.opacity = locked ? 0.75 : 0.32; line.scale.set(locked ? 0.5 : 0.3, 1, far);
+    line.rotation.set(-Math.asin(clamp(v2.y, -1, 1)), Math.atan2(v2.x, v2.z), 0); line.position.copy(pos).addScaledVector(v2, far / 2); line.position.y -= 0.25; };
   const markAt = (at, size) => { mark.visible = true; mark.position.set(at.x, world.height(at.x, at.z) + 0.25, at.z); mark.scale.setScalar(size); };
   const watch = { p: new THREE.Vector3(), t: 0, lift: 0, side: 0, dodge: 0 }, UP = new THREE.Vector3(0, 1, 0); // the last resort: if it is getting nowhere, the Shearer rises until it is, and the Keeper turns aside
 
@@ -149,6 +189,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     const fish = ctx.pos, far = Math.hypot(fish.x - W.x, fish.z - W.z), awake = ctx.playing && far < 26;
     let warnSize = 0;
     if (mark) mark.visible = false;
+    if (line) line.visible = false;
     if (kind === 'keeper') for (let i = 0; i < 8; i++) if (S.leg[i] === 1 && !(S.wrapLeg === i && target.progress > 0.15) && (S.legT[i] -= dt) <= 0) S.leg[i] = 0; // a numb leg comes back, unless a body is going round it
     if (S.done) { pos.y = Math.max(world.height(pos.x, pos.z) + 0.5, kind === 'shearer' ? world.topNear(pos.x, pos.z, 0.9) + 0.4 : -1e9, pos.y - 1.6 * dt); if (!rig) mesh.rotation.z = damp(mesh.rotation.z, 1.3, 3, dt); }
     else if (S.stun > 0) { S.stun -= dt; vel.multiplyScalar(Math.exp(-4 * dt)); pos.addScaledVector(vel, dt); }
@@ -240,36 +281,69 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         yaw += wrapPi(face - yaw) * (1 - Math.exp(-2.4 * dt));
         if (engaged && S.cool <= 0) set('stalk');
       }
-    } else if (kind === 'shearer') { // it sweeps its saw over the rift and feels a fish that comes near. Then it strikes where the tail was: a slash through it if it is up in the water, a stoop onto it if it lies along the bed
-      const J = ctx.joints, tail = J[J.length - 1], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the veil it keeps
+    } else if (kind === 'shearer') { // it sweeps its saw over the rift and feels a fish that comes near; then the fight (SHEARER_FIGHT)
+      const J = ctx.joints, N = J.length - 1, tail = J[N], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the veil it keeps
+      const raging = S.hp <= Z.rage, q = raging ? Z.haste : 1, k = S.T > 0 ? clamp(1 - S.t / S.T, 0, 1) : 0, fx = Math.sin(yaw), fz = Math.cos(yaw);
+      const tailSpeed = dt > 1e-5 ? Math.min(tail.distanceTo(tailWas) / dt, 20) : 0, moving = tailSpeed > Z.still;
+      if (dt > 1e-5) { v.subVectors(tail, tailWas).multiplyScalar(1 / dt); if (v.length() > 8) v.setLength(8); tailV.lerp(v, 1 - Math.exp(-6 * dt)); } tailWas.copy(tail); // which way the tail is going, and how fast: it aims ahead of it
+      const sawOut = S.snapped ? 1.5 : 2.6, reach = Z.cut.reach - Z.cut.less * S.lost;
+      S.swipeT -= dt;
+      const spent = (secs, stuck = false) => { set('tired', secs * q); S.stuck = stuck; S.chain = 0; S.baited = false; };
+      const strike = (at, pin) => { aim.copy(at); S.mode = pin ? 'pin' : 'slash'; S.side = rand() < 0.5 ? 1 : -1; S.slid = 0; S.locked = false; set('aim', (pin ? Z.aim.pin : Z.aim.slash) * q); };
+      // a shed tail: it stoops on that, whatever it was about
+      if (!S.baited && (S.state === 'idle' || S.state === 'sense' || (S.state === 'aim' && !S.locked)) && S.cool <= 0 && (bait = baitNear(ctx, Z.bait))) { strike(bait.pos, true); S.baited = true; }
+      if (S.baited && bait && !bait.dead) { bait.life = Math.max(bait.life, 0.9); if (!S.locked) aim.copy(bait.pos); }
       if (S.state === 'sense') { // something is there: it slows, and the saw swings round to it
         vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); struck(); yaw += wrapPi(Math.atan2(fish.x - pos.x, fish.z - pos.z) - yaw) * (1 - Math.exp(-3 * dt));
-        if (S.t <= 0) {
-          if (!awake || pos.distanceTo(fish) > 24) set('idle');
-          else { aim.copy(tail); S.mode = tail.y - floor(tail) < 1.5 ? 'pin' : 'slash'; S.side = rand() < 0.5 ? 1 : -1; set('aim', S.mode === 'pin' ? 1.1 : 0.8); }
-        }
+        if (S.t <= 0) { if (!awake || pos.distanceTo(fish) > 24) set('idle'); else { strike(tail, tail.y - floor(tail) < 1.5); game.event('aimed', pos); } }
       }
-      else if (S.state === 'aim') {
-        warnSize = 2.8; S.danger = 0.7; yaw += wrapPi(Math.atan2(aim.x - pos.x, aim.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt));
+      else if (S.state === 'aim') { // winding up. Its line follows a tail it can feel moving and slides off one it cannot, until it locks
+        warnSize = 2.8; S.danger = 0.7;
+        if (!S.locked && k >= Z.aim.lock) S.locked = true;
+        if (!S.locked && !S.baited) {
+          if (moving) { const lead = Math.min(1.3, Math.max(S.t, 0) + pos.distanceTo(tail) / Z.cut.speed[raging ? 1 : 0]); v.copy(tail).addScaledVector(tailV, lead); aim.lerp(v, 1 - Math.exp(-9 * dt)); S.slid = 0; } // where the tail will be when the saw gets there, if it goes on as it is going
+          else if (S.slid < Z.aim.most) { v.set(aim.x - pos.x, 0, aim.z - pos.z).normalize(); const d = Z.aim.slide * dt; aim.x += -v.z * S.side * d; aim.z += v.x * S.side * d; S.slid += d; }
+        }
+        yaw += wrapPi(Math.atan2(aim.x - pos.x, aim.z - pos.z) - yaw) * (1 - Math.exp(-9 * dt));
         if (S.mode === 'pin') { // up over the tail and a little short of it, nose down, the point of the saw hanging over it
           v.set(aim.x - pos.x, 0, aim.z - pos.z); const d = v.length() || 1; v.multiplyScalar(Math.max(0, d - 2.4) / d).add(pos).setY(aim.y + 6);
           v.sub(pos); const off = v.length(); vel.lerp(off > 1e-3 ? v.multiplyScalar(Math.min(9, off * 4) / off) : v, 1 - Math.exp(-6 * dt)); pos.addScaledVector(vel, dt); struck();
-        } else { vel.multiplyScalar(Math.exp(-5 * dt)); pos.y += clamp(aim.y - pos.y, -8 * dt, 8 * dt); } // level with the tail, from however high it had gone to clear something: the slash goes through it flat
-        if (S.t <= 0) { vel.subVectors(aim, pos).setLength(10.5); set('charge', S.mode === 'pin' ? pos.distanceTo(aim) / 10.5 + 0.15 : Math.min(1.5, pos.distanceTo(aim) / 10.5 + 0.35)); }
+          markAt(aim, 1.6 + (S.locked ? 1 : 0));
+        } else { vel.multiplyScalar(Math.exp(-5 * dt)); pos.y += clamp(aim.y - pos.y, -8 * dt, 8 * dt); lineTo(aim, S.locked); } // level with the tail, from however high it had gone to clear something: the slash goes through it flat
+        if (S.t <= 0) { const sp = Z.cut.speed[raging ? 1 : 0]; vel.subVectors(aim, pos).setLength(sp); set('charge', S.mode === 'pin' ? pos.distanceTo(aim) / sp + 0.15 : Math.min(1.5, pos.distanceTo(aim) / sp + 0.35)); S.cut = 0; }
       }
-      else if (S.state === 'charge') {
+      else if (S.state === 'charge') { // down the line. The saw cuts where it crosses the body, and what is behind the cut is gone
         S.danger = 1; pos.addScaledVector(vel, dt);
-        if (world.inStone(pos, 0.7, 1.6)) { struck(); vel.set(0, 0, 0); S.stuck = false; set('tired', 2.4); game.event('clang', pos); } // it has run onto a column or a rock (not a kerb: it stoops past those): that stops it, and it is spent
-        const j = sawNear(ctx, 0.85), hit = S.state === 'charge' && j >= 0 && game.bite(3, j, pos); v.copy(vel).setLength(3.3).add(pos); const down = S.mode === 'pin' && v.y <= floor(v) + 0.1; // v: the point of the saw
-        if (hit) S.bites++;
-        if (S.state === 'charge' && (S.mode === 'pin' ? down || S.t <= -0.6 : hit || S.t <= 0)) { // a slash stops on what it hits, or runs out; a stoop goes on down until the saw is in the bed
-          if (S.mode === 'pin') { vel.set(0, 0, 0); set('tired', 2.6); S.stuck = true; } else set('tired', 2.2);
+        let stone = false; if (world.inStone(pos, 0.7, 1.6)) { struck(); vel.set(0, 0, 0); stone = true; game.event('clang', pos); spent(Z.tired.stone, 'stone'); } // it has run onto a column or a rock (not a kerb: it stoops past those): the saw is in it
+        v.copy(vel).setLength(sawOut).add(pos); let hit = false;
+        if (!stone && !S.cut) for (let j = 0; j <= N && !hit; j++) if (J[j].distanceTo(v) < reach || J[j].distanceTo(pos) < reach) { const n = clamp(N - j, 1, Z.cut.most); if (game.bite(n, j, pos)) { hit = true; S.bites++; S.cut = n; } }
+        if (raging && S.mode !== 'pin' && pos.y - floor(pos) < 3.2 && (S.puffT -= dt) <= 0) { S.puffT = 0.05; silt(pos, 1, 1.2); } // low over the bed, it raises the silt
+        v.copy(vel).setLength(sawOut + 0.7).add(pos); const down = S.mode === 'pin' && v.y <= floor(v) + 0.1; // v: the point of the saw
+        if (S.state === 'charge' && (S.mode === 'pin' ? down || S.t <= -0.6 : S.t <= 0)) { // a slash runs its line out; a stoop goes on down until the saw is in the bed
+          if (S.mode === 'pin') { vel.set(0, 0, 0); if (S.baited && bait) bait.life = 0.2; const baited = S.baited; bait = null; spent(baited ? Z.tired.bait : Z.tired.pin, true); }
+          else if (raging && S.chain < Z.chain) { S.chain++; set('wheel', Z.wheel); } // and round, and back down it
+          else spent(Z.tired.slash);
         }
+      }
+      else if (S.state === 'wheel') { // it comes about
+        S.danger = 0.6; warnSize = 2; vel.multiplyScalar(Math.exp(-3.5 * dt)); pos.addScaledVector(vel, dt); struck(); yaw += wrapPi(Math.atan2(tail.x - pos.x, tail.z - pos.z) - yaw) * (1 - Math.exp(-7 * dt));
+        if (S.t <= 0) { strike(tail, false); S.t = S.T = Z.aim.slash * q * 0.75; }
+      }
+      else if (S.state === 'cock') { // a body by its head: the saw goes back to one side
+        warnSize = 2; S.danger = 0.6; vel.multiplyScalar(Math.exp(-4 * dt)); pos.addScaledVector(vel, dt); struck();
+        if (S.t <= 0) { set('swipe', Z.swipe.time); S.hit2 = 0; }
+      }
+      else if (S.state === 'swipe') { // and across, and back: one for each that lands
+        S.danger = 1;
+        if ((S.hit2 === 0 && k > 0.2) || (S.hit2 === 1 && k > 0.7)) { S.hit2++;
+          const j = struckAt(ctx, (p) => { const dx = p.x - pos.x, dz = p.z - pos.z; return Math.hypot(dx, dz) < Z.swipe.reach - (S.snapped ? 1 : 0) && Math.abs(p.y - pos.y) < 1.3 && Math.abs(wrapPi(Math.atan2(dx, dz) - yaw)) < 1.25; });
+          if (j >= 0 && game.bite(Z.swipe.cost, j, pos)) S.bites++; }
+        if (S.t <= 0) { spent(Z.swipe.rest); S.swipeT = Z.swipe.every; }
       }
       else if (S.state === 'tired') { // spent, it coasts and sinks; stuck, it stays where its saw is
         if (!S.stuck) { vel.multiplyScalar(Math.exp(-2.5 * dt)); pos.addScaledVector(vel, dt); const rest = over(0.9) + 0.7, sunk = pos.y - 0.5 * dt; pos.y = Math.max(floor(pos) + 0.8, pos.y >= rest ? Math.max(sunk, rest) : sunk); struck(); } // over something, it sinks no lower than its top; beside it, it is kept out of it
-        else pos.y = damp(pos.y, floor(pos) + 1.7, 8, dt); // its tail in the air, its saw in the bed
-        if (S.t <= 0) { set('idle'); S.cool = 1.2; }
+        else if (S.stuck !== 'stone') pos.y = damp(pos.y, floor(pos) + 1.7, 8, dt); // its tail in the air, its saw in the bed
+        if (S.t <= 0) { set('idle'); S.cool = 1.2 * q; }
       }
       else {
         S.ang += dt * 0.3; aim.set(W.x + Math.sin(S.ang) * HOME[0], Y0 + HOME[1] + 0.35 * Math.sin(ctx.time * 0.5), W.z + Math.cos(S.ang) * HOME[0]);
@@ -279,7 +353,11 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         go(dt, aim, 3.2, 2.5); if (pos.y < clear) pos.y = Math.min(clear, pos.y + 7 * dt);
         struck();
         const stir = dt > 1e-5 ? Math.min(fish.distanceTo(fishWas) / dt, 12) : 0; // it feels the water a fish moves: a still one has to come nearer
-        if (awake && S.cool <= 0 && pos.distanceTo(fish) < 12 + 8 * clamp(stir / 9, 0, 1)) set('sense', 0.6);
+        if (awake && S.cool <= 0) {
+          sawP.set(pos.x + fx * 2.2, pos.y, pos.z + fz * 2.2); let by = -1; if (S.swipeT <= 0) for (let j = 0; j <= N && by < 0; j++) if (J[j].distanceTo(sawP) < Z.swipe.near) by = j; // a body right by its head gets the flat of the saw
+          if (by >= 0) { S.side = wrapPi(Math.atan2(J[by].x - pos.x, J[by].z - pos.z) - yaw) >= 0 ? 1 : -1; set('cock', Z.swipe.tell * q); }
+          else if (pos.distanceTo(fish) < 12 + 8 * clamp(stir / 9, 0, 1)) set('sense', 0.6 * q);
+        }
       }
       fishWas.copy(fish);
     } else if (kind === 'lamplighter') { // over the mouth; it lunges at a tail, but takes a bait first, and a mouthful puts its lamp out
@@ -323,8 +401,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       for (const m of fallen) { m.position.x += T * Math.round((ctx.focus.x - m.position.x) / T); m.position.z += T * Math.round((ctx.focus.z - m.position.z) / T); const low = world.height(m.position.x, m.position.z) + 0.14; if (m.position.y > low) { m.position.y = Math.max(low, m.position.y - 2.4 * dt); m.rotation.x += 0.9 * dt; } } // a leg that has come off sinks to the bed and lies there
       was.copy(pos);
     } else if (rig) { // the Shearer bends its own body (sawfish.js): it is told where it is, how it is moving and what it is about
-      const k = dt > 1e-5 && pos.distanceTo(was) < 5 ? 1 / dt : 0, mood = S.done ? 'down' : S.stun > 0 ? 'stun' : S.state === 'tired' ? (S.stuck ? 'stuck' : 'tired') : S.state === 'idle' ? 'search' : S.state;
-      rig.update(dt, { x: pos.x, y: pos.y, z: pos.z, yaw, speed: Math.hypot(pos.x - was.x, pos.z - was.z) * k, climb: (pos.y - was.y) * k, mood, mode: S.mode, side: S.side, k: S.T > 0 ? 1 - S.t / S.T : 0, look: fish, time: ctx.time });
+      const k = dt > 1e-5 && pos.distanceTo(was) < 5 ? 1 / dt : 0, mood = S.done ? 'down' : S.stun > 0 ? 'stun' : S.state === 'tired' ? (S.stuck === 'stone' ? 'jammed' : S.stuck ? 'stuck' : 'tired') : S.state === 'idle' ? 'search' : S.state === 'wheel' ? 'sense' : S.state === 'cock' ? 'aim' : S.state;
+      rig.update(dt, { x: pos.x, y: pos.y, z: pos.z, yaw, speed: Math.hypot(pos.x - was.x, pos.z - was.z) * k, climb: (pos.y - was.y) * k, mood, mode: S.state === 'cock' ? 'slash' : S.mode, side: S.side, k: S.T > 0 ? 1 - S.t / S.T : 0, look: fish, time: ctx.time });
       was.copy(pos);
     } else {
       mesh.position.copy(pos); mesh.rotation.y = yaw; actor.tick(S.done ? dt * 0.27 : dt, S.done ? 0 : vel.length());
@@ -343,7 +421,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
       if (wi !== S.wrapLeg) target.progress = 0; S.wrapLeg = wi;
       if (wi >= 0) { const f = rig.walker.legs[wi].foot; target.x = f.x; target.y = pos.y + 0.4; target.z = f.z; target.can = canWrap(ctx.total, target.room); S.wrap = target; }
     }
-    else if (wrappable() && ctx.playing) { target.x = pos.x; target.y = pos.y; target.z = pos.z; target.can = canWrap(ctx.total, target.room); S.wrap = target; } else target.progress = 0;
+    else if (wrappable() && ctx.playing) { const out = kind === 'shearer' && S.stuck ? 1.9 : 0; target.x = pos.x + Math.sin(yaw) * out; target.y = pos.y; target.z = pos.z + Math.cos(yaw) * out; // (the Shearer's saw, when that is what is stuck)
+      target.can = canWrap(ctx.total, target.room); S.wrap = target; } else target.progress = 0;
   }
   // while the keeper lives the veil holds: the ledges can be swum over, but nothing goes down between the walls
   function pushOut(p, radius) {
@@ -352,6 +431,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (p.y < top && rift.in(p.x, p.z) > rift.ledge - 0.3) p.y = top;
   }
   function dispose() { scene.remove(root); for (const o of trash) o.dispose(); }
-  const wrapped = () => { if (kind !== 'keeper') return fall(); if (S.wrapLeg >= 0 && S.leg[S.wrapLeg] === 1) tear(S.wrapLeg, true); target.progress = 0; }; // round the Keeper's numb leg, it comes off; round any of the others, they are held
-  return { update, ram, pushOut, dispose, wrapped, state: S, kind, pos, rig, mesh, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legNear, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; set('charge', 1.4); } } }; // (debug.charge: for the checks, a slash at a point)
+  const wrapped = () => { if (kind === 'shearer') { S.snapped = true; target.progress = 0; game.event('snap', pos); return tooth(Z.snap, 2.6); } // the saw goes, and two rows with it
+    if (kind !== 'keeper') return fall(); if (S.wrapLeg >= 0 && S.leg[S.wrapLeg] === 1) tear(S.wrapLeg, true); target.progress = 0; }; // round the Keeper's numb leg, it comes off; round any of the others, they are held
+  return { update, ram, pushOut, dispose, wrapped, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, debug: { set, fall, hurt, numb, tear, legNear, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
 }
