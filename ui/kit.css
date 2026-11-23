@@ -1,0 +1,32 @@
+/* The kit's own styles. None of this is the game's, and none of it goes back into the game: the game's styles are menus.css. */
+
+/* ---- inside the stage ---- */
+/* the still that stands where the game draws its picture. It is a <canvas> so that every rule the game writes for its canvas
+   (and every rule that says "everything but the canvas") falls on it as it does in the game. */
+#still { background: var(--abyss) center / cover no-repeat; }
+
+/* A touch screen, stood in for. The game shows its touch layout through `@media (hover: none), (pointer: coarse)` (menus.css,
+   near the end), which a desktop browser cannot be talked into. With Touch set in the bar the same three rules are applied here
+   by hand. IF YOU CHANGE THAT BLOCK IN menus.css, CHANGE THIS COPY OF IT TOO. */
+html.kit-touch .depth { display: flex; }
+html.kit-touch .top .icon { width: 44px; height: 44px; }
+html.kit-touch #pause .mouse { display: none; }
+
+/* For pictures (?hold=1), and for the two flashes, which are over in half a second: nothing moves, fades or throbs. */
+html.kit-hold *, html.kit-hold *::before, html.kit-hold *::after { animation-play-state: paused !important; transition: none !important; caret-color: transparent !important; }
+
+/* ---- round the stage: the switcher bar and the frame the stage is shown in ---- */
+html.kit-shell, html.kit-shell body { height: 100%; }
+html.kit-shell body { margin: 0; overflow: hidden; background: #22262b; color: #dfe4e8; font: 12px/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+html.kit-shell #stage { display: none; }
+#kit-bar { position: fixed; z-index: 2; inset: 0 0 auto 0; height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 14px; background: #101214; border-bottom: 2px dashed #ffd400; white-space: nowrap; overflow-x: auto; }
+#kit-bar b { color: #101214; background: #ffd400; padding: 2px 6px; letter-spacing: 0.1em; }
+#kit-bar span, #kit-bar i { color: #8d98a1; font-style: normal; }
+#kit-bar label { display: flex; align-items: center; gap: 6px; color: #b9c2c9; }
+#kit-bar select { font: inherit; color: #f2f5f7; background: #2b3036; border: 1px solid #4a525b; border-radius: 3px; padding: 4px 6px; max-width: 250px; cursor: pointer; accent-color: auto; backdrop-filter: none; }
+#kit-bar a { color: #ffd400; }
+#kit-bar kbd { font: inherit; min-width: 0; padding: 1px 6px; border-radius: 3px; background: #2b3036; border: 1px solid #4a525b; color: #f2f5f7; }
+#kit-desk { position: fixed; inset: 44px 0 0 0; display: grid; place-items: center; overflow: hidden; background: repeating-conic-gradient(#272b30 0 25%, #22262b 0 50%) 0 0 / 24px 24px; }
+#kit-frame { display: block; border: 0; flex: none; background: #000; transform-origin: 50% 50%; box-shadow: 0 0 0 1px #4a525b, 0 12px 40px rgba(0, 0, 0, 0.5); }
+html.kit-nobar #kit-bar { display: none; }
+html.kit-nobar #kit-desk { inset: 0; }

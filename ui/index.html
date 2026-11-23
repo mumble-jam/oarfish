@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oarfish dive: the menus, without the game</title>
+<!-- Today's menus of Oarfish dive, standing on their own over stills from the game. Read README.md in this folder first.
+     Everything inside #stage below is the game's own markup, copied from index.html (lines 331 to 492) with one line added:
+     the <canvas id="still">, which stands where the game puts its picture. Keep the ids and class names: game/main.js finds
+     its elements by them, and they are how a change made here is carried back.
+     menus.css   the game's styles, copied whole (index.html, lines 26 to 327)
+     menus.js    stands in for game/main.js and game/library.js: fills in what they write into the page, and answers clicks
+     kit.css, kit.js   the kit's own: the switcher bar and the states. Not part of the design.
+     game-data.js, bg/stills.js   written by tools/shot_ui.mjs from the running game: its words and lists, and what the plate said at each still. -->
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="menus.css">
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="still" aria-hidden="true"></canvas>
+  <div class="plate"></div>
+  <div id="pulse"></div>
+  <p class="lettering book">Règne Animal.</p>
+  <p class="lettering class">Poissons.</p>
+  <div class="lettering where" aria-live="polite">
+    <b id="zone">The sunlight zone</b>
+    <span id="zone-depth">40 m down</span>
+  </div>
+  <div id="card"><b id="card-name"></b><span id="card-depth"></span></div>
+  <div id="library" hidden>
+    <header><div><b>Specimen library</b><span>Every creature of the dive, built here exactly as the game builds it.</span></div><button type="button" class="main" id="lib-close">Back to the menu</button></header>
+    <nav id="lib-list" aria-label="Specimens"></nav>
+    <div id="lib-stage" title="Drag to turn, scroll to zoom"></div>
+    <aside id="lib-panel">
+      <h2 id="lib-name"></h2>
+      <p id="lib-role"></p>
+      <p id="lib-about"></p>
+      <p class="fact"><span id="lib-where"></span> · <span id="lib-tris"></span></p>
+      <button type="button" id="lib-hear" hidden>Hear its instrument</button>
+      <div class="cap">Playground</div>
+      <div id="lib-play"></div>
+      <div class="cap">Component</div>
+      <div id="lib-palette"></div>
+      <div class="row"><button type="button" id="lib-reset">Reset this one</button><button type="button" id="lib-all">Reset all</button></div>
+      <button type="button" id="lib-copy">Copy changes for Claude</button>
+      <textarea id="lib-text" hidden readonly rows="4" aria-label="The changes, as text"></textarea>
+      <p id="lib-note" aria-live="polite"></p>
+    </aside>
+  </div>
+  <div id="prompt"></div>
+  <div id="toast" role="status" aria-live="polite"><i class="mark"></i><div class="txt"><em id="toast-kick"></em><b id="toast-title"></b><span id="hint"></span></div><i class="time"></i></div>
+  <svg id="stamina" viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="13"/><circle class="fg" id="stamina-arc" cx="18" cy="18" r="13" pathLength="100"/></svg>
+  <div id="goal"><div class="in"><i id="goal-arrow"></i><span id="goal-label">the rift</span></div></div>
+
+  <div class="lettering foot">
+    <h1 class="caption"><b>Le Gymnètre Épée.</b><i>(Gymnetrus gladius)</i></h1>
+    <div class="scale" id="scale" role="img" aria-label="Body length">
+      <div class="ruler"><span id="scale-shells"></span><i id="scale-bar"></i><i id="scale-food"></i><i id="scale-toll"></i></div>
+      <span id="len">3.6 m</span>
+    </div>
+  </div>
+
+  <ul class="keys" id="keys" aria-label="Controls"></ul>
+
+  <div class="depth" role="group" aria-label="Depth and tail">
+    <button type="button" id="btn-rise">Rise</button>
+    <button type="button" id="btn-dive">Dive</button>
+    <button type="button" id="btn-shed">Shed</button>
+    <button type="button" id="btn-dash">Dash</button>
+  </div>
+  <div class="tools" role="group" aria-label="Show">
+    <button type="button" id="show-wire" aria-pressed="false">Wireframe</button>
+    <button type="button" id="show-bones" aria-pressed="false">Skeleton</button>
+  </div>
+
+  <div class="top">
+    <button type="button" id="btn-skip" hidden>Skip tutorial</button>
+    <button type="button" class="icon" id="btn-pause" aria-pressed="false" aria-label="Pause" title="Pause (P)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2.5" width="3.4" height="11" rx="0.8"/><rect x="9.6" y="2.5" width="3.4" height="11" rx="0.8"/></svg></button>
+    <button type="button" class="icon" id="btn-fs" aria-pressed="false" aria-label="Full screen" title="Full screen (F)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
+    <button type="button" id="music-tab" aria-expanded="false" aria-controls="drawer">Tuning</button>
+  </div>
+  <aside id="drawer" aria-label="Tuning: music and feel">
+    <h2>The band</h2>
+    <p class="now" id="music-now">Press any key or click to start the sound.</p>
+    <button type="button" id="music-mute" aria-pressed="true">Sound on</button>
+    <div class="dial"><label for="m-volume">Volume</label><input type="range" id="m-volume" min="0" max="100" value="70"><span class="lo">quiet</span><span class="hi">loud</span></div>
+    <div class="scope" role="group" aria-label="Where the sliders below apply">
+      <button type="button" id="scope-all" aria-pressed="true">All depths</button>
+      <button type="button" id="scope-zone" aria-pressed="false">This depth only</button>
+      <p id="scope-note"></p>
+    </div>
+    <div class="dial"><label for="m-dream">Dream</label><input type="range" id="m-dream" min="0" max="100" value="60"><span class="lo">dry club</span><span class="hi">deep under water</span><p>Reverb, how dark the sound is, and how long notes hang.</p></div>
+    <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><i class="live" id="energy-live" title="Where the band is now"></i><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is. The slider is where it rests in empty water. From there it climbs by itself with what is going on round you: swarms, hunters, whatever keeps the rift. The line under the slider shows where it is now.</p></div>
+    <div class="dial"><label for="m-menace">Menace</label><input type="range" id="m-menace" min="0" max="100" value="50"><span class="lo">sweet</span><span class="hi">feral</span><p>Which harmony plays, from floating major to something with teeth. Adds low brass and toms.</p></div>
+    <div class="dial"><label for="m-react">Reaction</label><input type="range" id="m-react" min="0" max="100" value="70"><span class="lo">steady band</span><span class="hi">follows every move</span><p>How hard speed, wrapping, danger and catches push the band around.</p></div>
+    <div class="dial"><label for="m-swing">Swing</label><input type="range" id="m-swing" min="0" max="100" value="60"><span class="lo">straight</span><span class="hi">hard swing</span></div>
+    <div class="dial"><label for="m-band">Balance</label><input type="range" id="m-band" min="0" max="100" value="50"><span class="lo">drummer forward</span><span class="hi">harmony forward</span></div>
+    <div class="preset">
+      <button type="button" id="preset-copy">Copy preset</button>
+      <label for="preset-in">Paste a preset</label>
+      <div class="row"><input type="text" id="preset-in" placeholder="oarfish-music:1:..." autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" id="preset-apply">Apply</button></div>
+      <p id="preset-msg" aria-live="polite">A preset is the six sliders above as a line of text. Volume is not part of it.</p>
+    </div>
+    <div class="feel">
+      <h2>The feel</h2>
+      <div class="dial"><label for="f-assist">Loop assist</label><input type="range" id="f-assist" min="0" max="100" value="60"><span class="lo">by hand</span><span class="hi">guided</span><p>How far round a swarm you must go, how much the fish holds the ring for you, and how readily the swarm settles inside it. At zero you close every loop yourself.</p></div>
+    </div>
+  </aside>
+
+  <div id="fade"></div>
+  <div id="pause" role="dialog" aria-labelledby="pause-title"><div class="in">
+    <h2 id="pause-title">Paused</h2>
+    <button type="button" class="main" id="btn-resume">Resume</button>
+    <div class="row">
+      <button type="button" id="btn-full" aria-pressed="false">Full screen</button>
+      <button type="button" id="btn-new">New dive</button>
+    </div>
+    <button type="button" id="btn-note">Leave feedback</button>
+    <p id="pause-msg" aria-live="polite"></p>
+    <div class="set">
+      <span class="cap">Shells</span>
+      <ul id="shell-list"></ul>
+    </div>
+    <div class="set mouse">
+      <span class="cap" id="mode-cap">Controls</span>
+      <div class="row" role="group" aria-labelledby="mode-cap">
+        <button type="button" id="mode-point" aria-pressed="true">Point and swim</button>
+        <button type="button" id="mode-look" aria-pressed="false">Adventure camera</button>
+      </div>
+      <p id="mode-note"></p>
+    </div>
+    <div class="dial"><label for="f-look">Look speed</label><input type="range" id="f-look" min="0" max="100" value="50"><span class="lo">slow</span><span class="hi">fast</span><p>How fast the mouse or the right stick turns the view.</p></div>
+    <label class="check"><input type="checkbox" id="f-teach" checked><span><b>Teach me as I play</b>A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
+    <label class="check"><input type="checkbox" id="f-light"><span><b>Lighter picture</b>Softer, and drawn about sixty times a second at most. For a laptop that runs hot, or on battery.</span></label>
+    <button type="button" id="btn-library">Specimen library</button>
+    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-keys">Show keys and tools on screen</button></div>
+    <div class="set dev">
+      <span class="cap" id="dev-cap">Testing</span>
+      <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
+      <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button></div>
+      <span class="cap" id="bring-cap">Bring one to look at (not in the dive yet)</span>
+      <div class="row wrap" id="dev-bring" role="group" aria-labelledby="bring-cap"></div>
+      <div class="row"><button type="button" id="dev-unlock">Unlock every shell</button><button type="button" id="dev-forget">Empty the nest</button></div>
+      <p id="dev-msg" aria-live="polite"></p>
+    </div>
+    <ul class="keys menu" id="pause-keys" aria-label="Controls"></ul>
+    <div class="dial"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
+    <button type="button" id="btn-rumble">Test the vibration</button>
+    <button type="button" id="btn-direct" hidden>Connect DualSense motors</button>
+    <p id="rumble-msg" aria-live="polite"></p>
+    <p id="pad-note" aria-live="polite"></p>
+  </div>
+  <div class="in binds">
+    <h2>Key bindings</h2>
+    <div class="set preset">
+      <label for="bind-preset">Saved sets</label>
+      <div class="row paste"><select id="bind-preset"></select><button type="button" id="bind-delete">Delete</button></div>
+      <div class="row paste"><input type="text" id="bind-name" placeholder="Name this set" maxlength="24" autocomplete="off" spellcheck="false" aria-label="Name for this set"><button type="button" id="bind-save">Save</button></div>
+      <p id="bind-msg" aria-live="polite"></p>
+    </div>
+    <div id="bind-grid"></div>
+    <div class="row foot"><button type="button" id="bind-reset">Back to the defaults</button><button type="button" class="main" id="bind-back">Done</button></div>
+  </div>
+  <div class="in note">
+    <h2>Leave feedback</h2>
+    <p>What worked, what did not, where you got stuck: a line is plenty. Nothing is sent from this page. Your note is copied, or handed to your own apps, for you to send to whoever gave you the link.</p>
+    <textarea id="note-text" rows="6" maxlength="4000" placeholder="I liked… I got stuck when… I expected…" aria-label="Your feedback"></textarea>
+    <label class="check"><input type="checkbox" id="note-facts" checked><span><b>Add how the dive went</b><span id="note-facts-text"></span></span></label>
+    <div class="row foot"><button type="button" id="note-back">Back</button><button type="button" id="note-share" hidden>Share…</button><button type="button" class="main" id="note-copy">Copy</button></div>
+    <p id="note-msg" aria-live="polite"></p>
+    <textarea id="note-out" rows="6" readonly hidden aria-label="Your note, to copy"></textarea>
+  </div></div>
+  <div id="end" role="dialog" aria-labelledby="end-title"><div class="in">
+    <h2 id="end-title"></h2>
+    <p id="end-text"></p>
+    <small id="end-best"></small>
+    <button type="button" id="btn-again">Dive again</button>
+    <button type="button" class="quiet" id="btn-note-end">Leave feedback</button>
+  </div></div>
+  <div id="error"><p>The dive could not start in this browser: WebGL is unavailable or the 3D library did not load. Try a current version of Chrome, Safari or Firefox.</p></div>
+</div>
+
+<script src="game-data.js"></script>
+<script src="bg/stills.js"></script>
+<script src="menus.js"></script>
+<script src="kit.js"></script>
+</body>
+</html>
