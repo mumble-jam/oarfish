@@ -35,8 +35,9 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/spine.js` | A swimming body that bends: a neck that turns and nods, a body that lies along its turn. Not tied to any one animal. |
 | `game/sawfish.js` | The Shearer in motion: how it holds its saw for each thing it does. |
 | `game/strands.js` | Limbs with no bones in them: an arm or a tentacle that hangs on a body and trails through the water after it. Not tied to any one animal. |
-| `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed and reaching. Not in the dive yet. |
-| `game/jelly.js` | The four jellyfish in motion: a bell that squeezes and fills, part clear over what is inside it, and every arm and tentacle trailing by itself. Not in the dive yet. |
+| `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed, reaching, bluffing and fleeing pale. A shoal lives at the bloom water (bloom.js). |
+| `game/jelly.js` | The four jellyfish in motion: a bell that squeezes and fills, part clear over what is inside it, and every arm and tentacle trailing by itself. The moon jelly and the sea nettle live at the bloom water (bloom.js); the other two are not in the dive yet. |
+| `game/bloom.js` | The bloom water, the first band's first new place: where it lies (laid by the world from its own run of numbers), its moon jellies and their fry, its sea nettles and their stinging trains, the squid shoal that raids swarms and answers pressure in steps, and the game of settling the shoal, kept in the nest. Every number is in `BLOOM`. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |

@@ -295,7 +295,7 @@ export function sumSegment() {
 }
 
 
-// ================================================================ not yet in the dive
+// ================================================================ the detailed creatures (the squid lives at the bloom water, bloom.js)
 // ---------------------------------------------------------------- the squid
 // Its shape is the bigfin reef squid's (Sepioteuthis lessoniana), whose fins run down nearly the whole mantle, so that from above the
 // back end of it is a kite coming to a point. Arms and head toward +z, the point of the mantle toward -z: jetting, it goes point first.
@@ -364,7 +364,7 @@ export function squidArm(pal, def) {
   return m.geometry();
 }
 
-// ================================================================ jellyfish (not yet in the dive)
+// ================================================================ jellyfish (the moon jelly and the sea nettle live at the bloom water, bloom.js; the other two are not in the dive yet)
 // Four of them, each after a real animal (the sources are at the top of jelly.js). A jellyfish is modelled upright: the top of its bell toward +y, its
 // mouth and everything that hangs toward -y. It comes in three kinds of piece:
 //   the body      what is solid in it and seen through the bell: gonads, stomach, canals, eyes, the stalks the tentacles hang from (moon, nettle, helmet, box)
