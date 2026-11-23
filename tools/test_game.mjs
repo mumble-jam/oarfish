@@ -752,13 +752,13 @@ s = await ev(async () => { const g = window.__game, box = document.getElementByI
   for (let i = 0; i < 40 && !g.adrift.on; i++) await wait(100);
   const began = g.adrift.on, p0 = g.rig.pos.clone(), segs = g.run.segs; let turned = 0, last = g.rig.yaw, far = 0;
   for (let i = 0; i < 90; i++) { g.sim(0.1); const d = Math.atan2(Math.sin(g.rig.yaw - last), Math.cos(g.rig.yaw - last)); turned += Math.abs(d); last = g.rig.yaw; far = Math.max(far, Math.hypot(g.rig.pos.x - p0.x, g.rig.pos.z - p0.z)); }
-  const bitten = g.bite(2, g.rig.spine.length, g.rig.pos, 'biter');
+  const bitten = g.bite(2, g.rig.spine.length, g.rig.pos, 'biter'), blinking = g.run.safe > 0; // protected, but not by the kind of protection that shows
   g.QUIET.away = away; window.dispatchEvent(new PointerEvent('pointerdown')); for (let i = 0; i < 40 && g.adrift.on; i++) await wait(100); const back = g.adrift.on;
   g.adrift.allow = false; window.__hold = true;
-  return { first, on, off, began, turned: +turned.toFixed(1), far: +far.toFixed(1), bitten, lost: segs - g.run.segs, back, state: g.run.state }; });
-check('the lighter picture is off until it is asked for, and is kept when it is (one pixel to a point, a shadow map of half the size); a dive nobody touches has the fish swim figures about where it was left, bitten by nothing, until it is touched',
+  return { first, on, off, began, turned: +turned.toFixed(1), far: +far.toFixed(1), bitten, blinking, lost: segs - g.run.segs, back, state: g.run.state }; });
+check('the lighter picture is off until it is asked for, and is kept when it is (one pixel to a point, a shadow map of half the size); a dive nobody touches has the fish swim figures about where it was left, bitten by nothing and not blinking, until it is touched',
   s.first.box === false && s.first.on === false && s.first.map === 2048 && s.on.on === true && s.on.map === 1024 && s.on.ratio === 1 && s.on.kept === true && s.off.on === false && s.off.map === 2048 && s.off.kept === false
-  && s.began && s.turned > 6 && s.far < 16 && s.bitten === false && s.lost === 0 && s.back === false && s.state === 'play', JSON.stringify(s));
+  && s.began && s.turned > 6 && s.far < 16 && s.bitten === false && s.blinking === false && s.lost === 0 && s.back === false && s.state === 'play', JSON.stringify(s));
 
 await page.close();
 

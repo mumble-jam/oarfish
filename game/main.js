@@ -268,7 +268,7 @@ export async function start(saved = {}) {
   const feel = { assist: SHIPPED_FEEL.assist / 100, mode: 'point', look: SHIPPED_FEEL.look / 100, rumble: SHIPPED_FEEL.rumble / 100 };
   const focus = new THREE.Vector3();
   const game = {
-    safe: () => run.safe > 0 || run.state !== 'play',
+    safe: () => run.safe > 0 || run.hush > 0 || run.state !== 'play', // (hush: left to itself and swimming figures, or only just taken back. It is not `safe`, which shows: the fish blinks)
     // a hunter has reached a bait: what the shell that went with the bait does about it
     baited(decoy, hunter) {
       if (decoy.fx === 'spire') { for (const h of foes.blast(decoy.pos, 2.8)) mote(h.pos, h.food); decoy.life = Math.min(decoy.life, 0.15); run.kick = 1; moment('kill'); }
@@ -918,7 +918,7 @@ export async function start(saved = {}) {
     if (far > 7) adrift.turn += clamp(Math.atan2(Math.sin(Math.atan2(dx, dz) - adrift.turn), Math.cos(Math.atan2(dx, dz) - adrift.turn)), -1, 1) * 1.6 * dt; // it does not wander off
     if (!o.vertical) o.vertical = clamp((adrift.at.y - p.y) * 0.5, -0.6, 0.6);
     o.dir.x = Math.sin(adrift.turn); o.dir.z = Math.cos(adrift.turn);
-    run.safe = Math.max(run.safe, 0.6);
+    run.hush = 0.6; // nothing bites it, and nothing shows that: it does not blink
     return o;
   }
   const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
@@ -1693,7 +1693,7 @@ export async function start(saved = {}) {
     stage.classList.toggle('cine', cine()); // the endings play with the help put away
     if (run.state === 'play') end.quake = Math.max(0, end.quake - dt * 0.5);
     fall(dt);
-    run.safe = Math.max(0, run.safe - dt);
+    run.safe = Math.max(0, run.safe - dt); run.hush = Math.max(0, (run.hush || 0) - dt);
     rig.update(dt, inp, arena);
     if (run.state === 'play' && rig.dashT > 0) for (const u of world.urns) { // a dash breaks a sealed jar open
       if (u.broken || Math.hypot(wrapD(rig.snout.x - u.x), wrapD(rig.snout.z - u.z)) > u.col.r + 0.85 || rig.snout.y > u.y + u.size + 0.4) continue;
@@ -1872,7 +1872,7 @@ export async function start(saved = {}) {
     devices(dt);
     if (keys.size || pointers.size || look.buttons) touchedAt = performance.now(); // something held down is a hand on it, however long it is held
     { const was = adrift.on; adrift.on = adrift.allow && !paused && !lib.isOpen && run.state === 'play' && !cine() && performance.now() - touchedAt > QUIET.away * 1000;
-      if (adrift.on && !was) { adrift.t = 0; adrift.at.copy(rig.pos); adrift.turn = rig.yaw; } else if (was && !adrift.on) run.safe = Math.max(run.safe, 1.2); } // given back, it has a moment before anything can bite
+      if (adrift.on && !was) { adrift.t = 0; adrift.at.copy(rig.pos); adrift.turn = rig.yaw; } else if (was && !adrift.on) run.hush = 1.2; } // given back, it has a moment before anything can bite
     haptics(dt);
     if (run.freeze > 0 && !paused) { run.freeze -= dt; return; } // a ram lands: the world holds still for an instant
     if (!paused) return step(dt);
