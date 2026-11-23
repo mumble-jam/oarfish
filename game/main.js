@@ -594,6 +594,7 @@ export async function start(saved = {}) {
   // the keeper of a rift: when it falls the veil goes, and it leaves a shell the fish is not wearing
   const guardGame = {
     bite: (n, joint, from) => game.bite(n, joint, from, 'guard'),
+    fed: (pos, food) => mote(pos, food), // a leg the Keeper has lost, eaten
     event(kind, pos) {
       if (kind === 'clang') moment('burst');
       else if (kind === 'windup') music.flourish(guard?.kind, 'fill'); // the wind-up of its biggest blow: its instrument plays a fill (seldom: music.js sees to that)
@@ -601,6 +602,13 @@ export async function start(saved = {}) {
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
       else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
       else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7);
+      else if (kind === 'crack') { moment('ram'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.25); }
+      else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6); }
+      else if (kind === 'stomp') { cam.shake = Math.max(cam.shake, 0.45); moment('burst'); say('keeper-stomp', 'Its spike is stuck in the bed. Ram that leg.', 6); }
+      else if (kind === 'held') say('keeper-held', 'You have its leg. Swim away and drag it out from under it.', 6);
+      else if (kind === 'topple') { cam.shake = Math.max(cam.shake, 0.7); moment('kill'); }
+      else if (kind === 'shed') { moment('burst'); say('keeper-shed', 'It let the leg go. The leg is food.', 6); }
+      else if (kind === 'ate') { pulse('grow'); }
       else if (kind === 'tear') { moment('kill'); pulse('grow'); run.freeze = Math.max(run.freeze, 0.1); cam.shake = Math.max(cam.shake, 0.5); }
       else if (kind === 'rage') { cam.shake = Math.max(cam.shake, 0.7); music.flourish(guard?.kind, 'solo'); if (guard?.kind === 'keeper') say('keeper-rage', 'It is quicker now, and it digs. Watch the sand.', 6, 'warn'); else say('shearer-rage', 'It is quicker now, and comes back down its line. Watch the silt.', 6, 'warn'); }
       else if (kind === 'aimed') say('shearer-still', 'It feels the water you move. Hold still and its line slides off you.', 7);
@@ -1672,7 +1680,7 @@ export async function start(saved = {}) {
       if (cam.ease.t <= 0) cam.ease = null;
     }
     cam.pitch = clamp(cam.pitch, V.low, 1.4);
-    cam.dist = damp(cam.dist, 10.6 + 1.2 * bodyMetres(), dt ? 1.5 : 1e3, dt || 1); // step back as the body grows
+    cam.dist = damp(cam.dist, 10.6 + 1.2 * bodyMetres() + (guard?.view || 0), dt ? 1.5 : 1e3, dt || 1); // step back as the body grows, and while the tall Keeper is near (guard.view)
     cam.fov = damp(cam.fov, V.fov, dt ? 3 : 1e3, dt || 1); cam.k = damp(cam.k, V.k, dt ? 3 : 1e3, dt || 1);
     if (Math.abs(camera.fov - cam.fov) > 0.01) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
     const d = cam.dist * cam.zoom * cam.fit * cam.k, cp = Math.cos(cam.pitch), sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
