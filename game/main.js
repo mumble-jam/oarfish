@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
-import { resolve, make } from './npc.js';
+import { resolve, make, NPC, inOrder } from './npc.js';
 import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, NEST, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
@@ -927,17 +927,32 @@ export async function start(saved = {}) {
     run.hush = 0.6; // nothing bites it, and nothing shows that: it does not blink
     return o;
   }
-  // A squid to look at, in the water beside the fish. It is not in the dive: this is a testing tool (the pause menu), there so that the model can be seen
-  // where it would live. It hovers, turning to watch the fish; every few seconds it jets, mantle first, to another place near by; crowded, it blanches and goes.
-  let pet = null;
-  function bringSquid(on) {
-    if (pet) { scene.remove(pet.a.object); pet.a.dispose(); pet = null; }
-    if (!on) return;
-    const a = make('squid'); scene.add(a.object);
-    pet = { a, pos: new THREE.Vector3(rig.pos.x + rig.forward.x * 5, rig.pos.y + 1, rig.pos.z + rig.forward.z * 5), to: new THREE.Vector3(), yaw: rig.yaw + Math.PI, mood: 'hover', t: 2.5, n: 1 };
+  // Creatures to look at, in the water beside the fish: whatever the library holds under "Not yet in the dive". None of them is in the dive: this is a testing
+  // tool (the pause menu), there so that a model can be seen where it would live. Each is brought and taken away by its own button; none harms or is harmed.
+  // The squid hovers, turning to watch the fish; every few seconds it jets, mantle first, to another place near by; crowded, it blanches and goes.
+  // A jellyfish simply lives: it beats, and each beat really moves it; it sinks a little between beats, wanders, and keeps near the fish.
+  const pets = {}, BRING = inOrder().filter((n) => n.group === 'Not yet in the dive');
+  // how each jelly lives. n: how many are brought; ring: how far from the fish it may wander before it turns back; push, drag: what a stroke gives it and what the
+  // water takes; sink: how fast it sinks, left to itself; turn: how fast it comes round (radians a second), leg: how long it holds a heading, veer: how far it then turns;
+  // high: the heights over the bed it keeps between; lean: how far its bell lies over when it climbs and when it lets itself down; moods: what it does, and for how long
+  const LIVES = {
+    moonjelly: { n: 6, ring: 6, push: 0.6, drag: 1.6, sink: 0.035, turn: 0.3, leg: 6, veer: 0.7, high: [2.2, 4.6], lean: [0.3, 1.05], moods: [['pulse', 8], ['drift', 5], ['pulse', 6], ['rest', 4]] },
+    nettle: { n: 1, ring: 7, push: 1.25, drag: 1.3, sink: 0.05, turn: 0.32, leg: 8, veer: 0.6, high: [3.6, 6], lean: [0.6, 1.3], moods: [['pulse', 12], ['drift', 4], ['pulse', 8], ['fish', 8]] },
+    helmetjelly: { n: 1, ring: 6, push: 0.55, drag: 1.5, sink: 0.03, turn: 0.25, leg: 7, veer: 0.6, high: [2.2, 4.4], lean: [0.25, 1.0], moods: [['pulse', 9], ['drift', 5], ['lit', 3.5], ['pulse', 6], ['reach', 4]] },
+    boxjelly: { n: 1, ring: 9, push: 4.4, drag: 1.5, sink: 0.05, turn: 2.8, leg: 3.2, veer: 1.9, high: [2, 4.6], lean: [1.0, 1.4], moods: [['pulse', 10], ['drift', 3], ['pulse', 7], ['fish', 6]] },
+  };
+  const fracOf = (x) => x - Math.floor(x);
+  function bring(id, on) {
+    if (pets[id]) { for (const s of pets[id].list) { scene.remove(s.a.object); s.a.dispose(); } delete pets[id]; }
+    if (!on || !BRING.some((n) => n.id === id)) return;
+    const ahead = (d, up) => new THREE.Vector3(rig.pos.x + rig.forward.x * d, rig.pos.y + up, rig.pos.z + rig.forward.z * d), L = LIVES[id];
+    if (!L) { const a = make(id); scene.add(a.object); pets[id] = { list: [{ id, a, pos: ahead(5, 1), to: new THREE.Vector3(), yaw: rig.yaw + Math.PI, mood: 'hover', t: 2.5, n: 1 }] }; return; } // the squid
+    pets[id] = { list: Array.from({ length: L.n }, (_, i) => { const a = make(id), ph = i * 2.399, r = i ? 1.3 + 0.55 * i : 0, s = { id, a, i, ph, pos: ahead(5, 1.2 + (i % 3) * 0.5).add(new THREE.Vector3(Math.sin(ph) * r, 0, Math.cos(ph) * r)), vel: new THREE.Vector3(), yaw: rig.yaw + 1.2 + ph, head: rig.yaw + 1.2 + ph, tilt: 0.6, k: 0, mood: L.moods[0][0], t: L.moods[0][1] * (0.4 + 0.6 * fracOf(i * 0.37 + 0.2)), leg: L.leg * fracOf(i * 0.53 + 0.4), n: i };
+      scene.add(a.object); a.rig.pose.q = fracOf(i * 0.37); return s; }) }; // (no two of a group beat together)
   }
-  function squidStep(dt) {
-    const s = pet, p = s.pos, dx = wrapD(rig.pos.x - p.x), dz = wrapD(rig.pos.z - p.z), far = Math.hypot(dx, dz), turn = (a, rate) => { s.yaw += clamp(Math.atan2(Math.sin(a - s.yaw), Math.cos(a - s.yaw)), -rate * dt, rate * dt); };
+  const bringSquid = (on) => bring('squid', on);
+  function squidStep(dt, s) {
+    const p = s.pos, dx = wrapD(rig.pos.x - p.x), dz = wrapD(rig.pos.z - p.z), far = Math.hypot(dx, dz), turn = (a, rate) => { s.yaw += clamp(Math.atan2(Math.sin(a - s.yaw), Math.cos(a - s.yaw)), -rate * dt, rate * dt); };
     if (far > 34) { p.set(rig.pos.x + rig.forward.x * 6, rig.pos.y + 1, rig.pos.z + rig.forward.z * 6); s.mood = 'hover'; s.t = 2; } // the fish has gone a long way, or down a rift: it is there again
     s.t -= dt;
     const leave = (away) => { s.n++; const a = away ? Math.atan2(-dx, -dz) + Math.sin(s.n * 2.4) * 0.7 : s.n * 2.4, r = away ? 9 : 5 + (s.n % 3) * 2, x = (away ? p.x : rig.pos.x) + Math.sin(a) * r, z = (away ? p.z : rig.pos.z) + Math.cos(a) * r;
@@ -950,6 +965,27 @@ export async function start(saved = {}) {
     const X = rig.pos.x - wrapD(rig.pos.x - p.x), Z = rig.pos.z - wrapD(rig.pos.z - p.z); p.x = X; p.z = Z; // the nearest copy of the world to the fish
     s.a.rig.update(dt, { x: p.x, y: p.y, z: p.z, yaw: s.yaw, pitch: 0, mood: s.mood, rate: 1.2 });
   }
+  function jellyStep(dt, s) {
+    const L = LIVES[s.id], p = s.pos, v = s.vel, dx = wrapD(rig.pos.x - p.x), dz = wrapD(rig.pos.z - p.z), far = Math.hypot(dx, dz);
+    if (far > 34) { const r = 5 + s.i * 0.8; p.set(rig.pos.x + rig.forward.x * 6 + Math.sin(s.ph) * r * 0.4, rig.pos.y + 1.2, rig.pos.z + rig.forward.z * 6 + Math.cos(s.ph) * r * 0.4); v.set(0, 0, 0); } // the fish has gone a long way, or down a rift: it is there again
+    if ((s.t -= dt) <= 0) { s.k = (s.k + 1) % L.moods.length; s.mood = L.moods[s.k][0]; s.t = L.moods[s.k][1] * (0.8 + 0.4 * fracOf(++s.n * 0.37)); }
+    // where it is headed: it holds a heading for a while and then takes another; gone too far from the fish, it turns back toward it
+    if ((s.leg -= dt) <= 0) { s.leg = L.leg * (0.7 + 0.6 * fracOf(++s.n * 0.61)); s.head = far > L.ring ? Math.atan2(dx, dz) + (fracOf(s.n * 0.29) - 0.5) : s.head + (s.n % 2 ? 1 : -1) * L.veer * (0.5 + fracOf(s.n * 0.47)); }
+    s.yaw += clamp(wrapPi(s.head - s.yaw), -L.turn * dt, L.turn * dt);
+    // how it lies: beating, it leans up to climb and lies over to go level, between the two heights it keeps; drifting, it rights itself; the box jelly, fishing, tips right over
+    const bed = world.height(p.x, p.z), h = p.y - bed, want = (L.high[0] + L.high[1]) / 2 + ((L.high[1] - L.high[0]) / 2) * Math.sin(run.time * 0.13 + s.ph * 2);
+    const lean = s.mood === 'pulse' ? lerp(L.lean[0], L.lean[1], clamp((h - want) / 1.6 + 0.6, 0, 1)) : s.mood === 'fish' && s.id === 'boxjelly' ? 2.75 : 0.12 + 0.1 * Math.sin(run.time * 0.4 + s.ph);
+    s.tilt = damp(s.tilt, lean, s.id === 'boxjelly' ? 2.2 : 0.7, dt);
+    // a stroke pushes it the way the top of its bell points; the water slows it; left to itself it sinks
+    // (drifting, it beats gently, and when it has risen over the height it wants it stops beating and lets itself down)
+    if (s.mood === 'pulse') s.idle = false; else if (h > want + 0.5) s.idle = true; else if (h < want - 0.2) s.idle = false;
+    const T = s.a.rig.pose.thrust * L.push * (s.mood === 'pulse' ? 1 : 0.45), st = Math.sin(s.tilt);
+    v.x += (Math.sin(s.yaw) * st * T - v.x * L.drag) * dt; v.y += (Math.cos(s.tilt) * T - (v.y + L.sink) * L.drag) * dt; v.z += (Math.cos(s.yaw) * st * T - v.z * L.drag) * dt;
+    p.addScaledVector(v, dt); if (p.y < bed + 1.1) { p.y = bed + 1.1; v.y = Math.max(0, v.y); }
+    p.x = rig.pos.x - wrapD(rig.pos.x - p.x); p.z = rig.pos.z - wrapD(rig.pos.z - p.z); // the nearest copy of the world to the fish
+    s.a.rig.update(dt, { x: p.x, y: p.y, z: p.z, yaw: s.yaw, tilt: s.tilt, mood: s.mood, rate: s.idle ? 0 : undefined });
+  }
+  function petStep(dt) { for (const id in pets) for (const s of pets[id].list) (LIVES[id] ? jellyStep : squidStep)(dt, s); }
   const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
   const lookK = () => Math.pow(4, feel.look - 0.5); // the Look speed slider: half speed to double
   function turnView(dx, dy, kx, ky = kx * 0.85) {
@@ -1360,7 +1396,9 @@ export async function start(saved = {}) {
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
   $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
   $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {} }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked. It shows from the next dive.'); });
-  $('dev-squid').addEventListener('click', (e) => { const on = !pet; bringSquid(on); e.currentTarget.setAttribute('aria-pressed', String(on)); showDev(on ? 'A squid is in the water just ahead of you. It is only to look at.' : 'The squid is gone.'); });
+  $('dev-bring').innerHTML = BRING.map((n) => `<button type="button" data-bring="${n.id}"${n.id === 'squid' ? ' id="dev-squid"' : ''} aria-pressed="false">${n.name}</button>`).join('');
+  $('dev-bring').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const id = b.dataset.bring, on = !pets[id], name = NPC[id].name.toLowerCase(), many = LIVES[id]?.n > 1; bring(id, on); b.setAttribute('aria-pressed', String(on));
+    showDev(on ? (many ? `${LIVES[id].n} ${name === 'moon jelly' ? 'moon jellies' : `${name}s`} are in the water just ahead of you. They are only to look at.` : `A ${name} is in the water just ahead of you. It is only to look at.`) : many ? 'They are gone.' : `The ${name} is gone.`); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {
     const ls = $('f-look');
@@ -1687,7 +1725,7 @@ export async function start(saved = {}) {
     run.stateT += dt;
     if (run.state === 'play') run.time += dt;
     scripted.sprint = false; scripted.gentle = false;
-    if (pet && run.state === 'play') squidStep(dt);
+    if (run.state === 'play') petStep(dt);
     if (run.state === 'arrive') { // sinking in from the band above
       scripted.dir.copy(rig.forward).setY(0).normalize(); scripted.vertical = -0.9; scripted.amount = 0.6;
       inp = scripted;
@@ -1942,7 +1980,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, get pet() { return pet; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

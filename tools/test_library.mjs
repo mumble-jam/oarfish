@@ -33,7 +33,7 @@ const vis = (sel) => ev((s) => { const el = document.querySelector(s); return !!
 // ---- opening it from the pause menu
 await page.keyboard.press('KeyP'); await page.waitForTimeout(200); await page.click('#btn-library'); await frame();
 let s = await ev(() => ({ open: window.__game.lib.isOpen, paused: window.__game.paused, list: [...document.querySelectorAll('#lib-list button')].map((b) => b.dataset.id), groups: [...document.querySelectorAll('#lib-list h3')].map((h) => h.textContent), name: document.getElementById('lib-name').textContent, hash: location.hash }));
-check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 64 && s.groups.join() === 'The oarfish,Swarms,Company,Hunters,Keepers of the rifts,The Sum,Not yet in the dive,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
+check('the pause menu opens the specimen library: the oarfish, every creature, shell, plant and piece of stone, and the two colour sets, in their groups', s.open && s.paused && s.list.length === 68 && s.groups.join() === 'The oarfish,Swarms,Company,Hunters,Keepers of the rifts,The Sum,Not yet in the dive,Shells,Loose things,Things that grow,On the bed,Stonework,Colours of the world' && s.name === 'The oarfish' && s.hash === '#library/oarfish' && !(await vis('#pause')) && !(await vis('.foot')) && (await vis('#lib-panel')), JSON.stringify(s));
 await snap('l-oarfish');
 
 // ---- one playground: the biter
@@ -99,10 +99,10 @@ s = await ev(async () => { const g = window.__game, L = g.lib, held = () => { le
   return { ...out, most, kelpTuck: !!N.NPC.kelp.build().attributes.tuck, give: N.NPC.kelp.material.give, shy: N.NPC.anemone.material.shy }; });
 check('on the stand, an anemone can be shown shut and kelp leaning, each opening again slowly; the pilot fish and the chime are there with the rest',
   s.anemone.states.length === 2 && s.anemone.open === 0 && s.anemone.near > 0.95 && s.anemone.back < 0.05 && s.kelp.near > 0.95 && s.most > 0.8 && !s.kelpTuck && s.give > 0 && s.shy === 1 && s.pilot.name === 'Pilot fish' && s.pilot.states.length === 2 && s.pilot.tris > 60 && s.pilot.tris < 200 && s.chime === 'Chime', JSON.stringify(s));
-// ---- the squid: a model to look at. On the stand each arm is a piece of its own and trails by itself; and no dive has one
+// ---- the squid: a model to look at (the jellyfish, further down, share its group). On the stand each arm is a piece of its own and trails by itself; and no dive has one
 s = await ev(async () => { const g = window.__game, L = g.lib, N = await import('/game/npc.js'), M = await import('/game/music.js'); L.pick('squid'); L.frame(0.3);
   const btn = document.querySelector('#lib-list [data-id="squid"]'); let head = btn.previousElementSibling; while (head && head.tagName !== 'H3') head = head.previousElementSibling;
-  const out = { name: document.getElementById('lib-name').textContent, where: document.getElementById('lib-where').textContent, group: head?.textContent, alone: btn.nextElementSibling?.tagName === 'H3', states: [...document.querySelectorAll('[data-set="state"] button')].map((b) => b.textContent).join(),
+  const out = { name: document.getElementById('lib-name').textContent, where: document.getElementById('lib-where').textContent, group: head?.textContent, first: btn.previousElementSibling?.tagName === 'H3', states: [...document.querySelectorAll('[data-set="state"] button')].map((b) => b.textContent).join(),
     tris: parseInt(document.getElementById('lib-tris').textContent, 10), cast: !!M.CAST.squid, bands: N.NPC.squid.bands.length, pieces: 0 };
   L.scene.traverse((o) => { if (o.isSkinnedMesh) out.pieces++; });
   // one of its own, run through its states as the stand runs them. Everything is read off the rig: where each arm's tip is, as the body sees it (+z ahead of the head)
@@ -120,11 +120,61 @@ s = await ev(async () => { const g = window.__game, L = g.lib, N = await import(
   // and in the dive: every band, and not one squid
   L.close(); g.setPaused(false); out.dive = 0; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); g.sim(0.2); g.scene.traverse((o) => { if (o.name === 'squid') out.dive++; }); }
   return out; });
-check('the squid is in the library in a group of its own, with ten arms that are each a piece and each move their own way: loose and curled when it hovers, together and streaming when it jets, swinging when it turns, thrown wide and pale when alarmed, the two long ones shot out to reach. No band has one',
-  s.name === 'Squid' && /In no band yet/.test(s.where) && s.group === 'Not yet in the dive' && s.alone && s.states === 'Hovering,Jetting,Turning,Alarmed,Reaching' && s.pieces === 10 && s.tris > 800 && s.tris < 1800 && !s.cast && s.bands === 0
+check('the squid is in the library, the first of those not yet in the dive, with ten arms that are each a piece and each move their own way: loose and curled when it hovers, together and streaming when it jets, swinging when it turns, thrown wide and pale when alarmed, the two long ones shot out to reach. No band has one',
+  s.name === 'Squid' && /In no band yet/.test(s.where) && s.group === 'Not yet in the dive' && s.first && s.states === 'Hovering,Jetting,Turning,Alarmed,Reaching' && s.pieces === 10 && s.tris > 800 && s.tris < 1800 && !s.cast && s.bands === 0
   && s.hover.reach < 0.9 && s.hover.wide > 0.3 && s.hover.differ > 0.08 && s.hover.least > 0.01 && s.hover.ripple > 0.3 && s.hover.fold < 0.2
   && s.jet.reach > 0.93 && s.jet.wide < s.hover.wide * 0.6 && s.jet.ahead > 0.7 && s.jet.lo < -0.18 && s.jet.hi > 0.1 && s.jet.fold > 0.8
   && s.turn.swing > 0.3 && s.alarm.wide > 0.6 && s.alarm.pale > 0.8 && s.alarm.pink < 0.3 && s.reach.shot > 1.9 && s.reach.shot > s.reach.armsOut + 0.5 && s.reach.club > 0.8 && s.dive === 0, JSON.stringify(s, (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)));
+// ---- the four jellyfish: models to look at, like the squid. Every arm and tentacle goes its own way, the bell really squeezes, and each has a way of its own
+s = await ev(async () => { const g = window.__game, L = g.lib, N = await import('/game/npc.js'), M = await import('/game/music.js'), out = {};
+  const mean = (l) => l.reduce((t, v) => t + v, 0) / l.length, far = (v) => Math.hypot(v.x, v.z);
+  for (const id of ['moonjelly', 'nettle', 'helmetjelly', 'boxjelly']) { g.setPaused(true); if (!L.isOpen) g.openLibrary(id); L.pick(id); L.frame(0.3);
+    const btn = document.querySelector(`#lib-list [data-id="${id}"]`); let head = btn.previousElementSibling; while (head && head.tagName !== 'H3') head = head.previousElementSibling;
+    const o = out[id] = { name: document.getElementById('lib-name').textContent, where: document.getElementById('lib-where').textContent, group: head?.textContent, states: [...document.querySelectorAll('[data-set="state"] button')].map((b) => b.textContent).join(),
+      tris: parseInt(document.getElementById('lib-tris').textContent, 10), cast: !!M.CAST[id], bands: N.NPC[id].bands.length, drawn: 0, clear: 0 };
+    L.scene.traverse((x) => { if (x.isSkinnedMesh) o.drawn++; if (x.isMesh && x.material.transparent && !x.material.depthWrite && x.geometry.attributes.veil) o.clear++; });
+    // one of its own, run through its states as the stand runs them. Everything is read off the rig: the stroke, and where each strand hangs and where its tip is, as the body sees it (+y the top of the bell)
+    const a = N.make(id), R = a.rig, P = R.pose, all = R.strands, T = all.filter((x) => x.def.kind === 't' || x.def.kind === 'f'), tip = (x) => x.st.local[x.st.n], root = (x) => x.st.local[0], state = (k) => N.NPC[id].states.find((x) => x.id === k);
+    const run = (k, secs, each) => { const st = state(k); for (let i = 0; i < Math.round(secs * 60); i++) { R.show(1 / 60, st, st.speed || 0); each?.(); } };
+    o.strands = all.length;
+    run('drift', 5); const was = all.map((x) => tip(x).clone()); let lo = 9, hi = -9, push = 0, rimIn = 9, rimOut = 0;
+    run('drift', 4, () => { lo = Math.min(lo, P.pulse); hi = Math.max(hi, P.pulse); push = Math.max(push, P.thrust); const r = mean(T.map((x) => far(root(x)))); rimIn = Math.min(rimIn, r); rimOut = Math.max(rimOut, r); });
+    const moved = all.map((x, i) => tip(x).clone().sub(was[i])); let differ = 0; for (let i = 0; i < moved.length; i++) for (let j = 0; j < i; j++) differ = Math.max(differ, moved[i].distanceTo(moved[j]));
+    o.drift = { lo, hi, push, rim: rimIn / rimOut, differ: differ / N.NPC[id].length, wide: mean(T.map((x) => far(tip(x)))), up: mean(T.map((x) => tip(x).y - root(x).y)) };
+    let straight = 0, slack = 9, rate = 0; run('pulse', 4); run('pulse', 4, () => { const r = mean(T.map((x) => x.st.reach)); straight = Math.max(straight, r); slack = Math.min(slack, r); rate = Math.max(rate, P.rate); });
+    o.pulse = { straight, slack, rate, wide: mean(T.map((x) => far(tip(x)))), up: mean(T.map((x) => tip(x).y - root(x).y)), stretch: P.tStretch, lean: a.object.rotation.x };
+    if (id === 'moonjelly') { let rest = 9, pushed = 0; run('rest', 5, () => { rest = Math.min(rest, P.pulse); }); run('rest', 2, () => { pushed = Math.max(pushed, P.thrust); }); o.rest = { flat: rest, pushed }; }
+    if (id === 'nettle') { run('fish', 9); o.fish = { wide: mean(T.map((x) => far(tip(x)))), down: mean(T.map((x) => tip(x).y)) }; let l = 9, r = -9; run('turn', 9, () => { const x = mean(T.map((v) => tip(v).x)); l = Math.min(l, x); r = Math.max(r, x); }); o.turn = r - l; }
+    if (id === 'helmetjelly') { let lit = 0; run('lit', 3, () => { lit = Math.max(lit, P.lit); }); o.lit = { lit, wide: mean(T.map((x) => far(tip(x)))) }; run('reach', 6); o.reach = mean(T.map((x) => tip(x).y - root(x).y)); run('drift', 3); o.dark = P.lit; }
+    if (id === 'boxjelly') { let l = 9, r = -9; run('turn', 7, () => { l = Math.min(l, a.object.rotation.y); r = Math.max(r, a.object.rotation.y); }); o.turn = r - l; let pushed = 0; run('fish', 5); run('fish', 2, () => { pushed = Math.max(pushed, P.thrust); }); o.fish = { over: a.object.rotation.x, stretch: P.tStretch, pushed, above: mean(T.map((x) => x.st.joints[x.st.n].y - x.st.joints[0].y)) }; } // (how far its tips are over where they hang, as the world sees it: it is upside down)
+    a.dispose(); }
+  // in the dive: every band, and not one of them; then brought by the testing tool, where they live beside the fish and are taken away again
+  L.close(); g.setPaused(false); out.dive = 0; const count = () => { let n = 0; g.scene.traverse((x) => { if (x.name.startsWith('jelly-') || x.name === 'squid') n++; }); return n; };
+  for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); g.sim(0.2); out.dive += count(); }
+  g.startRun(4242); g.run.safe = 1e9; g.sim(0.5); const buttons = [...document.querySelectorAll('#dev-bring button')], segs = g.run.segs; out.tool = { buttons: buttons.map((b) => b.textContent).join(), each: {} };
+  for (const b of buttons) { const id = b.dataset.bring; b.click(); const list = g.pets[id].list, from = list.map((x) => x.pos.clone()), e = out.tool.each[id] = { n: list.length, here: count(), pressed: b.getAttribute('aria-pressed'), msg: document.getElementById('dev-msg').textContent };
+    let near = 0, low = 9, beat = 0, path = 0; const at = list[0].pos.clone(); for (let i = 0; i < 40; i++) { g.sim(0.5); path += list[0].pos.distanceTo(at); at.copy(list[0].pos); for (const x of list) { near = Math.max(near, Math.hypot(x.pos.x - g.rig.pos.x, x.pos.z - g.rig.pos.z)); low = Math.min(low, x.pos.y - g.world.height(x.pos.x, x.pos.z)); if (x.a.rig.pose.thrust > 0.3) beat++; } }
+    e.went = Math.min(...list.map((x, i) => x.pos.distanceTo(from[i]))); e.near = near; e.low = low; e.beat = beat; e.path = path; b.click(); e.gone = count() === 0 && !g.pets[id] && b.getAttribute('aria-pressed') === 'false'; }
+  // left far behind, it is there again beside the fish
+  g.bring('boxjelly', true); g.pets.boxjelly.list[0].pos.x += 80; g.sim(0.3); out.tool.back = Math.hypot(g.pets.boxjelly.list[0].pos.x - g.rig.pos.x, g.pets.boxjelly.list[0].pos.z - g.rig.pos.z); g.bring('boxjelly', false);
+  out.tool.segs = g.run.segs === segs; out.tool.squid = !!g.bringSquid && g.pet === null;
+  return out; });
+{ const J = s, m = J.moonjelly, n = J.nettle, h = J.helmetjelly, b = J.boxjelly, each = [m, n, h, b], t = J.tool;
+  check('the four jellyfish are in the library beside the squid, each a bell part clear over what is inside it, its arms and tentacles pieces of their own that go their own ways; the bell squeezes and fills, and the rim, with what hangs from it, is drawn in',
+    [m.name, n.name, h.name, b.name].join() === 'Moon jelly,Sea nettle,Helmet jelly,Box jelly' && each.every((o) => /In no band yet/.test(o.where) && o.group === 'Not yet in the dive' && !o.cast && o.bands === 0 && o.clear === 1 && /^Drifting,Pulsing,/.test(o.states) && o.tris > 400 && o.tris < 1500
+      && o.drift.hi > 0.35 && o.drift.lo < 0.08 && o.drift.push > 0.3 && o.drift.rim < 0.93 && o.drift.differ > 0.004)
+    && m.strands === 20 && m.drawn === 2 && n.strands === 28 && n.drawn === 2 && h.strands === 12 && h.drawn === 1 && b.strands === 20 && b.drawn === 1, JSON.stringify(each.map((o) => ({ ...o, pulse: 0, drift: o.drift })), (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)));
+  check('each jellyfish has a way of its own: the moon jelly lies flat and still at rest; the sea nettle’s train streams out on the stroke and falls slack after it, swings when it turns, and hangs wide as a net when it fishes; the helmet jelly carries its horns up and ahead, throws them wide and lights when touched, and can turn them down; the box jelly beats fastest with its tentacles drawn short, comes right round, and to fish tips over and lets them out',
+    m.rest.flat < -0.5 && m.rest.pushed === 0
+    && n.pulse.straight > 0.9 && n.pulse.straight - n.pulse.slack > 0.02 && n.pulse.wide < 0.55 && n.fish.wide > n.pulse.wide * 1.6 && n.fish.wide > 0.9 && n.fish.down < -0.8 && n.turn > 0.4
+    && h.drift.up > 0.2 && h.pulse.up > h.drift.up + 0.05 && h.pulse.wide < h.drift.wide * 0.75 && h.lit.lit > 0.8 && h.lit.wide > h.drift.wide * 1.1 && h.reach < -0.25 && h.dark < 0.1
+    && b.pulse.rate > 1.4 && b.pulse.rate > 1.8 * Math.max(m.pulse.rate, n.pulse.rate, h.pulse.rate) && b.pulse.stretch < 0.62 && b.turn > 1.6 && b.fish.over > 2.4 && b.fish.stretch > 1.35 && b.fish.pushed === 0 && b.fish.above > 0.6,
+    JSON.stringify({ moon: m.rest, nettle: { pulse: n.pulse, fish: n.fish, turn: n.turn }, helmet: { drift: h.drift, pulse: h.pulse, lit: h.lit, reach: h.reach, dark: h.dark }, box: { pulse: b.pulse, turn: b.turn, fish: b.fish } }, (k, v) => (typeof v === 'number' ? +v.toFixed(3) : v)));
+  const e = t.each;
+  check('no band has a jellyfish. The pause menu’s testing tools bring each creature that is not in the dive, and take it away again: six moon jellies, one of each other; brought, they beat, move by their beating, keep off the bed and near the fish, and do it no harm',
+    J.dive === 0 && t.buttons === 'Squid,Moon jelly,Sea nettle,Helmet jelly,Box jelly' && e.squid.n === 1 && e.moonjelly.n === 6 && e.nettle.n === 1 && e.helmetjelly.n === 1 && e.boxjelly.n === 1
+    && Object.entries(e).every(([id, x]) => x.here === x.n && x.pressed === 'true' && x.gone && x.near < 30 && /only to look at/.test(x.msg) && (id === 'squid' || (x.went > 0.25 && x.low > 1 && x.beat > 3)))
+    && /6 moon jellies/.test(e.moonjelly.msg) && e.boxjelly.path > 3 * e.helmetjelly.path && t.back < 12 && t.segs && t.squid, JSON.stringify({ dive: J.dive, tool: t }, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v))); }
 console.log(failures ? `${failures} check(s) failed` : 'all library checks passed');
 await browser.close(); server.close();
 process.exit(failures ? 1 : 0);

@@ -363,3 +363,183 @@ export function squidArm(pal, def) {
   else for (let i = 1; i < n - 2; i++) { const z = (cuts[i] + cuts[i + 1]) / 2, [w] = size(z); dot(z, (i % 2 ? 0.3 : -0.3) * w, w * 0.42); }
   return m.geometry();
 }
+
+// ================================================================ jellyfish (not yet in the dive)
+// Four of them, each after a real animal (the sources are at the top of jelly.js). A jellyfish is modelled upright: the top of its bell toward +y, its
+// mouth and everything that hangs toward -y. It comes in three kinds of piece:
+//   the body      what is solid in it and seen through the bell: gonads, stomach, canals, eyes, the stalks the tentacles hang from (moon, nettle, helmet, box)
+//   the bell      its skin, drawn part clear over the body by jelly.js (moonBell, nettleBell, …); `veil` on each corner says how much of it is there
+//   the strands   each oral arm and each tentacle a piece of its own, modelled straight along +z from where it hangs (moonPiece, …), trailed by strands.js
+// MOON, NETTLE, HELMET and BOX say how the bell squeezes (`flex` on each corner, read by the shader in jelly.js) and where every strand hangs.
+const TAU = Math.PI * 2, clamp01 = (v) => Math.min(1, Math.max(0, v));
+// How a corner at (x, y, z) goes when the bell squeezes all the way: [x, y, z, how late]. Nothing above `from` (a part of the way down from the top to the
+// rim) moves; from there down it is drawn in toward the middle, most at the rim, and the rim sinks a little as the bell deepens. The rim goes last.
+export const squeezeOf = (D) => (x, y, z) => { const s = clamp01((D.top - y) / (D.top - D.rim)), u = clamp01((s - D.from) / (1 - D.from)), k = D.squeeze * u ** D.power; return [-x * k, -D.drop * u, -z * k, u]; };
+const flexed = (g, D) => { const P = g.attributes.position, F = new Float32Array(P.count * 4), f = squeezeOf(D); for (let i = 0; i < P.count; i++) F.set(f(P.getX(i), P.getY(i), P.getZ(i)), i * 4); g.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4)); return g; };
+const veiled = (g, D, fn) => { const P = g.attributes.position, V = new Float32Array(P.count); for (let i = 0; i < P.count; i++) V[i] = fn(P.getX(i), P.getY(i), P.getZ(i)); g.setAttribute('veil', new THREE.Float32BufferAttribute(V, 1)); return flexed(g, D); };
+// a skin over rings that is open, as a bell is: every face is turned away from `from`
+const sheet = (m, rings, paint, from, glow = false) => { for (let i = 0; i + 1 < rings.length; i++) { const R0 = rings[i], R1 = rings[i + 1], n = R0.length;
+  for (let k = 0; k < n; k++) { const a = R0[k], b = R0[(k + 1) % n], c = R1[(k + 1) % n], d = R1[k], p = typeof paint === 'function' ? paint(i, k, n) : paint, [c0, c1] = Array.isArray(p) && typeof p[0] !== 'number' ? p : [p, p];
+    m.out(a, b, c, from, [c0, c0, c1], glow).out(a, c, d, from, [c0, c1, c1], glow); } } return m; };
+const around = (phi, r, y) => [Math.sin(phi) * r, y, Math.cos(phi) * r];
+const jointsOf = (long, n, q = 1) => { const first = q === 1 ? long / n : (long * (1 - q)) / (1 - q ** n), cuts = [0]; for (let i = 0; i < n; i++) cuts.push(cuts[i] + first * q ** i); cuts[n] = long; return cuts; };
+// one strand: what kind it is (a: an oral arm, t: a tentacle, f: a length of fringe), where round the bell it hangs, where its root is, how long, how many joints
+const hung = (kind, phi, root, long, n, q = 1, more = {}) => ({ kind, phi, root, long, cuts: jointsOf(long, n, q), ...more });
+// A ribbon with a ruffled edge, for an oral arm: a rib down the middle, a lip to each side of it thrown into pleats. wide(s), deep(s): half its width and
+// how far the pleats stand, at s along it (0 to 1). Two sections to a joint, so the pleats are finer than the bends.
+function frilled(m, def, wide, deep, rib, lip, per = 2) {
+  const zs = [0]; for (let i = 0; i + 1 < def.cuts.length; i++) for (let j = 1; j <= per; j++) zs.push(def.cuts[i] + ((def.cuts[i + 1] - def.cuts[i]) * j) / per);
+  const sec = zs.map((z, j) => { const s = z / def.long, w = wide(s), d = deep(s) * (j % 2 ? 1 : -1); return [[-w, d, z], [0, -0.35 * w, z], [w, -d, z]]; });
+  for (let j = 0; j + 1 < sec.length; j++) { const a = sec[j], b = sec[j + 1]; m.tri(a[0], a[1], b[1], [lip, rib, rib]).tri(a[0], b[1], b[0], [lip, rib, lip]).tri(a[1], a[2], b[2], [rib, lip, lip]).tri(a[1], b[2], b[1], [rib, lip, rib]); }
+  return m;
+}
+// A flat ribbon, for a fine tentacle: one section to a joint. colour(i): the colour of length i
+function ribbon(m, def, wide, colour) {
+  const n = def.cuts.length - 1;
+  for (let i = 0; i < n; i++) { const z0 = def.cuts[i], z1 = def.cuts[i + 1], w0 = wide(z0 / def.long), w1 = i === n - 1 ? 0.0008 : wide(z1 / def.long), c = colour(i, n); m.quad([-w0, 0, z0], [w0, 0, z0], [w1, 0, z1], [-w1, 0, z1], c); }
+  return m;
+}
+
+// ---------------------------------------------------------------- the moon jelly (Aurelia aurita)
+// A shallow saucer, colourless, with eight shallow lobes to its rim. What is seen from across the water is inside it: four horseshoes (its gonads), violet,
+// lying round the middle like a clover, open toward the centre. Sixteen canals run out from them to the rim. Under it four short oral arms, each a little
+// shorter than the bell is wide by half, and round the rim a fringe of fine short tentacles (here sixteen lengths of fringe, three threads to each).
+export const MOON = { wide: 0.4, top: 0.075, rim: -0.012, squeeze: 0.3, drop: 0.04, from: 0.1, power: 1.25,
+  strands: [...[0, 1, 2, 3].map((k) => hung('a', k * TAU / 4, around(k * TAU / 4, 0.022, 0.0), 0.17, 5)),
+    ...Array.from({ length: 16 }, (_, k) => hung('f', (k + 0.5) * TAU / 16, around((k + 0.5) * TAU / 16, 0.192, -0.014), 0.055, 2, 1, { span: 0.034 }))] };
+const moonRim = (y, r, k = 0.95) => Array.from({ length: 16 }, (_, i) => around(i * TAU / 16, r * (i % 2 ? 1 : k), y)); // drawn in a little at each of the eight sense organs
+const moonMid = (r) => 0.057 * (1 - (r / 0.2) ** 2) - 0.004; // the height of the middle of the bell's thickness, r from the axis
+export function moon(pal) {
+  const m = mesher(), { gonad, gonadPale, canal, arm } = pal;
+  // the four horseshoes, between the arms: a ribbon most of the way round a ring, the gap toward the middle
+  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.09, 0), R = 0.043, w = 0.013, N = 8, at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad; return [x, moonMid(Math.hypot(x, z)), z]; };
+    for (let i = 0; i < N; i++) m.quad(at(i / N, R - w), at(i / N, R + w), at((i + 1) / N, R + w), at((i + 1) / N, R - w), [gonadPale, gonad, gonad], true); }
+  // the canals, sixteen, from the stomach out to the rim; and the stomach, a small cross over the mouth
+  for (let k = 0; k < 16; k++) { const phi = k * TAU / 16, t = phi + TAU / 4, r0 = k % 2 ? 0.14 : 0.125, w = 0.0045, a = around(phi, r0, moonMid(r0)), b = around(phi, 0.192, moonMid(0.192) + 0.004); m.tri([a[0] + Math.sin(t) * w, a[1], a[2] + Math.cos(t) * w], [a[0] - Math.sin(t) * w, a[1], a[2] - Math.cos(t) * w], b, canal); }
+  for (let k = 0; k < 4; k++) { const phi = k * TAU / 4, t = phi + TAU / 4, w = 0.012, b = around(phi, 0.062, moonMid(0.062)); m.tri([Math.sin(t) * w, 0.05, Math.cos(t) * w], [-Math.sin(t) * w, 0.05, -Math.cos(t) * w], b, [canal, canal, gonadPale]); }
+  for (let k = 0; k < 8; k++) { const phi = k * TAU / 8, t = phi + TAU / 4, w = 0.006, a = around(phi, 0.186, -0.01); m.tri([a[0] + Math.sin(t) * w, a[1], a[2] + Math.cos(t) * w], [a[0] - Math.sin(t) * w, a[1], a[2] - Math.cos(t) * w], around(phi, 0.176, -0.002), gonad, true); } // a sense organ in each notch of the rim
+  m.limb([0, 0.046, 0], [0, -0.004, 0], 0.03, 0.024, 4, [canal, arm]); // the mouth's short stalk, which the four arms hang from
+  return flexed(m.geometry(), MOON);
+}
+export function moonBell(pal) {
+  const m = mesher(), { bell, rim } = pal, rings = [moonRim(0.068, 0.072, 1), moonRim(0.047, 0.134, 1), moonRim(0.016, 0.182, 0.985), moonRim(-0.012, 0.2), moonRim(-0.019, 0.186)], from = [0, -0.05, 0];
+  m.cap(rings[0], [0, 1, 0], bell, 0.007);
+  sheet(m, rings, (i) => (i < 2 ? bell : i === 2 ? [bell, rim] : rim), from);
+  return veiled(m.geometry(), MOON, (x, y, z) => { const r = Math.hypot(x, z) / 0.2; return 0.2 + 0.7 * r ** 4; }); // all but clear over the middle, milky at the rim
+}
+export function moonPiece(pal, def) {
+  const m = mesher(), { arm, frill, fringe } = pal;
+  if (def.kind === 'a') return frilled(m, def, (s) => 0.026 * (1 - 0.5 * s) * Math.min(1, (1 - s) / 0.25) + 0.002, (s) => 0.0045 * (1 - 0.5 * s), arm, frill).geometry();
+  // a length of fringe: three fine threads side by side, each of its own length
+  for (const [x, l] of [[-0.75, 0.82], [0, 1], [0.7, 0.7]]) { const X = x * def.span, mid = def.cuts[1] * l, end = def.long * l, w = 0.0034; m.quad([X - w, 0, 0], [X + w, 0, 0], [X + w * 0.7, 0, mid], [X - w * 0.7, 0, mid], fringe).tri([X - w * 0.7, 0, mid], [X + w * 0.7, 0, mid], [X, 0, end], fringe); }
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the sea nettle (the Pacific one, Chrysaora fuscescens)
+// A deep amber bell, darkest toward the rim, with no more than a faint pale star on it (the stripes belong to its northern cousin). Its rim is cut into
+// lappets. Twenty-four fine dark red tentacles hang from it, three between each two of its eight sense organs, and from the mouth four long pale oral arms,
+// ruffled along both edges and wound in a spiral.
+export const NETTLE = { wide: 0.5, top: 0.2, rim: 0, squeeze: 0.36, drop: 0.06, from: 0.18, power: 1.4,
+  strands: [...[0, 1, 2, 3].map((k) => hung('a', (k + 0.5) * TAU / 4, around((k + 0.5) * TAU / 4, 0.03, -0.03), 1.45 + 0.12 * (k % 2), 12, 0.97)),
+    ...Array.from({ length: 24 }, (_, i) => { const phi = (Math.floor(i / 3) + (i % 3 + 1) / 4) * TAU / 8, f = (i * 0.618) % 1; return hung('t', phi, around(phi, 0.243, 0.002), 2.4 * (0.82 + 0.3 * f), 14, 0.98); })] };
+const NETTLE_BELL = [[0.085, 0.188], [0.16, 0.152], [0.215, 0.092], [0.245, 0.032], [0.25, 0]];
+export function nettle(pal) {
+  const m = mesher(), { gut, gutDark, arm, frill } = pal;
+  // what shows through the top of the bell: the stomach, in four pouches
+  const top = ringY(0.158, 0.105, 8, { star: 0.62, turn: TAU / 16 }), low = ringY(0.1, 0.085, 8, { star: 0.7, turn: TAU / 16 });
+  m.cap(top, [0, 1, 0], [gut, gutDark, gutDark], 0.02); m.skin([top, low], (i, k) => (k % 2 ? gut : gutDark));
+  m.limb([0, 0.11, 0], [0, -0.035, 0], 0.07, 0.05, 6, [gutDark, arm]).cap(m.last, [0, -1, 0], frill, 0.03); // the mouth's stalk
+  return flexed(m.geometry(), NETTLE);
+}
+export function nettleBell(pal) {
+  const m = mesher(), { bell, rim, ray, lappet } = pal, rings = NETTLE_BELL.map(([r, y]) => ringY(y, r, 16)), from = [0, 0.02, 0], mix = [0, 0.06, 0.2, 0.5, 0.85];
+  const tone = (i, k) => tint(tint(bell, rim, mix[i]), ray, k % 2 ? 0.34 * (1 - mix[i]) : 0); // every other face a little paler: the star
+  m.cap(rings[0], [0, 1, 0], [tint(bell, ray, 0.3), bell, bell], 0.012);
+  sheet(m, rings, (i, k) => [tone(i, k), tone(i + 1, k)], from);
+  sheet(m, [rings[4], ringY(-0.008, 0.222, 16)], rim, [0, 0.3, 0]); // the rim's own thickness, turned under
+  // the lappets: two tongues to each side of the rim
+  for (let k = 0; k < 16; k++) { const a = rings[4][k], b = rings[4][(k + 1) % 16], at = (t, down) => { const x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t, r = Math.hypot(x, z), R = down ? 0.252 : 0.25; return [x / r * R, down ? -0.034 : 0, z / r * R]; };
+    m.tri(at(0.03), at(0.47), at(0.25, true), [rim, rim, lappet]).tri(at(0.53), at(0.97), at(0.75, true), [rim, rim, lappet]); }
+  return veiled(m.geometry(), NETTLE, (x, y) => 0.74 + 0.2 * clamp01(1 - y / 0.2));
+}
+export function nettlePiece(pal, def) {
+  const m = mesher(), { arm, frill, tentacle, tentacleTip } = pal;
+  if (def.kind === 'a') return frilled(m, def, (s) => (0.075 - 0.05 * s) * Math.min(1, (1 - s) / 0.12) + 0.004, (s) => 0.021 * (1 - 0.6 * s), arm, frill).geometry();
+  return ribbon(m, def, (s) => 0.0105 - 0.006 * s, (i, n) => tint(tentacle, tentacleTip, (i / n) ** 1.5)).geometry();
+}
+
+// ---------------------------------------------------------------- the helmet jelly (Periphylla periphylla)
+// Taller than it is wide and coming to a point. The outside of the dome is as clear as glass; what is seen is the stomach inside it, a dark red cone.
+// A deep groove runs round it a third of the way up, and below the groove is the crown: sixteen thick blocks, each ending in a lappet. Twelve thick
+// stiff tentacles stand in the clefts between the lappets, three between each two of its four sense organs. Its light is blue-green and is in the
+// groove and the lappets, not inside it.
+export const HELMET = { wide: 0.35, top: 0.345, rim: -0.1, squeeze: 0.34, drop: 0.035, from: 0.775, power: 1,
+  strands: Array.from({ length: 16 }, (_, k) => k).filter((k) => k % 4).map((k) => hung('t', k * TAU / 16, around(k * TAU / 16, 0.17, -0.082), 0.5 * (k % 4 === 2 ? 1 : 0.92), 7, 0.96)) };
+export function helmet(pal) {
+  const m = mesher(), { core, coreLit, crown, crownDark, lappet, mouth, light } = pal;
+  // the stomach: a cone of dark red filling the top of the dome
+  const cone = [[0.04, 0.225], [0.082, 0.105], [0.104, 0.012], [0.1, -0.012]].map(([r, y]) => ringY(y, r, 8, { turn: TAU / 16 }));
+  m.cap(cone[0], [0, 1, 0], [coreLit, core, core], 0.085); m.skin(cone, (i, k) => ((i + k) % 2 ? core : coreLit));
+  // the crown under the groove: sixteen blocks, light and dark by turns, each with its lappet
+  const neck = ringY(-0.008, 0.126, 16, { turn: TAU / 32 }), swell = ringY(-0.042, 0.166, 16, { turn: TAU / 32 }), edge = ringY(-0.09, 0.176, 16, { turn: TAU / 32 });
+  sheet(m, [neck, swell, edge], (i, k) => (k % 2 ? crown : crownDark), [0, -0.03, 0]);
+  for (let k = 0; k < 16; k++) { const a = edge[k], b = edge[(k + 1) % 16], mid = (t, r, y) => { const x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t, l = Math.hypot(x, z); return [x / l * r, y, z / l * r]; }, c = k % 2 ? crown : crownDark;
+    const l0 = mid(0.14, 0.178, -0.092), l1 = mid(0.86, 0.178, -0.092), t0 = mid(0.3, 0.181, -0.142), t1 = mid(0.7, 0.181, -0.142);
+    m.quad(l0, l1, t1, t0, [c, c, lappet]).tri(t0, t1, mid(0.5, 0.176, -0.162), lappet); // the lappet: a rounded tongue
+    m.tri(mid(0.36, 0.184, -0.118), mid(0.64, 0.184, -0.118), mid(0.5, 0.184, -0.15), light, true); } // and the light on it
+  // the light in the groove: a broken ring
+  for (let k = 0; k < 16; k++) { const p0 = (k + 0.14) * TAU / 16, p1 = (k + 0.86) * TAU / 16; m.quad(around(p0, 0.129, 0.004), around(p1, 0.129, 0.004), around(p1, 0.138, -0.016), around(p0, 0.138, -0.016), light, true); }
+  // underneath: the hollow of the bell, dark, and the mouth
+  m.cap(ringY(-0.09, 0.16, 8), [0, 1, 0], [mouth, crownDark, crownDark], 0.05);
+  return flexed(m.geometry(), HELMET);
+}
+export function helmetBell(pal) {
+  const m = mesher(), { glass } = pal, rings = [[0.036, 0.3], [0.078, 0.21], [0.116, 0.105], [0.14, 0.025], [0.128, -0.006]].map(([r, y]) => ringY(y, r, 16, { turn: TAU / 32 }));
+  m.cap(rings[0], [0, 1, 0], glass, 0.045); sheet(m, rings, glass, [0, 0.1, 0]);
+  return veiled(m.geometry(), HELMET, (x, y) => 0.1 + 0.16 * clamp01(1 - y / 0.3) ** 2);
+}
+export function helmetPiece(pal, def) {
+  const m = mesher(), { tentacle, tentacleTip } = pal, n = def.cuts.length - 1, r = (s) => 0.017 * (1 - 0.8 * s) + 0.0012;
+  const ring = (z) => { const w = r(z / def.long); return [[-w, -0.6 * w, z], [0, w, z], [w, -0.6 * w, z]]; };
+  m.skin(def.cuts.map((z, i) => ring(i === 0 ? -0.02 : z)), (i, k) => { const c0 = tint(tentacle, tentacleTip, (i / n) ** 1.3), c1 = tint(tentacle, tentacleTip, ((i + 1) / n) ** 1.3); return k === 1 ? [dim(c0, 0.82), dim(c1, 0.82)] : [c0, c1]; });
+  return m.geometry();
+}
+
+// ---------------------------------------------------------------- the box jelly (the sea wasp, Chironex fleckeri)
+// A bell that is square from above, flat on top, clear, with a paler rib down each of its four corners. Low on each flat side, a quarter of the way
+// up, an eye-stalk hangs in a niche: a dark dot. At each corner under the rim a fleshy stalk like a hand, and from each finger of it a long flat
+// tentacle, ringed along its length. A shelf of skin turns in under the rim and narrows the opening, which is what makes its stroke a jet.
+// The real one has up to fifteen tentacles to a corner; here there are five.
+const boxRing = (y, w, p = 8) => Array.from({ length: 12 }, (_, k) => { const a = Math.floor(k / 3) * TAU / 4 + [0, 0.66, 0.91][k % 3], r = w / (Math.abs(Math.cos(a)) ** p + Math.abs(Math.sin(a)) ** p) ** (1 / p); return [Math.sin(a) * r, y, Math.cos(a) * r]; });
+const BOX_FINGERS = [-2, -1, 0, 1, 2];
+const boxHand = (q) => { const phi = TAU / 8 + q * TAU / 4, out = [Math.sin(phi), Math.cos(phi)], tan = [Math.cos(phi), -Math.sin(phi)], wrist = [out[0] * 0.166, -0.012, out[1] * 0.166], palm = [out[0] * 0.186, -0.085, out[1] * 0.186];
+  return { phi, wrist, palm, tips: BOX_FINGERS.map((j) => [palm[0] + tan[0] * j * 0.021 + out[0] * (0.016 - 0.011 * Math.abs(j)), -0.128 + 0.008 * Math.abs(j), palm[2] + tan[1] * j * 0.021 + out[1] * (0.016 - 0.011 * Math.abs(j))]) }; };
+export const BOX = { wide: 0.27, top: 0.3, rim: 0, squeeze: 0.37, drop: 0.02, from: 0.22, power: 1.2,
+  strands: [0, 1, 2, 3].flatMap((q) => { const h = boxHand(q); return h.tips.map((tip, j) => hung('t', h.phi + (j - 2) * 0.16, tip, 1.25 * (1 - 0.07 * Math.abs(j - 2)), 12, 0.97)); }) };
+export function box(pal) {
+  const m = mesher(), { gut, gonad, eye, pedal, rib } = pal;
+  // the stomach under the flat top, and the mouth on its trunk
+  const roof = ringY(0.262, 0.07, 4, { turn: TAU / 8 }); m.cap(roof, [0, 1, 0], gut, 0.012).skin([roof, ringY(0.2, 0.034, 4, { turn: TAU / 8 }), ringY(0.125, 0.03, 4, { turn: TAU / 8 }), ringY(0.1, 0.046, 4, { turn: TAU / 8 })], (i) => (i === 2 ? rib : gut));
+  for (let q = 0; q < 4; q++) { const h = boxHand(q), o = [Math.sin(h.phi), Math.cos(h.phi)], t = [Math.cos(h.phi), -Math.sin(h.phi)];
+    // inside each corner, two leaves of gonad
+    for (const s of [1, -1]) { const at = (r, y, w) => [o[0] * r + t[0] * w * s, y, o[1] * r + t[1] * w * s]; m.quad(at(0.142, 0.225, 0.012), at(0.1, 0.2, 0.05), at(0.106, 0.07, 0.056), at(0.146, 0.045, 0.012), [gonad, gonad, dim(gonad, 0.9)]); }
+    // the hand at the corner: a wrist, a flat palm, five fingers
+    m.limb(h.wrist, h.palm, 0.03, 0.034, 4, [rib, pedal]);
+    for (const tip of h.tips) m.limb([h.palm[0] + (tip[0] - h.palm[0]) * 0.3, h.palm[1] + 0.012, h.palm[2] + (tip[2] - h.palm[2]) * 0.3], tip, 0.012, 0.007, 3, pedal);
+    // the eye-stalk on the flat side next to it: a dark club in a niche of the wall
+    const a = q * TAU / 4, f = [Math.sin(a), Math.cos(a)], s2 = [Math.cos(a), -Math.sin(a)], on = (r, y, w) => [f[0] * r + s2[0] * w, y, f[1] * r + s2[1] * w];
+    m.tri(on(0.126, 0.1, -0.02), on(0.126, 0.1, 0.02), on(0.12, 0.066, 0), [rib, rib, pedal]); // the stalk it hangs by
+    m.quad(on(0.128, 0.078, 0), on(0.128, 0.062, 0.014), on(0.128, 0.044, 0), on(0.128, 0.062, -0.014), eye).quad(on(0.111, 0.078, 0), on(0.111, 0.062, -0.014), on(0.111, 0.044, 0), on(0.111, 0.062, 0.014), eye); }
+  return flexed(m.geometry(), BOX);
+}
+export function boxBell(pal) {
+  const m = mesher(), { bell, rib } = pal, rings = [[0.07, 0.292], [0.118, 0.264], [0.131, 0.2], [0.132, 0.09], [0.138, 0]].map(([w, y]) => boxRing(y, w)), from = [0, 0.1, 0];
+  m.cap(rings[0], [0, 1, 0], bell, 0.008);
+  sheet(m, rings, (i, k) => (k % 3 === 1 ? rib : bell), from); // (the face across each corner is the rib)
+  sheet(m, [rings[4], boxRing(-0.008, 0.094)], [rib, bell], [0, 0.3, 0]); // the shelf turned in under the rim
+  return veiled(m.geometry(), BOX, (x, y, z) => { const c = Math.abs(2 * x * z) / (x * x + z * z + 1e-9); return (y < -0.001 ? 0.3 : 0.17) + 0.42 * c ** 3; });
+}
+export function boxPiece(pal, def) {
+  const { tentacle, band } = pal;
+  return ribbon(mesher(), def, (s) => 0.0095 - 0.0045 * s, (i) => (i % 2 ? tint(tentacle, band, 0.55) : tentacle)).geometry(); // ringed: light and dark by turns
+}

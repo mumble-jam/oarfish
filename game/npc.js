@@ -13,6 +13,7 @@ import * as model from './critters.js';
 import { crabRig } from './crab.js';
 import { sawfishRig } from './sawfish.js';
 import { squidRig } from './squid.js';
+import { jellyRig } from './jelly.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -145,6 +146,26 @@ NPCS.push({ id: 'squid', group: 'Not yet in the dive', name: 'Squid', bands: [],
   build: (pal) => model.squid(pal), swim: null, beat: [0, 0], material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
   assemble(a, pal) { squidRig(a, pal); }, // the mantle and head are the model; its ten arms are hung on it, and trail (squid.js, strands.js)
   states: [{ id: 'hover', name: 'Hovering', speed: 0 }, { id: 'jet', name: 'Jetting', speed: 2.6 }, { id: 'turn', name: 'Turning', speed: 1.1 }, { id: 'alarm', name: 'Alarmed', speed: 0 }, { id: 'reach', name: 'Reaching', speed: 0 }] });
+// Four jellyfish, made the same way and for the same reason: to be looked at first. Each is a bell part clear over what is inside it, with every arm and tentacle
+// a piece of its own (jelly.js, strands.js). The pause menu's testing tools can put any of them in the water beside the fish; nothing else ever does.
+const JELLY = { group: 'Not yet in the dive', bands: [], swim: null, beat: [0, 0], material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.07 }, role: 'Nothing yet. It is a model to look at: no dive has one, and nothing has been decided about what it does.' };
+NPCS.push(
+  { ...JELLY, id: 'moonjelly', name: 'Moon jelly', length: 0.4, about: 'A clear saucer forty centimetres across with four violet horseshoes showing through it, as the real one has. A fine fringe round the rim and four short ruffled arms under it, each a piece of its own. It beats slowly and evenly and never quite stops. A creature of the bright water, seen in numbers.',
+    palette: { bell: '#dff1ff', rim: '#ffffff', gonad: '#9a3fe6', gonadPale: '#e3a6ff', canal: '#a78de8', arm: '#e2ccff', frill: '#fbf4ff', fringe: '#f6f8ff' },
+    build: (pal) => model.moon(pal), assemble(a, pal) { jellyRig(a, pal, 'moon'); },
+    states: [{ id: 'drift', name: 'Drifting', speed: 0 }, { id: 'pulse', name: 'Pulsing', speed: 0.14 }, { id: 'rest', name: 'Flattened, at rest', speed: 0 }] },
+  { ...JELLY, id: 'nettle', name: 'Sea nettle', length: 3, about: 'An amber bell half a metre across, darkest at the rim, and behind it a train: twenty-four fine dark red tentacles, each a piece of its own, round four long pale ruffled arms wound in spirals. It beats hard; the train streams out on the stroke and catches up as the bell fills. Fishing, it lets the tentacles hang wide like a net.',
+    palette: { bell: '#f2a53f', rim: '#b24c2a', ray: '#ffe0a0', lappet: '#8a3524', gut: '#ffe9cf', gutDark: '#f3c79d', arm: '#fff3e6', frill: '#f7c3ae', tentacle: '#8c2437', tentacleTip: '#cf5f6f' },
+    build: (pal) => model.nettle(pal), assemble(a, pal) { jellyRig(a, pal, 'nettle'); },
+    states: [{ id: 'drift', name: 'Drifting', speed: 0, lift: 1.15 }, { id: 'pulse', name: 'Pulsing', speed: 0.3 }, { id: 'turn', name: 'Turning', speed: 0.3 }, { id: 'fish', name: 'Fishing, tentacles spread', speed: 0, lift: 1.0 }] },
+  { ...JELLY, id: 'helmetjelly', name: 'Helmet jelly', length: 0.9, about: 'Taller than it is wide and coming to a point: a dark red cone inside a dome as clear as glass, a groove round it, and under the groove a crown of sixteen lappets. Twelve thick stiff tentacles, which it carries up and ahead of itself. Touched, a blue-green light runs round the crown. An animal of the dark water: daylight harms the real one.',
+    palette: { glass: '#ffd9e2', core: '#4a0818', coreLit: '#6b1024', crown: '#8a1629', crownDark: '#620f20', lappet: '#b8303f', mouth: '#2c0610', tentacle: '#9a1f30', tentacleTip: '#ee7f6c', light: '#74ffe4' },
+    build: (pal) => model.helmet(pal), assemble(a, pal) { jellyRig(a, pal, 'helmet', { halo: sprite(a, pal.light, 1) }); }, material: { ...JELLY.material, emissive: '#ff5a66', emissiveIntensity: 0.13 }, // it carries a little red light of its own: red is the first colour the deep takes away
+    states: [{ id: 'drift', name: 'Drifting', speed: 0 }, { id: 'pulse', name: 'Pulsing', speed: 0.1 }, { id: 'lit', name: 'Touched: lit', speed: 0 }, { id: 'reach', name: 'Tentacles turned down', speed: 0 }] },
+  { ...JELLY, id: 'boxjelly', name: 'Box jelly', length: 1.5, about: 'A clear bell that is square from above, a pale rib down each corner and a dark eye low on each side. At each corner a stalk like a hand, with a long ringed ribbon of a tentacle from every finger (five here; the real sea wasp has up to fifteen). Unlike the others it goes somewhere: quick strokes, the tentacles drawn up short behind it. To fish it lets them out, tips over and sinks.',
+    palette: { bell: '#bfe3ff', rib: '#f4fbff', gut: '#ffc4d8', gonad: '#e9d6ff', eye: '#1b1730', pedal: '#e6f4ff', tentacle: '#cfe0ff', band: '#6f8fe8' },
+    build: (pal) => model.box(pal), assemble(a, pal) { jellyRig(a, pal, 'box'); }, material: { ...JELLY.material, emissive: '#bfe2ff', emissiveIntensity: 0.2 }, // the real one is all but invisible; this one has to be seen
+    states: [{ id: 'drift', name: 'Drifting', speed: 0, lift: 0.45 }, { id: 'pulse', name: 'Pulsing', speed: 0.9 }, { id: 'turn', name: 'Turning sharply', speed: 0.7 }, { id: 'fish', name: 'Fishing: tipped over, sinking', speed: 0, lift: -0.55 }] });
 // the two sets of colours everything built of stone is made from. They are not things: they are what things are tinted with
 NPCS.push(
   { id: 'paint', group: 'Colours of the world', kind: 'tokens', name: 'District paint', bands: [0, 1, 2, 3, 4], length: 6, fixed: true, role: 'One colour to a band. It is on the top slab of every column, the caps of the well curbs, the seal over a guarded well, and the lengths of the Sum paid in that band.',

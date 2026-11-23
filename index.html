@@ -248,6 +248,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause .main { font-size: 16px; padding: 12px 22px; background: var(--coral); border-color: var(--coral); color: var(--ink); }
 #pause .row { display: flex; gap: 8px; }
 #pause .row button { flex: 1 1 0; line-height: 1.2; }
+#pause .row.wrap { flex-wrap: wrap; }
+#pause .row.wrap button { flex: 1 1 30%; }
 /* the key-binding menu takes the place of the pause menu while it is open */
 #pause > .binds { display: none; width: min(540px, 100%); }
 #pause.binding > .binds { display: flex; }
@@ -447,7 +449,8 @@ button:disabled { opacity: 0.4; cursor: default; }
       <span class="cap" id="dev-cap">Testing</span>
       <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
       <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button></div>
-      <div class="row"><button type="button" id="dev-squid" aria-pressed="false">Bring a squid to look at</button></div>
+      <span class="cap" id="bring-cap">Bring one to look at (not in the dive yet)</span>
+      <div class="row wrap" id="dev-bring" role="group" aria-labelledby="bring-cap"></div>
       <div class="row"><button type="button" id="dev-unlock">Unlock every shell</button><button type="button" id="dev-forget">Empty the nest</button></div>
       <p id="dev-msg" aria-live="polite"></p>
     </div>
