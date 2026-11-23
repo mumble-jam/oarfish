@@ -1104,6 +1104,28 @@ float seaLight(vec2 p, float t) {
   for (const f of fragments) { const g = add(new THREE.Group()), stone = mat(new THREE.MeshLambertMaterial({ color: stoneTones[0], vertexColors: true })), cushion = new THREE.Mesh(G.echinus, stone), neck = new THREE.Mesh(G.stump, stone),
       slab = new THREE.Mesh(G.block, mat(new THREE.MeshLambertMaterial({ color: district, vertexColors: true, emissive: district, emissiveIntensity: 0.2 })));
     slab.scale.set(1.5, 0.18, 1.5); slab.position.y = 0.2; neck.rotation.x = Math.PI; cushion.castShadow = slab.castShadow = neck.castShadow = true; g.add(neck, cushion, slab); g.scale.setScalar(0.8); g.rotation.set(f.tilt, f.yaw, 0, 'YXZ'); f.mesh = g; f.slab = slab; single.push(f); }
+  // The mural's stonework and its three carvings. A carving is a flat sign standing a little proud of its panel: dark until it is lit.
+  // Each is drawn in a square a metre across, x to the right and y up, from triangles and bars.
+  const SIGNS = (() => {
+    const draw = (fn) => { const m = mesher(), tri = (a, b, c) => m.tri([a[0], a[1], 0], [b[0], b[1], 0], [c[0], c[1], 0], '#ffffff'), quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
+      const bar = (p, q, w) => { const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = (-dy / L) * w / 2, ny = (dx / L) * w / 2; quad([p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]); };
+      const gem = (x, y, r, a = 0, long = 1) => { const c = Math.cos(a), sn = Math.sin(a), P = (u, v) => [x + u * c - v * sn, y + u * sn + v * c]; quad(P(r * long, 0), P(0, r), P(-r * long, 0), P(0, -r)); };
+      fn({ tri, quad, bar, gem }); const g = m.geometry(); owned.push({ dispose: () => g.dispose() }); return g; };
+    const arc = (bar, r, from, to, n, w) => { for (let i = 0; i < n; i++) { const a = from + ((to - from) * i) / n, b = from + ((to - from) * (i + 1)) / n; bar([Math.sin(a) * r, Math.cos(a) * r], [Math.sin(b) * r, Math.cos(b) * r], w); } };
+    return {
+      // a swarm with a body going round it: the ring not quite closed, its head a little bigger than its tail
+      swarm: draw(({ bar, gem }) => { arc(bar, 0.36, 0.5, 5.9, 12, 0.075); gem(Math.sin(0.5) * 0.36, Math.cos(0.5) * 0.36, 0.075, -0.5 + 1.57, 1.5);
+        for (let i = 0; i < 6; i++) { const a = i * 1.047 + 0.3; gem(Math.sin(a) * 0.17, Math.cos(a) * 0.17, 0.042, -a, 2.1); } gem(0, 0, 0.042, 0.4, 2.1); }),
+      // a cache: a stone box, its lid lifted, and what was in it going up
+      cache: draw(({ quad, bar, gem }) => { quad([-0.27, -0.36], [0.27, -0.36], [0.23, -0.08], [-0.23, -0.08]); bar([-0.3, 0.05], [0.2, 0.19], 0.085); gem(-0.06, 0.3, 0.05); gem(0.16, 0.36, 0.038); gem(-0.24, 0.34, 0.032); }),
+      // the mural itself, its three carvings as three stones: for what is won by lighting a whole one
+      mural: draw(({ bar, gem }) => { bar([-0.4, -0.33], [0.4, -0.33], 0.1); bar([-0.38, 0.31], [0.38, 0.31], 0.09); bar([-0.33, -0.3], [-0.33, 0.28], 0.06); bar([0.33, -0.3], [0.33, 0.28], 0.06); for (const x of [-0.19, 0, 0.19]) gem(x, -0.01, 0.07); }),
+      // the keepers' signs: the crab's claw, the sawfish's saw, the angler's lamp, the moray's jaws
+      claw: draw(({ tri, quad }) => { quad([-0.36, -0.38], [-0.08, -0.4], [0.14, -0.06], [-0.14, 0.1]); tri([-0.14, 0.1], [0.12, 0.38], [0.32, 0.16]); tri([-0.14, 0.1], [0.32, 0.16], [0.06, 0.02]); tri([0.14, -0.06], [0.4, 0.02], [0.16, -0.24]); }),
+      saw: draw(({ tri, bar }) => { bar([-0.38, -0.2], [0.38, 0.2], 0.09); const ux = 0.885, uy = 0.466; for (let i = 0; i < 6; i++) { const t = -0.3 + i * 0.125, x = t * ux, y = t * uy; for (const sd of [1, -1]) tri([x - ux * 0.035 - uy * 0.04 * sd, y - uy * 0.035 + ux * 0.04 * sd], [x + ux * 0.035 - uy * 0.04 * sd, y + uy * 0.035 + ux * 0.04 * sd], [x - uy * 0.15 * sd, y + ux * 0.15 * sd]); } }),
+      lamp: draw(({ bar, gem }) => { bar([-0.22, -0.38], [-0.26, -0.02], 0.07); bar([-0.26, -0.02], [-0.1, 0.24], 0.065); bar([-0.1, 0.24], [0.1, 0.27], 0.06); gem(0.2, 0.16, 0.1, 0, 0.8); for (const a of [0.2, 1.3, 2.4]) bar([0.2 + Math.sin(a) * 0.15, 0.16 - Math.cos(a) * 0.15], [0.2 + Math.sin(a) * 0.24, 0.16 - Math.cos(a) * 0.24], 0.035); }),
+      jaw: draw(({ tri, bar }) => { bar([-0.38, 0], [0.38, 0.3], 0.075); bar([-0.38, 0], [0.38, -0.3], 0.075); for (let i = 0; i < 4; i++) { const x = -0.12 + i * 0.14, yu = 0.1 + (x + 0.38) * 0.395 - 0.1, w = 0.05; tri([x - w, yu - 0.02], [x + w, yu + 0.02], [x + 0.01, yu - 0.15]); tri([x - w, -yu + 0.02], [x + 0.01, -yu + 0.15], [x + w, -yu - 0.02]); } }),
+    }; })();
   // The nest (NEST). One group, moved with the world as it comes round; everything in it is placed from the start point.
   let nestAt = null;
   if (nest && floor === 0 && !nursery) { const g = add(new THREE.Group()), yaw = NEST.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)];
@@ -1122,30 +1144,13 @@ float seaLight(vec2 p, float t) {
       if (raised) { stood++; const neck = ground + 0.9 * S - 0.14; stumps.push({ p: here(x, neck, z), q: upside, s: new THREE.Vector3(S, S, S), color: stoneTones[0] }); cushions.push({ p: here(x, neck, z), s: new THREE.Vector3(S, S, S), color: stoneTones[0] });
         blocks.push({ p: here(x, neck + 0.2 * S, z), q: turned, s: new THREE.Vector3(1.5 * S, 0.18 * S, 1.5 * S), color: district }); top = neck + 0.38 * S; }
       dishes.push({ p: here(x, top, z), s: new THREE.Vector3(0.62, 0.07, 0.62), color: pl.found ? stoneTones[1 % stoneTones.length] : new THREE.Color(stoneTones[0]).multiplyScalar(0.6) });
-      places.push({ type: pl.type, found: !!pl.found, raised, x: x - SPAWN.x, y: top + 0.07 + NEST.lift, z: z - SPAWN.z, top: top + 0.07 }); });
+      // a kind that has to be won has, lying in its dish, the sign of what wins it: dark until that has been done, lit ever after
+      if (pl.sign) { const sg = new THREE.Mesh(SIGNS[pl.sign === 'guard' ? 'claw' : pl.sign], mat(new THREE.MeshLambertMaterial({ color: pl.open ? '#fff1c4' : '#3a4a52', vertexColors: true, side: THREE.DoubleSide, emissive: '#ffdf9a', emissiveIntensity: pl.open ? 0.8 : 0 })));
+        sg.rotation.set(-Math.PI / 2, yaw + Math.PI, 0, 'YXZ'); sg.position.set(x - SPAWN.x, top + 0.078, z - SPAWN.z); sg.scale.setScalar(0.52); sg.userData.sign = pl.sign; g.add(sg); }
+      places.push({ type: pl.type, found: !!pl.found, sign: pl.sign || null, open: pl.open !== false, raised, x: x - SPAWN.x, y: top + 0.07 + NEST.lift, z: z - SPAWN.z, top: top + 0.07 }); });
     for (const r of places.length ? NEST.rows : []) { const [x, z] = at(0.4 - 2 * NEST.gap, r); blocks.push({ p: here(x, height(x, z) - 0.06, z), q: turned, s: new THREE.Vector3(0.9, 0.18, 4.7), color: stoneTones[0] }); }
     lay(G.drum, dishes); lay(G.block, blocks); lay(G.stump, stumps); lay(G.echinus, cushions);
     nestAt = { x: SPAWN.x, y: 0, z: SPAWN.z, mesh: g, group: g, places, line: L, stones: stones.length, stood, yaw }; single.push(nestAt); }
-  // The mural's stonework and its three carvings. A carving is a flat sign standing a little proud of its panel: dark until it is lit.
-  // Each is drawn in a square a metre across, x to the right and y up, from triangles and bars.
-  const SIGNS = (() => {
-    const draw = (fn) => { const m = mesher(), tri = (a, b, c) => m.tri([a[0], a[1], 0], [b[0], b[1], 0], [c[0], c[1], 0], '#ffffff'), quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
-      const bar = (p, q, w) => { const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = (-dy / L) * w / 2, ny = (dx / L) * w / 2; quad([p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]); };
-      const gem = (x, y, r, a = 0, long = 1) => { const c = Math.cos(a), sn = Math.sin(a), P = (u, v) => [x + u * c - v * sn, y + u * sn + v * c]; quad(P(r * long, 0), P(0, r), P(-r * long, 0), P(0, -r)); };
-      fn({ tri, quad, bar, gem }); const g = m.geometry(); owned.push({ dispose: () => g.dispose() }); return g; };
-    const arc = (bar, r, from, to, n, w) => { for (let i = 0; i < n; i++) { const a = from + ((to - from) * i) / n, b = from + ((to - from) * (i + 1)) / n; bar([Math.sin(a) * r, Math.cos(a) * r], [Math.sin(b) * r, Math.cos(b) * r], w); } };
-    return {
-      // a swarm with a body going round it: the ring not quite closed, its head a little bigger than its tail
-      swarm: draw(({ bar, gem }) => { arc(bar, 0.36, 0.5, 5.9, 12, 0.075); gem(Math.sin(0.5) * 0.36, Math.cos(0.5) * 0.36, 0.075, -0.5 + 1.57, 1.5);
-        for (let i = 0; i < 6; i++) { const a = i * 1.047 + 0.3; gem(Math.sin(a) * 0.17, Math.cos(a) * 0.17, 0.042, -a, 2.1); } gem(0, 0, 0.042, 0.4, 2.1); }),
-      // a cache: a stone box, its lid lifted, and what was in it going up
-      cache: draw(({ quad, bar, gem }) => { quad([-0.27, -0.36], [0.27, -0.36], [0.23, -0.08], [-0.23, -0.08]); bar([-0.3, 0.05], [0.2, 0.19], 0.085); gem(-0.06, 0.3, 0.05); gem(0.16, 0.36, 0.038); gem(-0.24, 0.34, 0.032); }),
-      // the keepers' signs: the crab's claw, the sawfish's saw, the angler's lamp, the moray's jaws
-      claw: draw(({ tri, quad }) => { quad([-0.36, -0.38], [-0.08, -0.4], [0.14, -0.06], [-0.14, 0.1]); tri([-0.14, 0.1], [0.12, 0.38], [0.32, 0.16]); tri([-0.14, 0.1], [0.32, 0.16], [0.06, 0.02]); tri([0.14, -0.06], [0.4, 0.02], [0.16, -0.24]); }),
-      saw: draw(({ tri, bar }) => { bar([-0.38, -0.2], [0.38, 0.2], 0.09); const ux = 0.885, uy = 0.466; for (let i = 0; i < 6; i++) { const t = -0.3 + i * 0.125, x = t * ux, y = t * uy; for (const sd of [1, -1]) tri([x - ux * 0.035 - uy * 0.04 * sd, y - uy * 0.035 + ux * 0.04 * sd], [x + ux * 0.035 - uy * 0.04 * sd, y + uy * 0.035 + ux * 0.04 * sd], [x - uy * 0.15 * sd, y + ux * 0.15 * sd]); } }),
-      lamp: draw(({ bar, gem }) => { bar([-0.22, -0.38], [-0.26, -0.02], 0.07); bar([-0.26, -0.02], [-0.1, 0.24], 0.065); bar([-0.1, 0.24], [0.1, 0.27], 0.06); gem(0.2, 0.16, 0.1, 0, 0.8); for (const a of [0.2, 1.3, 2.4]) bar([0.2 + Math.sin(a) * 0.15, 0.16 - Math.cos(a) * 0.15], [0.2 + Math.sin(a) * 0.24, 0.16 - Math.cos(a) * 0.24], 0.035); }),
-      jaw: draw(({ tri, bar }) => { bar([-0.38, 0], [0.38, 0.3], 0.075); bar([-0.38, 0], [0.38, -0.3], 0.075); for (let i = 0; i < 4; i++) { const x = -0.12 + i * 0.14, yu = 0.1 + (x + 0.38) * 0.395 - 0.1, w = 0.05; tri([x - w, yu - 0.02], [x + w, yu + 0.02], [x + 0.01, yu - 0.15]); tri([x - w, -yu + 0.02], [x + 0.01, -yu + 0.15], [x + w, -yu - 0.02]); } }),
-    }; })();
   if (mural) { const g = add(new THREE.Group()), lambert = (color, more) => mat(new THREE.MeshLambertMaterial({ color, vertexColors: true, ...more }));
     const block = (color, x, y, z, sx, sy, sz, more) => { const m = new THREE.Mesh(G.block, lambert(color, more)); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
     const shade = new THREE.Color(stoneTones[0]).multiplyScalar(0.62);

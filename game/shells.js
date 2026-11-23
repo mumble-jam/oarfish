@@ -22,6 +22,10 @@ export const SHELLS = {
   pearl: { name: 'Pearl', colour: '#cfe6ff', worn: 'Every new segment costs a fifth less to grow.', shed: 'take the bait back before it fades and regain two segments.' },
 };
 export const SHELL_TYPES = Object.keys(SHELLS);
+// Four kinds are not to be found until a feat has been done once, in any dive: after that they are in the pool for good, from the next dive on.
+// The feats are the ones the murals count (world.js, MURAL): a band's greatest swarm taken, a cache opened, a keeper beaten, and a whole mural lit.
+export const SHELL_FEATS = { spine: 'swarm', tusk: 'cache', horn: 'guard', pearl: 'mural' };
+export const shellPool = (feats = {}) => SHELL_TYPES.filter((t) => !SHELL_FEATS[t] || feats[SHELL_FEATS[t]]);
 export const SLOT_EVERY = 3; // one shell to every third segment
 
 // what the worn shells add up to; two of a kind stack where that means anything
@@ -127,10 +131,10 @@ export function createShellKit() {
 }
 
 // The shells lying about one band. Swim the head over one to take it.
-export function createShellField(scene, world, kit, { seed = 1, floor = 0, count = 3 } = {}) {
+export function createShellField(scene, world, kit, { seed = 1, floor = 0, count = 3, types = SHELL_TYPES } = {}) {
   const rand = rng(seed * 53 + floor * 173 + 29), rr = (a, b) => a + (b - a) * rand();
   const items = [], spriteMats = [];
-  const pool = [...SHELL_TYPES];
+  const pool = [...types]; // the kinds that may lie about in this dive
   function drop(x, z, type, lift = 1.2) {
     const group = new THREE.Group(), mesh = kit.mesh(type, 1.15);
     const mat = new THREE.SpriteMaterial({ map: kit.glow, color: SHELLS[type].colour, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: 0.7 });

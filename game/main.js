@@ -12,7 +12,7 @@ import { createPad, BTN } from './pad.js';
 import { createSum } from './boss.js';
 import { createSurface, SKY } from './surface.js';
 import { createGuard } from './guards.js';
-import { SHELLS, SHELL_TYPES, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
+import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, createShellKit, createShellField } from './shells.js';
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
@@ -311,11 +311,11 @@ export async function start(saved = {}) {
     world?.dispose(); foes?.dispose();
     run.floor = index;
     world = createWorld(scene, { seed: run.seed, floor: index, calm, nursery: index === 0 && teach.on && !teach.done && !window.__noNursery,
-      nest: index === 0 ? { record: nest.record, fragments: nest.fragments, places: SHELL_TYPES.map((type) => ({ type, found: nest.shells.includes(type) })) } : null });
+      nest: index === 0 ? { record: nest.record, fragments: nest.fragments, places: SHELL_TYPES.map((type) => ({ type, found: nest.shells.includes(type), sign: SHELL_FEATS[type] || null, open: !SHELL_FEATS[type] || !!nest.feats[SHELL_FEATS[type]] })) } : null });
     nestShells.length = 0; // the shells the nest has to show, each over its own place (the world made the places; the shells are this file's to make)
     if (world.react?.nest) for (const p of world.react.nest.places) if (p.found) { const m = kit.mesh(p.type, 0.95); m.position.set(p.x, p.y, p.z); world.react.nest.group.add(m); nestShells.push({ m, p, ph: nestShells.length * 1.7 }); }
     foes = createFoes(scene, world, { seed: run.seed }, game);
-    field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3 });
+    field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3, types: run.pool || SHELL_TYPES });
     Object.assign(tut, { on: !!world.nursery, step: 0, stall: 0, told: false, was: 0, prize: null });
     if (tut.on && field.items[0]) { const it = field.items[0]; it.taken = true; it.group.visible = false; tut.prize = it.type; } // the band's first shell waits in the sealed jar
     $('btn-skip').hidden = !tut.on;
@@ -349,6 +349,7 @@ export async function start(saved = {}) {
     session.dives++;
     if (end.kind) { cam.zoom = 1; cam.pitch = feel.mode === 'look' ? LOOK_LEVEL : 0.56; cam.ease = null; } // an ending leaves the camera somewhere odd
     Object.assign(run, { seed, segs: START_SEGS, food: 0, charge: 0, toll: 0, chain: 0, chainT: 0, harmony: 0, drive: 0, caches: [], haul: null, hauled: 0, cleaned: 0, caught: 0, longest: START_SEGS, time: 0, stamina: 1, winded: false, hunted: 0, rest: 9, dashCool: 0, kick: 0, freeze: 0, shells: [], noRoom: -9 });
+    run.pool = shellPool(nest.feats); // the kinds of shell this dive can turn up: what has been unlocked by now, and no more until the next
     shellsChanged();
     said.clear(); hintQueue.length = 0; hintT = 0;
     motes.length = 0; // a catch still on its way to the mouth belongs to the dive that made it
@@ -447,13 +448,21 @@ export async function start(saved = {}) {
   // on purpose. Carried out over the open rift (or to the palace gate) it is given to the deep, and counted: in this dive, for the card
   // at its end, and for good, in this browser, for the nest that is to come.
   const HAUL = { slow: 0.85, at: 0.55, grip: 0.8, wait: 1.5 }; // `wait`: seconds a dropped one lies before a body still curled round it can take it up again
-  const nest = (() => { const n = store.get('oarfish.nest') || {}; return { ...n, fragments: n.fragments | 0, record: n.record | 0, shells: Array.isArray(n.shells) ? n.shells.filter((t) => SHELLS[t]) : [] }; })();
+  const nest = (() => { const n = store.get('oarfish.nest') || {}; return { ...n, fragments: n.fragments | 0, record: n.record | 0, shells: Array.isArray(n.shells) ? n.shells.filter((t) => SHELLS[t]) : [], feats: { ...(n.feats || {}) } }; })();
   const nestShells = [];
   // what the nest is to remember, noted as it happens so that a dive cut short still counts: the longest body, and each kind of shell found
   function remember() { let changed = false;
     if (run.longest > nest.record) { nest.record = run.longest; changed = true; }
     for (const sh of run.shells) if (!nest.shells.includes(sh.type)) { nest.shells.push(sh.type); changed = true; }
     if (changed) store.set('oarfish.nest', nest); }
+  // A feat, done for the first time in any dive, puts a new kind of shell in the pool for the dives after this one (shells.js, SHELL_FEATS).
+  function feat(kind) {
+    if (nest.feats[kind]) return false;
+    nest.feats[kind] = true; store.set('oarfish.nest', nest);
+    const type = Object.keys(SHELL_FEATS).find((t) => SHELL_FEATS[t] === kind), d = SHELLS[type];
+    if (d) tell(`${d.worn}\nIt can be found from your next dive on.`, 9, { kind: 'shell', kick: 'A new kind of shell', title: d.name, tone: d.colour });
+    return true;
+  }
   function takeUp(f) { run.haul = f; f.held = true; moment('loop'); buzz(0.4, 0.4, 120); run.kick = Math.max(run.kick, 0.3); }
   function letGo(how) { const f = run.haul; if (!f) return false; run.haul = null; world.react?.settle(f); f.wait = HAUL.wait; if (how === 'bite') buzz(0.5, 0.3, 160); return true; }
   function hauling(dt) {
@@ -475,8 +484,8 @@ export async function start(saved = {}) {
   function openCache(c) {
     const at = new THREE.Vector3(rig.pos.x + wrapD(c.x - rig.pos.x), c.y, rig.pos.z + wrapD(c.z - rig.pos.z));
     gulp(Array.from({ length: 12 }, (_, i) => at.clone().add(new THREE.Vector3(Math.sin(i * 2.4) * 0.5, 0.12 * i, Math.cos(i * 2.4) * 0.5))), c.food, 0.6);
-    moment('cache'); run.kick = Math.max(run.kick, 0.5); run.caches[run.floor] = (run.caches[run.floor] || 0) + 1; world.react?.earn('cache');
-    if (c.shell) { const have = new Set([...run.shells.map((s) => s.type), ...field.items.filter((it) => !it.taken).map((it) => it.type)]); field.drop(c.x + 1.6, c.z + 1.2, SHELL_TYPES.find((t) => !have.has(t)) || SHELL_TYPES[(run.floor * 3 + 1) % SHELL_TYPES.length], 1.1); }
+    moment('cache'); run.kick = Math.max(run.kick, 0.5); run.caches[run.floor] = (run.caches[run.floor] || 0) + 1; world.react?.earn('cache'); feat('cache');
+    if (c.shell) { const have = new Set([...run.shells.map((s) => s.type), ...field.items.filter((it) => !it.taken).map((it) => it.type)]); field.drop(c.x + 1.6, c.z + 1.2, run.pool.find((t) => !have.has(t)) || SHELL_TYPES[(run.floor * 3 + 1) % SHELL_TYPES.length], 1.1); }
   }
   // The swell that runs down the body when it grows: k is how strong, and a slow one (a new standing) takes its time.
   function growPulse(k, slow = false) { pulse3.at = -0.12; pulse3.k = k; pulse3.pace = slow ? 0.85 : 1.55; }
@@ -584,8 +593,8 @@ export async function start(saved = {}) {
     event(kind, pos) {
       if (kind === 'clang') moment('burst');
       else if (kind === 'down') {
-        moment('kill'); pulse('grow'); run.kick = 1; world.react?.earn('guard');
-        const spare = Object.keys(SHELLS).filter((t) => !run.shells.some((s) => s.type === t));
+        moment('kill'); pulse('grow'); run.kick = 1; world.react?.earn('guard'); feat('guard');
+        const spare = run.pool.filter((t) => !run.shells.some((s) => s.type === t));
         if (field && spare.length) field.drop(pos.x, pos.z, spare[(run.seed + run.floor * 7) % spare.length], 1.1);
       }
     },
@@ -1272,6 +1281,8 @@ export async function start(saved = {}) {
   function showDev(msg) { for (const b of $('dev-bands').children) b.setAttribute('aria-pressed', String(+b.dataset.band === run.floor)); $('dev-keeper').disabled = !guard || guard.done; $('dev-grow').disabled = run.segs >= MAX_SEGS; $('dev-msg').textContent = msg || DEV_NOTE; }
   $('dev-bands').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || ended()) return; enterFloor(+b.dataset.band, false); setPaused(false); if (e.isTrusted) grab(true); });
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
+  $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
+  $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {} }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked. It shows from the next dive.'); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {
     const ls = $('f-look');
@@ -1684,7 +1695,7 @@ export async function start(saved = {}) {
           const at = world.take(sc); // the whole swarm streams to the mouth, a few fish to a spark
           gulp(at, at.length, clamp(Math.sqrt(sc.n / SWARMS.h.n), 0, 1));
           fishCaught += sc.n;
-          if (sc.tier === world.react?.greatest && sc.n === SWARMS[sc.tier].n) world.react.earn('swarm'); // the band's greatest swarm, whole: a carving on its mural
+          if (sc.tier === world.react?.greatest && sc.n === SWARMS[sc.tier].n) { world.react.earn('swarm'); feat('swarm'); } // the band's greatest swarm, whole: a carving on its mural
           if (sc.tier !== 's') say(`swarm-${sc.tier}`, sc.tier === 'h' ? 'The great swarm, whole.' : 'A bigger swarm, whole. Bigger ones still need a longer body.', 6);
         } else if (!sc.can && sc.burst <= 0) { // a body too short to go round it: the swarm bursts out and regroups
           sc.burst = 1; moment('burst');
@@ -1767,7 +1778,7 @@ export async function start(saved = {}) {
     // the mural at the rift (world.js, MURAL) lights a carving as the fish comes up to it: a note each, rising, and when all three are lit the band answers
     if (world.react) for (const c of world.react.carved.splice(0)) {
       if (c.what === 'sign') { music.chime(1 + c.i * 2, 0.9); buzz(0.15, 0.3, 90); }
-      else if (c.what === 'whole') { moment('cache'); buzz(0.4, 0.5, 260); }
+      else if (c.what === 'whole') { moment('cache'); buzz(0.4, 0.5, 260); feat('mural'); }
     }
     // a cleaning station (world.js, CLEAN): a note for each step of the work, and at the end of it a segment grown back
     if (world.react) for (const c of world.react.cleaned.splice(0)) {
@@ -1840,7 +1851,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

@@ -543,7 +543,7 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {}, still = { 
   take(T.swarm('s')); out.small = lit(m);
   for (let i = 0; i < 9; i++) g.addFood(12); g.sim(3, still); out.segs = g.run.segs; out.took = take(T.swarm(R.greatest)); out.swarm = lit(m);
   R.opened.push({ kind: 'vent', x: g.rig.pos.x + 2, y: g.rig.pos.y, z: g.rig.pos.z, food: 6, shell: false }); g.sim(0.3, still); out.cache = lit(m);
-  document.getElementById('dev-keeper').click(); g.sim(0.5, still); out.guard = lit(m);
+  g.guard.debug.fall(); g.sim(0.5, still); out.guard = lit(m);
   // far from it, nothing is lit yet; come up to it and they light one after another, and then its painted top
   const news = []; T.put(m.x + Math.sin(m.yaw) * 6, m.y + 2, m.z + Math.cos(m.yaw) * 6, m.yaw + Math.PI); const grab = () => { for (const c of R.carved) news.push(c.what + (c.i ?? '')); };
   g.sim(0.3, still); const first = lit(m); g.sim(4, still); out.near = { first, then: lit(m), whole: m.whole, top: +m.top.material.emissiveIntensity.toFixed(2), sign: +m.signs[0].mesh.material.emissiveIntensity.toFixed(2) };
@@ -553,7 +553,7 @@ check('every rift has a mural with three carvings, dark at first: the band\u2019
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 
 // ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh).length;
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign).length;
   Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
   out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
   Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());
@@ -571,6 +571,29 @@ check('the nest is where a dive starts: nothing in it at first but ten empty pla
   s.bare.line === 0 && s.bare.stones === 0 && s.bare.places === 10 && s.bare.found === 0 && s.bare.stood === 0 && s.bare.shown === 0
   && Math.abs(s.full.line - 6.43) < 0.02 && s.full.line > s.full.body + 2 && s.full.stones >= 13 && s.full.stones <= 17 && s.full.found === 'spire,fan,ring,cap,lamp' && s.full.stood === 3 && s.full.shown === 5 && s.full.lifted && s.full.right && Math.abs(s.full.fish) < 0.6 && !s.below
   && s.kept.segs > 12 && s.kept.record === s.kept.segs && s.kept.saved === s.kept.segs && s.kept.shells === 'horn' && Math.abs(s.next.line - (s.kept.segs * 0.312 + 0.5)) < 0.02 && s.next.found === 'horn' && s.next.shown === 1, JSON.stringify(s));
+
+// ---- unlocks: four kinds of shell are won by feats, and are in the pool from the next dive on
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), still = { ...T.none(), amount: 0 }, locked = ['spine', 'tusk', 'horn', 'pearl'];
+  const lying = () => { const seen = new Set(); for (const seed of [4242, 7, 99]) for (let f = 0; f < 5; f++) { g.startRun(seed); if (f) g.enterFloor(f, false); for (const it of g.field.items) seen.add(it.type); } return [...seen].sort().join(); };
+  Object.assign(g.nest, { record: 0, shells: [], fragments: 0, feats: {} }); out.pool0 = (g.startRun(4242), g.run.pool.join()); out.lying0 = lying();
+  // a cache opened, for the first time ever: said once, kept, and not in this dive's pool but in the next one's; its place in the nest is lit
+  g.startRun(4242); g.run.safe = 1e9; const sign = (t) => g.world.react.nest.places.find((p) => p.type === t); const before = { open: sign('tusk').open, sign: sign('tusk').sign };
+  g.world.react.opened.push({ kind: 'vent', x: g.rig.pos.x + 2, y: g.rig.pos.y, z: g.rig.pos.z, food: 6, shell: false }); g.sim(0.5, still);
+  out.won = { before, feats: Object.keys(g.nest.feats).join(), saved: Object.keys(JSON.parse(localStorage.getItem('oarfish.nest')).feats).join(), title: document.getElementById('toast-title').textContent, now: g.run.pool.includes('tusk'), again: g.feat('cache') };
+  g.startRun(4242); out.next = { pool: g.run.pool.join(), open: sign('tusk').open, others: locked.filter((t) => t !== 'tusk').every((t) => !sign(t).open), base: sign('fan').sign };
+  // the other three: the band's greatest swarm, the keeper, a whole mural
+  g.enterFloor(1, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false; g.sim(0.2, still); const R = g.world.react, m = R.mural;
+  for (let i = 0; i < 9; i++) g.addFood(12); g.sim(3, still); const q = T.swarm(R.greatest); T.put(q.x + 2.6, q.y, q.z + 0.9, 1.1); g.sim(0.4, T.none()); for (let t = 0; q.left > 0 && t < 12; t += 0.1) g.sim(0.1, { ...T.none(), coil: 1 });
+  const afterSwarm = Object.keys(g.nest.feats).sort().join(); g.guard.debug.fall(); g.sim(0.5, still); const afterGuard = Object.keys(g.nest.feats).sort().join();
+  R.opened.push({ kind: 'vent', x: g.rig.pos.x + 2, y: g.rig.pos.y, z: g.rig.pos.z, food: 6, shell: false }); g.sim(0.3, still); T.put(m.x + Math.sin(m.yaw) * 6, m.y + 2, m.z + Math.cos(m.yaw) * 6, m.yaw + Math.PI); g.sim(4.5, still);
+  out.all = { afterSwarm, afterGuard, feats: Object.keys(g.nest.feats).sort().join(), pool: (g.startRun(4242), g.run.pool.length) }; out.lying1 = lying();
+  // the testing tools
+  document.getElementById('dev-forget').click(); const emptied = JSON.stringify(g.nest); document.getElementById('dev-unlock').click(); out.tools = { emptied, unlocked: Object.keys(g.nest.feats).sort().join() };
+  Object.assign(g.nest, JSON.parse(kept)); g.nest.feats = JSON.parse(kept).feats || {}; localStorage.setItem('oarfish.nest', kept); g.startRun(4242); g.run.safe = 0; return out; });
+check('four kinds of shell have to be won: until then none of them lies about in any band; a cache opened, a band\u2019s greatest swarm taken, a keeper beaten and a whole mural lit each win one, said once and kept; what is won is in the pool from the next dive, not this one, and its place in the nest is lit',
+  s.pool0 === 'spire,fan,coil,ring,cap,lamp' && s.lying0 === 'cap,coil,fan,lamp,ring,spire' && !s.won.before.open && s.won.before.sign === 'cache' && s.won.feats === 'cache' && s.won.saved === 'cache' && s.won.title === 'Tusk' && !s.won.now && s.won.again === false
+  && s.next.pool === 'spire,fan,coil,ring,cap,lamp,tusk' && s.next.open && s.next.others && s.next.base === null && s.all.afterSwarm === 'cache,swarm' && s.all.afterGuard === 'cache,guard,swarm' && s.all.feats === 'cache,guard,mural,swarm' && s.all.pool === 10
+  && s.lying1 === 'cap,coil,fan,horn,lamp,pearl,ring,spine,spire,tusk' && /"record":0/.test(s.tools.emptied) && /"feats":\{\}/.test(s.tools.emptied) && s.tools.unlocked === 'cache,guard,mural,swarm', JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, A = R.grown.anemone[0];
   // how far a thing standing at (x, y, z) is pulled in, as the plants' material works it out from the wake
