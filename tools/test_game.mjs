@@ -670,6 +670,38 @@ check('a chime brushed swings aside and rings once, stops nobody, and hangs stil
   s.sets >= 4 && s.bars >= 12 && s.atRift === 0 && s.rang >= 1 && s.rang <= 3 && s.swung > 0.15 && s.went > 9 && s.rest < 0.02 && s.queue === 0 && s.started && s.a !== s.b && s.inChord && s.moves, JSON.stringify(s));
 await page.evaluate(() => { try { localStorage.clear(); } catch {} });
 await snap(page, 'g-drawer');
+// the shadow pass draws only what stands in the sun's box: nothing that casts a shadow anyone could see may be left out of it
+s = await ev(async () => { const g = window.__game, gl = g.renderer.getContext(), out = { apart: 0, restless: 0, views: 0, shaded: 0, cast: 0, where: [] };
+  window.__hold = true; const sun = g.scene.children.find((o) => o.isDirectionalLight), pitch = g.cam.pitch, zoom = g.cam.zoom; // it is aimed at the point the picture is centred on
+  const shot = () => { g.renderer.render(g.scene, g.camera); const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+  const apart = (a, b) => { const w = gl.drawingBufferWidth; let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])) > 2) { n++; const x = (i / 4) % w, y = Math.floor(i / 4 / w); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { n, box: `x ${x0}..${x1}, y ${y0}..${y1}` }; };
+  for (const band of [0, 1, 2]) { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9;
+    for (const [secs, yaw, tilt, far] of [[0.6, 0, 0.56, 1], [3, 2.2, 0.3, 0.9], [3, -1.3, 0.9, 2]]) { g.cam.yaw += yaw; g.cam.pitch = tilt; g.cam.zoom = far; g.sim(secs, { dir: { x: Math.sin(band + yaw), y: 0, z: Math.cos(band + yaw) }, amount: 1, vertical: 0, sprint: false }); g.snap();
+      g.world.sorting(true); g.world.dress(sun.target.position); const t = g.world.tally(), a0 = shot(), a = shot();
+      g.world.sorting(false); g.world.dress(sun.target.position); const u = g.world.tally(), b = shot();
+      g.world.sorting(true); g.world.dress(sun.target.position);
+      out.restless += apart(a0, a).n; // the same picture drawn twice: anything that differs moves by itself
+      const d = apart(a, b); out.apart += d.n; if (d.n) out.where.push(`band ${band}: ${d.n} px in ${d.box}, pitch ${tilt}, zoom ${far}`);
+      out.views++; out.shaded += t.shaded; out.cast += u.shaded; } }
+  g.cam.pitch = pitch; g.cam.zoom = zoom;
+  return out; });
+check('what stands outside the sun’s box is left out of the shadow pass, and the picture is the same to the pixel: three bands, three views each, steep and flat, near and far', s.views === 9 && s.apart === 0 && s.restless === 0 && s.shaded < s.cast * 0.7, JSON.stringify(s));
+
+// going quiet: a paused dive is drawn once and left, and drawn again when something is pressed; an end card left alone goes the same way
+s = await ev(async () => { const g = window.__game, wait = (ms) => new Promise((r) => setTimeout(r, ms)), frames = () => g.renderer.info.render.frame, key = (type) => window.dispatchEvent(new KeyboardEvent(type, { key: 'F13', code: 'F13' }));
+  g.startRun(4242); g.sim(0.5); g.run.safe = 1e9; window.__hold = false;
+  g.setPaused(true); await wait(1500); // what pausing itself stirred up has been drawn
+  let ticks = 0, on = true; const count = () => { ticks++; if (on) requestAnimationFrame(count); }; requestAnimationFrame(count);
+  const a = frames(); await wait(3200); on = false; const idle = frames() - a;
+  key('keydown'); key('keyup'); await wait(900); const woke = frames() - a - idle;
+  const b = frames(); g.setPaused(false); await wait(2500); const live = frames() - b;
+  const away = g.QUIET.away; g.QUIET.away = 0.6; g.die(); for (let i = 0; i < 120 && g.run.stateT < 0.8; i++) await wait(250); await wait(1200); // an end card nobody has touched for a while (drawn here, the dive's clock runs slow)
+  const c = frames(); await wait(3200); const left = frames() - c;
+  window.dispatchEvent(new PointerEvent('pointerdown')); const d = frames(); await wait(2500); const back = frames() - d;
+  g.QUIET.away = away; window.__hold = true;
+  return { idle, ticks, woke, live, left, back, state: g.run.state }; });
+check('a paused dive is not drawn again and again (about one frame a second, while the page goes on running), a key pressed has it drawn, and resumed it runs; an end card left alone goes quiet too, until it is touched', s.idle <= 5 && s.ticks >= s.idle * 2 && s.woke >= 1 && s.live >= 3 && s.state === 'dead' && s.left <= 5 && s.back >= 2, JSON.stringify(s));
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }

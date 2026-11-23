@@ -879,6 +879,15 @@ export async function start(saved = {}) {
   const fp = store.get('oarfish.feel', {});
   let paused = false, pausedAt = 0, fsMine = false, side = 1, wasWrap = false, navY = 0, padText = null, padGreeted = false, newT = 0;
   const ended = () => run.state === 'dead' || run.state === 'won';
+  // going quiet: while the dive is paused nothing in the picture moves, so it is drawn once and left standing. It is drawn again when anything is pressed, clicked or changed,
+  // and once a second in case. An end card left alone for a while goes the same way, until somebody comes back.
+  const QUIET = { after: 0.35, beat: 1, away: 90 };
+  let drawUntil = 0, drewAt = 0, owed = 0, touchedAt = performance.now();
+  const touched = () => { touchedAt = performance.now(); };
+  const stir = () => { touchedAt = performance.now(); drawUntil = touchedAt + QUIET.after * 1000; owed = 3; }; // a few frames at the least, however long the thing that was pressed takes
+  for (const type of ['pointermove', 'wheel']) window.addEventListener(type, touched, { capture: true, passive: true });
+  for (const type of ['pointerdown', 'pointerup', 'keydown', 'keyup', 'click', 'input', 'change']) window.addEventListener(type, stir, { capture: true, passive: true });
+  const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
   const lookK = () => Math.pow(4, feel.look - 0.5); // the Look speed slider: half speed to double
   function turnView(dx, dy, kx, ky = kx * 0.85) {
     if (cine()) return; // the endings hold the camera
@@ -950,7 +959,7 @@ export async function start(saved = {}) {
   // --- pause, full screen, hiding the help
   function setPaused(on) {
     if (on === paused || (on && ended())) return;
-    paused = on; pausedAt = performance.now();
+    paused = on; pausedAt = performance.now(); stir();
     stage.classList.toggle('paused', on); $('pause').classList.toggle('on', on);
     $('btn-pause').setAttribute('aria-pressed', String(on)); $('btn-pause').setAttribute('aria-label', on ? 'Resume' : 'Pause');
     music.duck(on ? 0.5 : 1);
@@ -1002,7 +1011,7 @@ export async function start(saved = {}) {
     b.dataset.armed = arm ? '1' : ''; b.textContent = arm ? 'Leave this dive? Press again' : 'New dive';
     if (arm) newT = setTimeout(() => newDive(false), 4000);
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); else stir(); });
 
   // ---- key and button bindings. `binds` is what is in force; named sets of them are kept in this browser.
   const bindStore = store.get('oarfish.binds', {});
@@ -1219,7 +1228,7 @@ export async function start(saved = {}) {
   }
   function devices(dt) {
     const P = pad.poll();
-    if (P.active) setDev('pad');
+    if (P.active) { setDev('pad'); stir(); }
     const text = P.blocked ? 'Controllers are blocked in this view of the page.' : !P.connected ? 'No controller seen yet. To use one, click the page once, then press any button on it.'
       : `${pad.title()} is connected${pad.motors ? ', and can vibrate' : `, but the browser reports no vibration motors for it${!/dualsense|054c/i.test(P.name) ? '' : !pad.direct.supported ? ': Chrome and Edge can get round that' : pad.direct.allowed ? ': press “Connect DualSense motors” below' : ': “Connect DualSense motors” gets round that, but only on the game’s own page, not in a preview like this one'}`}.${P.standard ? '' : ' The browser does not recognise its layout, so buttons may be mixed up. Chrome and Edge read a DualSense properly.'}`;
     if (text !== padText) { padText = text; $('pad-note').textContent = text; }
@@ -1586,13 +1595,14 @@ export async function start(saved = {}) {
     }
     sun.position.copy(focus).add(SUN_OFFSET);
     sun.target.position.copy(focus);
+    world.dress?.(focus); // (the last hall is a world of its own kind, with no dressing) what casts is whatever stands in the sun's box where it now is: this catches a cut, which moves it all at once
     lamp.position.set(rig.pos.x + sy * 2.4, rig.pos.y + 3, rig.pos.z + cy * 2.4); // above and on the viewer's side, so the flank is lit
     { const c = run.charge, full = c >= 1, beat = full ? 0.5 + 0.5 * Math.sin(world.time.value * 7) : 0; // the crest: a glow over the head that grows as it fills, and beats when it is full
       crest.position.copy(rig.joints[0]).y += 0.3; crest.scale.setScalar(c > 0 ? 0.5 + 0.9 * c + 0.3 * beat : 0.01); crest.material.opacity = damp(crest.material.opacity, c > 0 ? 0.2 + 0.4 * c + 0.2 * beat : 0, 6, dt); }
   }
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
-    renderer.setSize(w, h, false);
+    renderer.setSize(w, h, false); stir(); // a canvas that changes size is wiped
     camera.aspect = w / h;
     cam.fit = Math.max(1, Math.pow(1.35 / camera.aspect, 0.8)); // step back on tall screens
     camera.updateProjectionMatrix();
@@ -1851,7 +1861,8 @@ export async function start(saved = {}) {
     last = now;
     if (lib.isOpen) { if (!window.__hold) lib.frame(dt); return renderer.render(lib.scene, lib.camera); }
     if (!window.__hold) tick(dt);
-    renderer.render(scene, camera);
+    if (still() && owed <= 0 && now > drawUntil && now - drewAt < QUIET.beat * 1000) return; // nothing has moved: what is on the screen stays there
+    owed--; drewAt = now; renderer.render(scene, camera);
   });
 
   // keep the dive going when the page is republished under an open viewer
@@ -1860,7 +1871,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

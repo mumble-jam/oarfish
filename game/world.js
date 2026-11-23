@@ -316,41 +316,52 @@ function geometries() {
   built('shard', 'Sherd', 'shard', 0.4, 'A potsherd, a roof tile, a broken plate: something thin with a curve to it.', 'clay', { scale: 1, n: 6, spread: 0.5, flat: true });
 }
 
-// instanced decoration that re-seats itself on the nearest copy of the repeating world
+// instanced decoration that re-seats itself on the nearest copy of the repeating world, and casts a shadow only from inside the sun's box
+const SIGHT = { step: 2, light: 4 }; // it is seated again when the fish has gone this far, and the box is taken this much wider to cover that
 class Scatter {
   // reach: small things are only drawn within this many metres of the fish; beyond it they are too small to miss
-  constructor(geometry, material, items, { cast = true, receive = true, reach = 0 } = {}) {
-    this.items = items; this.reach = reach;
-    this.mesh = new THREE.InstancedMesh(geometry, material, Math.max(items.length, 1));
-    this.mesh.count = items.length;
+  constructor(geometry, material, items, { cast = true, receive = true, reach = 0, shade = material } = {}) {
+    const n = items.length;
+    this.items = items; this.reach = reach; this.shaded = n;
+    this.mesh = new THREE.InstancedMesh(geometry, material, Math.max(n, 1));
+    this.mesh.count = n;
     this.mesh.frustumCulled = false;
-    this.mesh.castShadow = cast; this.mesh.receiveShadow = receive;
-    this.k = new Int16Array(items.length * 2).fill(32767);
-    const c = new THREE.Color();
-    this.tones = items.map((it) => new THREE.Color(it.color || '#ffffff'));
-    items.forEach((it, i) => this.mesh.setColorAt(i, c.copy(this.tones[i])));
-  }
-  wrap(fx, fz) {
-    const m = new THREE.Matrix4(), p = new THREE.Vector3();
-    if (this.reach) { // pack the near ones to the front and draw only those
-      const r2 = this.reach * this.reach; let n = 0;
-      this.items.forEach((it, i) => {
-        const x = it.x + T * Math.round((fx - it.x) / T), z = it.z + T * Math.round((fz - it.z) / T);
-        if ((x - fx) * (x - fx) + (z - fz) * (z - fz) > r2) return;
-        this.mesh.setMatrixAt(n, m.compose(p.set(x, it.y, z), it.q, it.s)); this.mesh.setColorAt(n, this.tones[i]); n++;
-      });
-      this.mesh.count = n; this.mesh.instanceMatrix.needsUpdate = true; if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-      return;
-    }
-    let dirty = false;
-    this.items.forEach((it, i) => {
-      const kx = Math.round((fx - it.x) / T), kz = Math.round((fz - it.z) / T);
-      if (kx === this.k[i * 2] && kz === this.k[i * 2 + 1]) return;
-      this.k[i * 2] = kx; this.k[i * 2 + 1] = kz;
-      this.mesh.setMatrixAt(i, m.compose(p.set(it.x + kx * T, it.y, it.z + kz * T), it.q, it.s));
-      dirty = true;
+    this.mesh.castShadow = false; this.mesh.receiveShadow = receive;
+    // What casts is a second mesh of the same pieces, holding only those in the sun's box and drawn only in the shadow pass. (One mesh with those put first would do,
+    // but then two flags that overlap would change places as the box passed over them: which of two faces in one plane shows goes by the order they are drawn in.)
+    // Its material is a blank that says only which side casts: in the picture it draws nothing, and the shadow pass takes no more from a material than that.
+    this.shade = cast ? new THREE.InstancedMesh(geometry, shade, Math.max(n, 1)) : null;
+    if (cast) { const sh = this.shade; sh.count = 0; sh.frustumCulled = false; sh.castShadow = true; sh.receiveShadow = false;
+      sh.onBeforeShadow = () => { sh.count = this.shaded; }; sh.onAfterShadow = () => { sh.count = 0; }; }
+    // each piece's matrix and tone, worked out once: seating it again is a copy and two sums
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), c = new THREE.Color();
+    this.base = new Float32Array(n * 16); this.tone = new Float32Array(n * 3); this.span = new Float32Array(n);
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    const round = geometry.boundingSphere.center.length() + geometry.boundingSphere.radius;
+    items.forEach((it, i) => {
+      m.compose(p.set(it.x, it.y, it.z), it.q, it.s).toArray(this.base, i * 16); c.set(it.color || '#ffffff').toArray(this.tone, i * 3);
+      this.span[i] = round * Math.max(Math.abs(it.s.x), Math.abs(it.s.y), Math.abs(it.s.z)); // how far from where it stands any of it can be
     });
-    if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.setColorAt(0, c.set('#ffffff'));
+  }
+  // fx, fy, fz: the fish, which the world wraps round, and which the sun's box is centred on.
+  // light: the two axes across the sun's rays and half the width of its box; null, and everything that can cast does; false, and nothing does (there is no sun to cast by)
+  wrap(fx, fy, fz, light) {
+    const { items, base, tone, span, mesh } = this, n = items.length, im = mesh.instanceMatrix.array, ic = mesh.instanceColor.array, sm = this.shade ? this.shade.instanceMatrix.array : null;
+    const r2 = this.reach ? this.reach * this.reach : Infinity;
+    let a = 0, b = 0;
+    for (let i = 0; i < n; i++) {
+      const it = items[i], x = it.x + T * Math.round((fx - it.x) / T), z = it.z + T * Math.round((fz - it.z) / T), dx = x - fx, dz = z - fz, s = i * 16;
+      if (sm && light !== false) { // in the sun's box, or all of them where there is no box to go by
+        const dy = it.y - fy, h = light ? light.half + span[i] : 0;
+        if (!light || (Math.abs(dx * light.ax + dy * light.ay + dz * light.az) <= h && Math.abs(dx * light.bx + dy * light.by + dz * light.bz) <= h)) { const o = a++ * 16; for (let k = 0; k < 16; k++) sm[o + k] = base[s + k]; sm[o + 12] = x; sm[o + 14] = z; }
+      }
+      if (dx * dx + dz * dz > r2) continue;
+      const o = b * 16; for (let k = 0; k < 16; k++) im[o + k] = base[s + k]; im[o + 12] = x; im[o + 14] = z; // what is drawn keeps the order it was made in
+      ic[b * 3] = tone[i * 3]; ic[b * 3 + 1] = tone[i * 3 + 1]; ic[b * 3 + 2] = tone[i * 3 + 2]; b++;
+    }
+    mesh.count = b; mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
+    if (sm) { this.shaded = a; this.shade.instanceMatrix.needsUpdate = true; }
   }
 }
 
@@ -368,7 +379,9 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const scatters = [], owned = [], materials = [];
   const add = (o) => { scene.add(o); owned.push(o); return o; };
   const mat = (m) => { materials.push(m); return m; };
-  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, opts); scatters.push(s); add(s.mesh); return s; };
+  const blanks = new Map(), blank = (m) => { if (m.map || m.alphaMap || m.alphaTest || m.wireframe) return m; const key = `${m.side}:${m.shadowSide}`;
+    if (!blanks.has(key)) blanks.set(key, mat(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, side: m.side, shadowSide: m.shadowSide }))); return blanks.get(key); };
+  const scatter = (geo, material, items, opts) => { const s = new Scatter(geo, material, items, { ...opts, shade: blank(material) }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
@@ -1488,6 +1501,21 @@ float seaLight(vec2 p, float t) {
   // ------------------------------------------------------------ per-frame
   const m4 = new THREE.Matrix4(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), q1 = new THREE.Quaternion(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), none = new THREE.Vector3(0, 0, 0);
   let wrapTimer = 0;
+  // what the dressing was last seated for: where the picture was centred, and whether there was a sun to cast by
+  const sight = { on: true, sun: null, lit: false, fx: NaN, fy: 0, fz: NaN, light: { ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, half: 0 }, z: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
+  function dress(focus) {
+    if (!sight.sun) sight.sun = scene.children.find((o) => o.isDirectionalLight) || null;
+    const sun = sight.sun && sight.sun.castShadow && sight.sun.visible ? sight.sun : null;
+    if (Math.hypot(focus.x - sight.fx, focus.z - sight.fz) < SIGHT.step && Math.abs(focus.y - sight.fy) < SIGHT.step && !sun === !sight.lit) return;
+    Object.assign(sight, { fx: focus.x, fy: focus.y, fz: focus.z, lit: !!sun });
+    let light = sun || !sight.sun ? null : false; // a scene with no sun of this kind is somebody else's: there, everything casts
+    if (sun && sight.on) { // the sun's box, as its shadow camera will lay it: across the rays, about the point it is aimed at (which is the point the picture is centred on)
+      const c = sun.shadow.camera, { x, y, z } = sight;
+      z.subVectors(sun.position, sun.target.position).normalize(); x.crossVectors(sight.up, z).normalize(); y.crossVectors(z, x);
+      light = Object.assign(sight.light, { ax: x.x, ay: x.y, az: x.z, bx: y.x, by: y.y, bz: y.z, half: Math.max(c.right, -c.left, c.top, -c.bottom) + SIGHT.light });
+    }
+    for (const s of scatters) s.wrap(focus.x, focus.y, focus.z, light);
+  }
   // ---- the tempers of swarms (TEMPER). What each does is told to whoever is listening through `swarmNews`: { what: 'bolt' | 'part' | 'shy' | 'lit', x, y, z }.
   const swarmNews = [], tell = (what, sc) => { swarmNews.push({ what, x: sc.x, y: sc.y, z: sc.z }); if (swarmNews.length > 12) swarmNews.shift(); };
   // One that bolts: its height is its own. Cornered by a head that is not over it, it climbs; with the head over it, it stays, and goes down with the head
@@ -1551,7 +1579,8 @@ float seaLight(vec2 p, float t) {
     if (!calm) time.value += dt;
     rebuildTerrain(focus.x, focus.z);
     wrapTimer -= dt;
-    if (wrapTimer <= 0) { wrapTimer = 0.3; for (const s of scatters) s.wrap(focus.x, focus.z); for (const o of single) o.mesh.position.set(o.x + T * Math.round((focus.x - o.x) / T), o.y, o.z + T * Math.round((focus.z - o.z) / T)); }
+    dress(focus);
+    if (wrapTimer <= 0) { wrapTimer = 0.3; for (const o of single) o.mesh.position.set(o.x + T * Math.round((focus.x - o.x) / T), o.y, o.z + T * Math.round((focus.z - o.z) / T)); }
     const t = time.value;
 
     // each swarm drifts on its own clock, balls up when the oarfish comes near, and gives way to its body
@@ -1860,6 +1889,9 @@ float seaLight(vec2 p, float t) {
   const pieces = () => [...scatters.flatMap((sc) => { const name = Object.keys(G).find((k) => G[k] === sc.mesh.geometry) || 'other'; if (!sc.mesh.geometry.boundingBox) sc.mesh.geometry.computeBoundingBox(); const b = sc.mesh.geometry.boundingBox;
     return sc.items.map((it) => ({ name, x: it.x, y: it.y, z: it.z, sx: it.s.x, sy: it.s.y, sz: it.s.z, lo: b.min.y, hi: b.max.y, half: Math.max(b.max.x, -b.min.x, b.max.z, -b.min.z), tilt: 2 * Math.acos(Math.min(1, Math.hypot(it.q.w, it.q.y))) })); }),
     ...single.filter((o) => o.signs || o.uses !== undefined || (o.held !== undefined && !o.held && !o.gone)).map((o) => ({ name: o.signs ? 'mural' : o.uses !== undefined ? 'station' : 'fragment', x: o.x, y: o.y - (o.held !== undefined ? 0.45 : 0), z: o.z, sx: 1, sy: 1, sz: 1, lo: 0, hi: 1, half: o.signs ? 1.6 : 0.6, tilt: 0 }))]; // (a fragment lies with its middle 0.45 m up; the moving parts of the puzzles hang where they are meant to)
-  return { update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
+  // for the checks: have everything cast (false) or only what is in the sun's box (true), and count what is drawn and what the shadow pass draws
+  const sorting = (on) => { sight.on = on; sight.fx = NaN; };
+  const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
+  return { update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }
