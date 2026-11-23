@@ -34,6 +34,8 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/crab.js` | The Keeper put together: its shell, eight legs and two claws, and the poses that say what it is about to do. |
 | `game/spine.js` | A swimming body that bends: a neck that turns and nods, a body that lies along its turn. Not tied to any one animal. |
 | `game/sawfish.js` | The Shearer in motion: how it holds its saw for each thing it does. |
+| `game/strands.js` | Limbs with no bones in them: an arm or a tentacle that hangs on a body and trails through the water after it. Not tied to any one animal. |
+| `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed and reaching. Not in the dive yet. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |

@@ -12,6 +12,7 @@ import { glowTexture, lerp } from './geo.js';
 import * as model from './critters.js';
 import { crabRig } from './crab.js';
 import { sawfishRig } from './sawfish.js';
+import { squidRig } from './squid.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -136,6 +137,14 @@ NPCS.unshift({ id: 'oarfish', group: 'The oarfish', kind: 'fish', name: 'The oar
 NPCS.push({ id: 'tailpiece', group: 'Loose things', kind: 'thing', name: 'A shed tail', bands: [0, 1, 2, 3, 4], length: 0.65, fixed: true, paletteFrom: 'oarfish', role: 'Three segments, dropped as bait or bitten off. Hunters go to it; a shell that rode on it gives the bait its other power.',
   about: 'A length of the oarfish’s own tail, loose in the water, the cut end showing. It has no colours of its own: it is the oarfish’s, so change those and this follows.',
   palette: {}, build: (pal) => model.tailPiece(pal), baked: true, swim: null, beat: [0, 0], material: {}, show: { scale: 1.6, n: 1, lift: 1.2, spin: true }, states: [{ id: 'still', name: 'Adrift' }] });
+// What is being made and is not in the dive: nothing spawns it, nothing in the game asks for it, and it has no band (so nothing that goes by band can place it).
+// It is here so that it can be looked at on the stand, in every light, as the oarfish was before there was a game round it.
+NPCS.push({ id: 'squid', group: 'Not yet in the dive', name: 'Squid', bands: [], length: model.SQUID.length, role: 'Nothing yet. It is a model to look at: no dive has one, and nothing has been decided about what it does.',
+  about: 'A big-finned squid, a metre of mantle and as much again of arms. The fins run down the whole mantle, so the back of it is an arrowhead. Eight arms and two long tentacles with clubs, each a piece of its own that trails through the water by itself, as the oarfish’s oars do.',
+  palette: { back: '#f79fbd', flank: '#ee7fa8', belly: '#fbd3e2', fin: '#f48db3', finUnder: '#dcb0e4', fleck: '#ffe6ef', arm: '#ea6f9b', armUnder: '#f9cfe0', sucker: '#fff4f6', eye: '#fff3f1', pupil: '#221a2e', pale: '#fff1ee' },
+  build: (pal) => model.squid(pal), swim: null, beat: [0, 0], material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.06 },
+  assemble(a, pal) { squidRig(a, pal); }, // the mantle and head are the model; its ten arms are hung on it, and trail (squid.js, strands.js)
+  states: [{ id: 'hover', name: 'Hovering', speed: 0 }, { id: 'jet', name: 'Jetting', speed: 2.6 }, { id: 'turn', name: 'Turning', speed: 1.1 }, { id: 'alarm', name: 'Alarmed', speed: 0 }, { id: 'reach', name: 'Reaching', speed: 0 }] });
 // the two sets of colours everything built of stone is made from. They are not things: they are what things are tinted with
 NPCS.push(
   { id: 'paint', group: 'Colours of the world', kind: 'tokens', name: 'District paint', bands: [0, 1, 2, 3, 4], length: 6, fixed: true, role: 'One colour to a band. It is on the top slab of every column, the caps of the well curbs, the seal over a guarded well, and the lengths of the Sum paid in that band.',
@@ -146,7 +155,7 @@ NPCS.push(
     palette: { band1: '#c3cfae', band2: '#d2d8c2', band3: '#dde0cf', band4: '#e2e3d8', band5: '#e8e8e0' }, swim: null, beat: [0, 0], states: [{ id: 'row', name: 'The five bands' }] });
 export const NPC = Object.fromEntries(NPCS.map((s) => [s.id, s]));
 // The library lists its groups in this order. Other files add their own things to it with register().
-export const GROUPS = ['The oarfish', 'Swarms', 'Company', 'Hunters', 'Keepers of the rifts', 'The Sum', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
+export const GROUPS = ['The oarfish', 'Swarms', 'Company', 'Hunters', 'Keepers of the rifts', 'The Sum', 'Not yet in the dive', 'Shells', 'Loose things', 'Things that grow', 'On the bed', 'Stonework', 'Colours of the world'];
 export function register(spec) { const full = { bands: [0, 1, 2, 3, 4], swim: null, beat: [0, 0], palette: {}, states: [{ id: 'still', name: 'As it stands' }], kind: 'thing', fixed: true, ...spec }; NPCS.push(full); NPC[full.id] = full; return full; }
 export const inOrder = () => [...NPCS].sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
 export const swarmFor = (band) => ['sprat', 'sprat', 'lanternfish', 'lanternfish', 'ghostfish'][band] || 'sprat';

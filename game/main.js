@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
-import { resolve } from './npc.js';
+import { resolve, make } from './npc.js';
 import { createWorld, SPAWN, FLOORS, SWARMS, CLEAN, NEST, wrapD, wrapRule, canWrap } from './world.js';
 import { createFoes } from './foes.js';
 import { createMusic } from './music.js';
@@ -927,6 +927,29 @@ export async function start(saved = {}) {
     run.hush = 0.6; // nothing bites it, and nothing shows that: it does not blink
     return o;
   }
+  // A squid to look at, in the water beside the fish. It is not in the dive: this is a testing tool (the pause menu), there so that the model can be seen
+  // where it would live. It hovers, turning to watch the fish; every few seconds it jets, mantle first, to another place near by; crowded, it blanches and goes.
+  let pet = null;
+  function bringSquid(on) {
+    if (pet) { scene.remove(pet.a.object); pet.a.dispose(); pet = null; }
+    if (!on) return;
+    const a = make('squid'); scene.add(a.object);
+    pet = { a, pos: new THREE.Vector3(rig.pos.x + rig.forward.x * 5, rig.pos.y + 1, rig.pos.z + rig.forward.z * 5), to: new THREE.Vector3(), yaw: rig.yaw + Math.PI, mood: 'hover', t: 2.5, n: 1 };
+  }
+  function squidStep(dt) {
+    const s = pet, p = s.pos, dx = wrapD(rig.pos.x - p.x), dz = wrapD(rig.pos.z - p.z), far = Math.hypot(dx, dz), turn = (a, rate) => { s.yaw += clamp(Math.atan2(Math.sin(a - s.yaw), Math.cos(a - s.yaw)), -rate * dt, rate * dt); };
+    if (far > 34) { p.set(rig.pos.x + rig.forward.x * 6, rig.pos.y + 1, rig.pos.z + rig.forward.z * 6); s.mood = 'hover'; s.t = 2; } // the fish has gone a long way, or down a rift: it is there again
+    s.t -= dt;
+    const leave = (away) => { s.n++; const a = away ? Math.atan2(-dx, -dz) + Math.sin(s.n * 2.4) * 0.7 : s.n * 2.4, r = away ? 9 : 5 + (s.n % 3) * 2, x = (away ? p.x : rig.pos.x) + Math.sin(a) * r, z = (away ? p.z : rig.pos.z) + Math.cos(a) * r;
+      s.to.set(x, world.height(x, z) + 2.4 + (s.n % 4) * 1.1, z); s.mood = 'jet'; s.t = 4; };
+    if (s.mood === 'hover') { turn(Math.atan2(dx, dz), 1.2); p.y += Math.sin(run.time * 0.9) * 0.12 * dt; if (far < 2.6 && Math.abs(rig.pos.y - p.y) < 2.5) { s.mood = 'alarm'; s.t = 0.7; } else if (s.t <= 0) leave(false); }
+    else if (s.mood === 'alarm') { turn(Math.atan2(dx, dz), 3); if (s.t <= 0) leave(true); }
+    else { const tx = wrapD(s.to.x - p.x), ty = s.to.y - p.y, tz = wrapD(s.to.z - p.z), d = Math.hypot(tx, ty, tz); turn(Math.atan2(-tx, -tz), 4); // its arms point back the way it came
+      if (d < 0.6 || s.t <= 0) { s.mood = 'hover'; s.t = 3 + (s.n % 3); } else { const v = Math.min(4.2, d * 2 + 0.6) * dt / d; p.x += tx * v; p.y += ty * v; p.z += tz * v; } }
+    p.y = Math.max(p.y, world.height(p.x, p.z) + 1.2);
+    const X = rig.pos.x - wrapD(rig.pos.x - p.x), Z = rig.pos.z - wrapD(rig.pos.z - p.z); p.x = X; p.z = Z; // the nearest copy of the world to the fish
+    s.a.rig.update(dt, { x: p.x, y: p.y, z: p.z, yaw: s.yaw, pitch: 0, mood: s.mood, rate: 1.2 });
+  }
   const still = () => !window.__hold && (paused || (ended() && run.stateT > QUIET.away && performance.now() - touchedAt > QUIET.away * 1000));
   const lookK = () => Math.pow(4, feel.look - 0.5); // the Look speed slider: half speed to double
   function turnView(dx, dy, kx, ky = kx * 0.85) {
@@ -1337,6 +1360,7 @@ export async function start(saved = {}) {
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
   $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
   $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {} }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked. It shows from the next dive.'); });
+  $('dev-squid').addEventListener('click', (e) => { const on = !pet; bringSquid(on); e.currentTarget.setAttribute('aria-pressed', String(on)); showDev(on ? 'A squid is in the water just ahead of you. It is only to look at.' : 'The squid is gone.'); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {
     const ls = $('f-look');
@@ -1663,6 +1687,7 @@ export async function start(saved = {}) {
     run.stateT += dt;
     if (run.state === 'play') run.time += dt;
     scripted.sprint = false; scripted.gentle = false;
+    if (pet && run.state === 'play') squidStep(dt);
     if (run.state === 'arrive') { // sinking in from the band above
       scripted.dir.copy(rig.forward).setY(0).normalize(); scripted.vertical = -0.9; scripted.amount = 0.6;
       inp = scripted;
@@ -1917,7 +1942,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, get pet() { return pet; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

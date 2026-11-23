@@ -24,6 +24,7 @@ Nothing slides and nothing hovers. Whatever carries the body has to be seen carr
 
 - **Walkers** stand on their feet. `legs.js` (`createWalker`) plants each foot, steps it when the body has left it behind, and sets the body's height and tilt from where the feet are. Feet land on `world.footing()`; the body is kept out of columns with `world.steer()`.
 - **Swimmers** bend. `spine.js` (`bendy`) gives one model a neck that turns and nods, and a body that lies along its turn. The rig banks it into a turn and points its nose the way it is going, from how it really moved since the last frame, not from what the behaviour meant it to do.
+- **Soft limbs** trail. `strands.js` (`createStrand`) hangs an arm or a tentacle on a body as a piece of its own. The rig says what shape it would hold in still water; the strand goes after that shape through the water, late and loose toward the tip. So it streams behind a body that moves and curls by one that is still.
 - Reuse these. A new way of moving goes in a file of its own, knowing nothing about the animal, so the next creature can have it too.
 
 ## 4. Every mood is a pose
@@ -88,3 +89,4 @@ The library shows the answer as a second pose without being asked. None of this 
 | Sprat, Lanternfish, Ghost fish | | | To do: as swarms, not one by one |
 | Pilot fish | *Naucrates ductor*, which goes about beside sharks | dark bars, and lit white tips to the tail | Done as company: waits, rides the wake, is left behind. One model, five to a band |
 | Cleaner wrasse | *Labroides dimidiatus*, which keeps cleaning stations on reefs | one black stripe from the eye to the tail, widening | Done as company: turns over its coral head, goes along the body while it works, goes in when the station rests. One model, six to a station |
+| Squid | the bigfin reef squid, *Sepioteuthis lessoniana*: fins down the whole mantle | ten separate arms that stream behind an arrowhead of a body | A model only, in the library under `Not yet in the dive`: hovers, jets, turns, flares pale, shoots its two long arms. No behaviour, in no band. Not yet seen moving by a person |
