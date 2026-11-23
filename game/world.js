@@ -50,13 +50,14 @@ export const canWrap = (total, room) => (0.9 * total) / GATE.sweep >= room * GAT
 // A band may say three things about its ground, and the first band does:
 //   size  how far across it is, in metres. It has to be a whole number of pairs of the bed's 3 m cells (a multiple of 6), or the bed's seam shows
 //   way   how far from the start its rift lies. Without it the distance is drawn by chance, 58 to 70 m
-//   food  how far across the square round the start is in which its swarms have their homes. Less than `size`, and the sea beyond holds no swarms:
-//         the first band is wider than the others but its food is no further from the nest, which is where a dive lost to the Keeper begins again
+//   home  how far across the square round the start is in which its swarms have their homes and its hunters their seats. Less than `size`, and
+//         the sea beyond holds neither: the first band is wider than the others, but its food is no further from the nest, which is where a dive
+//         lost to the Keeper begins again
 // What is scattered by chance (reefs, rocks, kelp, coral, what lives on the bed) is counted for a BASE square and made in proportion to the band's
 // area, so a wider band is as thickly grown, not thinner. What is counted for the dive (swarms, hunters, ruins, puzzles, shells) is as written.
 export const FLOORS = [
   { name: 'The sunlight zone', depth: 40, water: '#2b93a3', sky: '#e2f8ff', bed: '#4f97a0', hemi: 2.0, sun: 2.3, lamp: 0, lampReach: 30, fog: [0.75, 42], seaLight: 0.2, shafts: 0.42, fishGlow: 0, finGlow: 0,
-    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'], size: 204, way: 100, food: 144 },
+    rocks: 170, kelp: 46, coral: 150, glow: 0, schools: 'sssssmmlh', kinds: '......b..', biters: 0, hooks: 2, anglers: 0, ruins: ['ring', 'gate', 'remains'], size: 204, way: 100, home: 144 },
   { name: 'The edge of light', depth: 180, water: '#1d6f8e', sky: '#bfe6f5', bed: '#2f6f85', hemi: 1.5, sun: 1.35, lamp: 3, lampReach: 26, fog: [0.7, 36], seaLight: 0.1, shafts: 0.22, fishGlow: 0.2, finGlow: 0.12,
     rocks: 180, kelp: 34, coral: 90, glow: 30, schools: 'ssssmmml', kinds: '...b.t..', biters: 3, hooks: 6, anglers: 0, ruins: ['gate', 'remains', 'arch'] },
   { name: 'The twilight zone', depth: 450, water: '#12426a', sky: '#7fb4d8', bed: '#173f5e', hemi: 0.85, sun: 0.4, lamp: 10, lampReach: 24, fog: [0.62, 28], seaLight: 0.03, shafts: 0, fishGlow: 0.7, finGlow: 0.3,
@@ -384,6 +385,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const wrapD = (d) => d - T * Math.round(d / T); // shortest way round the repeating world
   const area = (T * T) / (BASE * BASE), dense = (n) => Math.round(n * area); // what is scattered by chance is counted for a BASE square: a wider band has more of it, as thickly
   const wave = (n) => Math.round((n * T) / BASE) || Math.sign(n); // and the bed's rolls are counted the same way, so that a wider band has more of them and not longer ones
+  const HOME = Math.min(F.home || T, T); // how far across the home water is: the square round the start in which swarms and hunters live (the whole band, unless it says less)
   const rand = rng(seed * 977 + floor * 7919 + 13);
   const rr = (a, b) => a + (b - a) * rand();
   const pick = (list) => list[Math.floor(rand() * list.length)];
@@ -401,6 +403,7 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
   const farFrom = (x, z, cx, cz, r) => Math.hypot(wrapD(x - cx), wrapD(z - cz)) > r;
+  const homeSpot = () => { const x = SPAWN.x - HOME / 2 + rand() * HOME, z = SPAWN.z - HOME / 2 + rand() * HOME; return [x, z]; }; // somewhere in the home water, by chance
   const polar = (a, d) => [SPAWN.x + Math.sin(a) * d, SPAWN.z + Math.cos(a) * d];
 
   // ------------------------------------------------------------ where this band leads: a rift down, or the palace
@@ -994,15 +997,15 @@ float seaLight(vec2 p, float t) {
   const schools = [], schoolTones = fishKit.tones;
   [...F.schools].forEach((tier, s) => {
     const first = floor === 0 && s === 0, tease = floor === 0 && tier === 'h';
-    let hx = rand() * T, hz = rand() * T;
+    let [hx, hz] = homeSpot();
     const kept = nurse ? nurse.keep[s] : null;
     if (first) { hx = SPAWN.x + 8; hz = SPAWN.z - 13; } // inside the ring of columns, to learn on
     if (kept) { [hx, hz] = kept; pen(hx, hz, SWARMS[tier].r * 2.6 + 1.1); }
     if (tease) [hx, hz] = [teaseAt[0] + 3.2, teaseAt[1]]; // the great swarm, kept inside the greatest hero's ring, in plain sight long before it can be caught
     const penned = !kept && !first && !tease && (floor === 0 || (floor === 1 && s % 2 === 0)); // deeper down nobody keeps them
-    if (penned) { for (let t = 0; t < 12 && !clearNow(hx, hz, 5); t++) { hx = rand() * T; hz = rand() * T; } sites.push([hx, hz, 4]); pen(hx, hz, SWARMS[tier].r * 2.6 + 1.1); }
-    if (hall) for (let t = 0; t < 20 && !farFrom(hx, hz, hall.x, hall.z, hall.R + 12); t++) { hx = rand() * T; hz = rand() * T; } // no swarm drifts into the hall
-    if (rift && !kept && !first && !tease) for (let t = 0; t < 20 && !riftClear(hx, hz, 5); t++) { hx = rand() * T; hz = rand() * T; } // or lives in the rift
+    if (penned) { for (let t = 0; t < 12 && !clearNow(hx, hz, 5); t++) [hx, hz] = homeSpot(); sites.push([hx, hz, 4]); pen(hx, hz, SWARMS[tier].r * 2.6 + 1.1); }
+    if (hall) for (let t = 0; t < 20 && !farFrom(hx, hz, hall.x, hall.z, hall.R + 12); t++) [hx, hz] = homeSpot(); // no swarm drifts into the hall
+    if (rift && !kept && !first && !tease) for (let t = 0; t < 20 && !riftClear(hx, hz, 5); t++) [hx, hz] = homeSpot(); // or lives in the rift
     const sw = SWARMS[tier];
     let kind = kept || first || tease ? '' : KIND[(F.kinds || '')[s]] || '';
     if (kind === 'twin' && (penned || !LOWER[tier])) kind = ''; // the halves need room to part, and a size to be
@@ -1050,12 +1053,13 @@ float seaLight(vec2 p, float t) {
   // ------------------------------------------------------------ rocks
   const rockTones = tonesOf('rock');
   const rocks = [], reefs = [];
-  for (let i = 0; i < 26; i++) reefs.push([rand() * T, rand() * T]);
-  for (let i = 0; i < F.rocks; i++) {
+  const REEFS = dense(26), ROCKS = dense(F.rocks); // (`dense`: counted for a BASE square, made in proportion to this band's area)
+  for (let i = 0; i < REEFS; i++) reefs.push([rand() * T, rand() * T]);
+  for (let i = 0; i < ROCKS; i++) {
     let x, z;
-    const big = i < 26;
+    const big = i < REEFS;
     if (big) [x, z] = reefs[i];
-    else if (i < F.rocks * 0.65) { const c = pick(reefs), a = rand() * 6.28, d = rr(1.5, 9); x = c[0] + Math.sin(a) * d; z = c[1] + Math.cos(a) * d; }
+    else if (i < ROCKS * 0.65) { const c = pick(reefs), a = rand() * 6.28, d = rr(1.5, 9); x = c[0] + Math.sin(a) * d; z = c[1] + Math.cos(a) * d; }
     else { x = rand() * T; z = rand() * T; }
     const base = big ? rr(1.6, 3.4) : rr(0.35, 1.3);
     const s = S(base * rr(0.8, 1.3), base * rr(0.55, 1.0), base * rr(0.8, 1.3)), q = qY(rand() * 6.28, rr(-0.3, 0.3), rr(-0.3, 0.3)), tone = pick(rockTones);
@@ -1073,7 +1077,7 @@ float seaLight(vec2 p, float t) {
   if (F.kelp) {
     const kelpMat = plant({ sway: 1, give: 0.25 });
     const kelpTones = tonesOf('kelp'), kelp = [];
-    for (let c = 0; c < F.kelp; c++) {
+    for (let c = 0, clumps = dense(F.kelp); c < clumps; c++) {
       const cx = rand() * T, cz = rand() * T, n = 3 + Math.floor(rand() * 7), tall = rr(3, 7.5);
       for (let i = 0; i < n; i++) {
         const a = rand() * 6.28, d = rr(0, 2.8), x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d, w = rr(1.3, 2.2), hgt = tall * rr(0.6, 1.1), yaw = rand() * 6.28, tone = pick(kelpTones);
@@ -1087,7 +1091,7 @@ float seaLight(vec2 p, float t) {
   // ------------------------------------------------------------ coral near the big rocks; lower down, things that make their own light
   const coralTones = tonesOf('staghorn'), tableTones = tonesOf('tablecoral');
   const fingers = [], tables = [];
-  for (let i = 0; i < F.coral; i++) {
+  for (let i = 0, n = dense(F.coral); i < n; i++) {
     const c = pick(reefs), a = rand() * 6.28, d = rr(1.8, 8), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d;
     const s = rr(0.8, 1.9), q = qY(rand() * 6.28, rr(-0.12, 0.12), rr(-0.12, 0.12)), tone = pick(coralTones), finger = rand() < 0.62;
     if (clearOfSites(x, z)) (finger ? fingers : tables).push({ x, y: drawnY(x, z) - 0.1, z, q, s: S(s), color: finger ? tone : tableTones[coralTones.indexOf(tone) % tableTones.length] });
@@ -1097,7 +1101,7 @@ float seaLight(vec2 p, float t) {
   scatter(G.finger, coralMat, fingers, { cast: false });
   scatter(G.table, coralMat, tables);
   const glowTones = tonesOf('lantern'), penTones = tonesOf('seapen'), lanterns = [], pens = [];
-  for (let i = 0; i < F.glow; i++) {
+  for (let i = 0, n = dense(F.glow); i < n; i++) {
     const c = rand() < 0.7 ? pick(reefs) : [rand() * T, rand() * T], a = rand() * 6.28, d = rr(0.5, 9), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d;
     const hgt = rr(0.5, 1.9), q = qY(rand() * 6.28, rr(-0.25, 0.25), rr(-0.25, 0.25)), tone = pick(glowTones);
     if (clearOfSites(x, z)) (i % 3 === 2 ? pens : lanterns).push({ x, y: drawnY(x, z) - 0.05, z, q, s: i % 3 === 2 ? S(1.5, hgt * 0.9 + 0.4, 1.5) : S(1.25, hgt * 0.75 + 0.35, 1.25), color: i % 3 === 2 ? penTones[glowTones.indexOf(tone) % penTones.length] : tone });
@@ -1109,7 +1113,7 @@ float seaLight(vec2 p, float t) {
 
   // ------------------------------------------------------------ the bed itself: what lives and lies on it, band by band
   {
-    const at = (list) => list[floor] || 0;
+    const at = (list) => dense(list[floor] || 0); // each list is counted for a BASE square, band by band
     const open = (pad = 1) => { for (let t = 0; t < 8; t++) { const x = drand() * T, z = drand() * T; if (clearOfSites(x, z, pad)) return [x, z]; } return null; };
     const byReef = (r0, r1) => { for (let t = 0; t < 8; t++) { const c = dpick(reefs), a = drand() * 6.28, d = dr(r0, r1), x = c[0] + Math.sin(a) * d, z = c[1] + Math.cos(a) * d; if (clearOfSites(x, z, 1)) return [x, z]; } return null; };
     const strew = (n, where, make) => { const out = []; for (let i = 0; i < n; i++) { const p = where(); if (p) { const it = make(p[0], p[1]); if (it) out.push(it); } } return out; };
@@ -1890,10 +1894,10 @@ float seaLight(vec2 p, float t) {
   // a clear spot on the open seabed, for placing hunters and hooks
   function openSpot(minFromSpawn = 24) {
     for (let i = 0; i < 40; i++) {
-      const x = rand() * T, z = rand() * T;
+      const [x, z] = homeSpot();
       if (clearOfSites(x, z, 2) && farFrom(x, z, SPAWN.x, SPAWN.z, minFromSpawn)) return [x, z];
     }
-    return [rand() * T, rand() * T];
+    return homeSpot();
   }
   function dispose() {
     for (const o of owned) {
