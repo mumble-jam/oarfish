@@ -38,6 +38,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed, reaching, bluffing and fleeing pale. A shoal lives at the bloom water (bloom.js). |
 | `game/jelly.js` | The four jellyfish in motion: a bell that squeezes and fills, part clear over what is inside it, and every arm and tentacle trailing by itself. The moon jelly and the sea nettle live at the bloom water (bloom.js); the other two are not in the dive yet. |
 | `game/bloom.js` | The bloom water, the first band's first new place: where it lies (laid by the world from its own run of numbers), its moon jellies and their fry, its sea nettles and their stinging trains, the squid shoal that raids swarms and answers pressure in steps, and the game of settling the shoal, kept in the nest. Every number is in `BLOOM`. |
+| `game/ink.js` | A squid's ink: a copy of the squid laid in soft see-through puffs that billows, curls, sags and thins away, drawn out in wisps and torn by the fish. All of it one draw call, and a faint stain on the bed. Its numbers are in `BLOOM.ink`. |
 | `game/boss.js` | The Sum, and the palace hall. |
 | `game/shells.js` | The ten shells: what each does, and its model. |
 | `game/oarfish.js`, `game/rig.js` | The player's fish: its model, and how its body follows its head. |
