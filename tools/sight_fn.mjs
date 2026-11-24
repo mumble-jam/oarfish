@@ -20,9 +20,11 @@ export async function seenShare() {
   const holder = new THREE.Scene(); holder.add(probe); holder.matrixWorldAutoUpdate = false; probe.matrixWorldAutoUpdate = false;
   const px = new Uint8Array(W * H * 4), count = () => { r.readRenderTargetPixels(rt, 0, 0, W, H, px); let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 250 && px[i + 1] < 5 && px[i + 2] > 250) n++; return n; };
   const auto = r.autoClear, bg = g.scene.background;
+  const sv = window.__sight?.SIGHT?.v.value, was = sv && [sv.x, sv.y]; if (sv) sv.set(W, H, sv.z, sv.w); // the window is placed in the target's own pixels
   r.setRenderTarget(rt); r.autoClear = true; r.render(g.scene, g.camera);
   r.autoClear = false; r.render(holder, g.camera); const seen = count();
   r.autoClear = true; holder.background = new THREE.Color('#000000'); r.render(holder, g.camera); const all = count();
+  if (sv) sv.set(was[0], was[1], sv.z, sv.w);
   r.setRenderTarget(null); r.autoClear = auto; f.ghost.visible = ghost; f.wire.visible = wire; holder.remove(probe);
   return { seen, all, share: all ? seen / all : 0 };
 }

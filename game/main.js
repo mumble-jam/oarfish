@@ -1836,7 +1836,7 @@ export async function start(saved = {}) {
         t.geometry = o.geometry; t.material = m; t.renderOrder = o.renderOrder; o.updateWorldMatrix(true, false); t.matrix.copy(o.matrixWorld); t.matrixWorld.copy(o.matrixWorld); ringHalo.add(t); } }
     if (ringHalo.children.length) scene.add(ringHalo); }
   function ringsAfter() { for (const [o, base] of ringDrawn) o.material = base; ringDrawn.length = 0; ringHalo.clear(); scene.remove(ringHalo); }
-  window.__sight = { SEE, SIGHT, devSee, fish: () => fish }; // for the checks and tools (tools/sight_fn.mjs)
+  window.__sight = { SEE, SIGHT, devSee, fish: () => fish, rings: ringState, RINGS, guardEvent: (k, p) => guardGame.event(k, p), say: (...a) => say(...a) }; // for the checks and tools (tools/sight_fn.mjs)
   // ---- end review polish
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;

@@ -1432,6 +1432,74 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   check('the kelp forest made lighter moved nothing else in the first band: in ten worlds every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
     r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
+// ---- review polish (items 1 to 10): the window round the fish, the Keeper's ground, the title and the beads, a moment's line, the dressing, the rings
+{ const { seenShare } = await import('./sight_fn.mjs');
+  const pass = async (setup, steps, steer) => { await ev(setup); let worst = 1; for (let i = 0; i < steps; i++) { await ev(steer); const s = await page.evaluate(seenShare); worst = Math.min(worst, s ? s.share : 1); } return +worst.toFixed(2); };
+  const out = {};
+  for (const name of ['sandflat', 'reef', 'kelpwood']) out[name] = await pass((name) => { const g = window.__game, w = g.world; g.setMode('look'); g.startRun(4242); g.run.safe = 1e9;
+      const q = w.quiet[name], fx = Math.sin(q.gate.yaw), fz = Math.cos(q.gate.yaw), x = q.gate.x + fx * 12, z = q.gate.z + fz * 12, yaw = Math.atan2(-fx, -fz);
+      window.__to = [q.gate.x - fx * 6, q.gate.z - fz * 6]; g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 3, z), yaw); g.cam.yaw = yaw + Math.PI; g.cam.pitch = 0.34; g.cam.zoom = 1; g.snap(); }, 28,
+    () => { const g = window.__game, p = g.rig.joints[0], [tx, tz] = window.__to, dx = tx - p.x, dz = tz - p.z, L = Math.hypot(dx, dz) || 1; for (let f = 0; f < 15; f++) { g.sim(1 / 60, { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: L < 0.6 ? 0 : 0.55 }); g.cam.yaw += (((g.rig.yaw + Math.PI - g.cam.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI) * 0.06; } });
+  // the arches at the height the review swam them; through each the fish is never wholly hidden (it was: 0.00 at the reef's lintel), and never less than a third seen
+  check('through each gate arch from the adventure camera the fish is never hidden: at least a third of it is seen at every step (sight.js)', Object.values(out).every((v) => v >= 0.33), JSON.stringify(out));
+  out.lane = await pass(() => { const g = window.__game, w = g.world; g.startRun(4242); g.run.safe = 1e9; const L = w.quiet.kelpwood.lanes.find((l) => l.name === 'main').points; window.__lane = L; window.__li = 1;
+      g.rig.reset(g.rig.pos.clone().set(L[0][0], w.height(L[0][0], L[0][1]) + 1.6, L[0][1]), Math.atan2(L[1][0] - L[0][0], L[1][1] - L[0][1])); g.cam.yaw = g.rig.yaw + Math.PI + 0.9; g.cam.pitch = 0.3; g.snap(); }, 40,
+    () => { const g = window.__game, L = window.__lane; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0]; while (window.__li < L.length - 1 && Math.hypot(L[window.__li][0] - p.x, L[window.__li][1] - p.z) < 2.5) window.__li++; const t = L[window.__li], dx = t[0] - p.x, dz = t[1] - p.z, d = Math.hypot(dx, dz) || 1;
+      g.sim(1 / 60, { ...window.T.none(), dir: { x: dx / d, y: 0, z: dz / d }, amount: 0.5 }); } }); // the camera held off to one side, looking across the stems
+  out.keeper = await pass(() => { const g = window.__game; g.startRun(4242); g.run.segs = 16; g.buildFish(16); g.run.hush = 1e9; const G = g.guard, yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
+      g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(G.pos.x - x, G.pos.z - z)); g.cam.yaw = g.rig.yaw + Math.PI; g.cam.pitch = 0.34; g.snap(); }, 24,
+    () => { const g = window.__game, G = g.guard; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0], dx = G.pos.x - p.x, dz = G.pos.z - p.z, L = Math.hypot(dx, dz); g.sim(1 / 60, L > 0.8 ? { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: 0.3 } : window.T.none()); } });
+  check('down the kelp forest\'s main lane with the camera looking across the stems, and in under the Keeper, the fish is never wholly hidden (the crab\'s own body on top of it aside, a fifth or more is seen)', out.lane >= 0.33 && out.keeper >= 0.2, JSON.stringify(out));
+  const off = await ev(() => { const g = window.__game; g.startRun(4242); const S = window.__sight; S.devSee.window = false; g.snap(); return true; });
+  const shut = await page.evaluate(seenShare); await ev(() => { window.__sight.devSee.window = true; window.__game.snap(); });
+  check('the window can be turned off for the testing tools (devSee.window), and the measure is the same picture without it', off && shut && shut.all > 0, JSON.stringify(shut)); }
+{ // the Keeper's ground: no standing column its legs can reach (the tall pillars on the ledge at the rift's mouth aside), and its numbers are the fight's
+  const s = await ev(() => { const g = window.__game, w = g.world, K = w.keeperGround, F = g.KEEPER_FIGHT; g.startRun(4242);
+    const cols = g.world.solids.filter((c) => c.top !== undefined && Math.abs(c.r - 0.78) < 1e-6 && K.reach(c.x, c.z, 0.8) && g.world.rift.in(c.x, c.z) < 0);
+    return { cols: cols.length, near: g.world.solids.filter((c) => Math.abs(c.r - 0.78) < 1e-6 && Math.hypot(c.x - K.x, c.z - K.z) < 30).length, leash: F.leash, edge: F.edge }; });
+  const { KEEPER_GROUND } = (await (await import('./headless.mjs')).load()).W;
+  check('no standing column stands on the Keeper\'s ground where its legs can reach, and the ground is measured with the fight\'s own leash and edge', s.cols === 0 && KEEPER_GROUND.leash === s.leash && KEEPER_GROUND.edge === s.edge, JSON.stringify(s));
+  const { keeperGround } = await import('./keeper_ground_fn.mjs'); const r = await keeperGround();
+  check('clearing the Keeper\'s ground moved nothing else in the first band: in ten worlds every other piece, solid, site, swarm, jar, fragment, puzzle, the mural, the quiet side\'s plan and the run of chance are as at 2ff5016', r.every((o) => !o.moved.length), JSON.stringify(r.filter((o) => o.moved.length))); }
+{ // the beads and the title never sit on each other while a keeper is fought (every keeper: the title steps aside)
+  const s = await ev(async () => { const g = window.__game, out = []; g.setMode('look');
+    for (const f of [0, 1, 2, 3]) { g.startRun(4242); if (f) g.enterFloor(f, false); g.run.safe = 1e9; g.run.hush = 1e9; const G = g.guard; if (!G) continue; const yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
+      g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(G.pos.x - x, G.pos.z - z)); g.cam.yaw = g.rig.yaw + Math.PI; g.cam.pitch = 0.34; g.snap();
+      let worst = 0; for (let i = 0; i < 12; i++) { g.sim(0.25, window.T.none()); await new Promise((r) => setTimeout(r, 80));
+        const el = document.querySelector('.lettering.where'), shown = +getComputedStyle(el).opacity > 0.05 && !el.classList.contains('aside'), R = el.getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect();
+        const hit = [0, 1, 2, 3].some((k) => { const p = G.pos.clone(); p.x += (k - 1.5) * 0.5; p.y += G.kind === 'keeper' ? 3 : 2.1; p.project(g.camera); const sx = st.left + (p.x * 0.5 + 0.5) * st.width, sy = st.top + (-p.y * 0.5 + 0.5) * st.height; return p.z < 1 && sx > R.left - 6 && sx < R.right + 6 && sy > R.top - 6 && sy < R.bottom + 6; });
+        if (shown && hit) worst++; }
+      out.push({ band: f + 1, kind: G.kind, over: worst, aside: document.querySelector('.lettering.where').classList.contains('aside') }); }
+    g.setMode('point'); return out; });
+  check('while a keeper is fought its beads never sit on the band\'s title, in every band (the title steps aside)', s.length >= 3 && s.every((o) => o.over === 0 && o.aside), JSON.stringify(s)); }
+{ // a line about a moment goes when the moment does; the rift's line comes as the Keeper's ground is met, before it takes up
+  const s = await ev(() => { const g = window.__game, S = window.__sight; g.setTeach(true, true); g.startRun(4242); g.run.safe = 1e9; g.run.hush = 1e9; const G = g.guard; const hint = () => document.getElementById('toast').classList.contains('on') ? document.getElementById('hint').textContent : '';
+    G.state.stomp = { leg: 0, at: G.pos.clone(), stuck: 0.6 }; S.guardEvent('stomp', G.pos.clone()); g.sim(0.1, window.T.none()); const first = hint();
+    let t = 0; while (G.state.stomp && G.state.stomp.stuck > 0 && t < 4) { g.sim(0.05, window.T.none()); t += 0.05; } g.sim(0.1, window.T.none()); const after = hint();
+    g.startRun(4242); g.run.safe = 1e9; g.run.hush = 1e9; const W = G.pos, dir = { x: g.world.spawn.x - W.x, z: g.world.spawn.z - W.z }, L = Math.hypot(dir.x, dir.z), x = W.x + dir.x / L * 40, z = W.z + dir.z / L * 40;
+    g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(-dir.x, -dir.z)); g.snap(); let saidAt = null, upAt = null;
+    for (let k = 0; k < 160 && upAt === null; k++) { g.sim(0.1, { ...window.T.none(), dir: { x: -dir.x / L, y: 0, z: -dir.z / L }, amount: 0.6 }); const d = Math.hypot(g.rig.pos.x - G.pos.x, g.rig.pos.z - G.pos.z);
+      if (saidAt === null && /Something keeps this rift/.test(hint())) saidAt = +d.toFixed(1); if (G.state.state !== 'idle') upAt = +d.toFixed(1); }
+    return { first, after, stuckFor: +t.toFixed(2), saidAt, upAt, state: G.state.state }; });
+  check('"Its spike is stuck in the bed" is shown while the spike is stuck and taken down when it comes free', /spike is stuck/.test(s.first) && !/spike is stuck/.test(s.after) && s.stuckFor < 3, JSON.stringify(s));
+  check('"Something keeps this rift" is shown as the Keeper\'s ground is met, before it takes up', s.saidAt !== null && (s.upAt === null || s.saidAt >= s.upAt), JSON.stringify(s)); }
+{ // small dressing: everything the adventure camera can see before the fog is whole is drawn, turning about, zoomed all the way out
+  const s = await ev(async () => { const THREE = await import('three'); const g = window.__game, w = g.world; g.setMode('look'); g.startRun(4242); g.run.safe = 1e9; const sp = w.spawn, T = w.size; let missing = 0, looked = 0, worst = null;
+    const small = new Set(['tuft', 'pebble', 'star', 'urchin', 'clam', 'shard', 'brittle']); const pieces = w.pieces().filter((p) => small.has(p.name));
+    for (let k = 0; k < 8; k++) { const x = sp.x + 20, z = sp.z - 30; g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 1.6, z), k * 0.785); g.cam.yaw = k * 0.785 + Math.PI; g.cam.pitch = 0.3; g.cam.zoom = 2.6; g.snap(); g.sim(0.3, window.T.none());
+      const cam = g.camera; cam.updateMatrixWorld(); const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)), far = g.scene.fog.far * 0.97, drawn = new Set();
+      g.scene.traverse((o) => { if (!o.isInstancedMesh || !o.visible) return; const a = o.instanceMatrix.array; for (let i = 0; i < o.count; i++) drawn.add(`${(((a[i * 16 + 12] % T) + T) % T).toFixed(2)},${(((a[i * 16 + 14] % T) + T) % T).toFixed(2)}`); });
+      for (const p of pieces) { const px = p.x + T * Math.round((cam.position.x - p.x) / T), pz = p.z + T * Math.round((cam.position.z - p.z) / T), v = new THREE.Vector3(px, p.y, pz); if (v.distanceTo(cam.position) > far || !fr.containsPoint(v)) continue; looked++;
+        if (!drawn.has(`${(((p.x % T) + T) % T).toFixed(2)},${(((p.z % T) + T) % T).toFixed(2)}`)) { missing++; worst ||= [p.name, +v.distanceTo(cam.position).toFixed(1), +far.toFixed(1)]; } } }
+    g.cam.zoom = 1; g.setMode('point'); return { looked, missing, worst }; });
+  check('small dressing is drawn by what the camera can show: zoomed out and turned all round, nothing in view short of the fog\'s far edge is left undrawn', s.looked > 500 && s.missing === 0, JSON.stringify(s)); }
+{ // rings fade in, and are drawn two pixels wide
+  const s = await ev(() => { const g = window.__game, S = window.__sight; g.startRun(4242); g.run.safe = 1e9; const sc = g.world.schools.find((q) => q.tier === 's' && q.left > 0 && !q.kind);
+    g.rig.reset(g.rig.pos.clone().set(sc.hx + 14, sc.hy, sc.hz), -Math.PI / 2); g.snap(); let k0 = null, t = 0;
+    for (; t < 6; t += 1 / 60) { g.sim(1 / 60, { ...window.T.none(), dir: { x: sc.hx - g.rig.pos.x, y: 0, z: sc.hz - g.rig.pos.z }, amount: 0.5 }); if (sc.ring.visible) { S.rings.size || g.sim(0.6, window.T.none()); k0 = S.rings.get(sc.ring)?.k ?? null; break; } }
+    const first = S.rings.get(sc.ring)?.k; g.sim(0.7, window.T.none()); const later = S.rings.get(sc.ring)?.k, showing = sc.ring.visible; return { first, later, showing, fade: S.RINGS.fade }; });
+  check('a ring comes in from nothing over a little more than half a second when it is shown, instead of popping on', s.first !== undefined && s.first < 0.5 && (!s.showing || s.later === 1), JSON.stringify(s)); }
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }

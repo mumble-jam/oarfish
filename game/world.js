@@ -1179,8 +1179,8 @@ float seaLight(vec2 p, float t) {
       lintel(ax, az, bx, bz, top, 0.6, false); g.under = top - drawnY(g.x, g.z); // how much water there is under the lintel
       // (review polish) a stepped crown on the middle of the lintel, in the band's paint, so that from afar and from above two columns and a beam say
       // 'gate' and not 'two more of the colonnade'. Laid with no number drawn (stone of the band's first tone), so nothing after it moves
-      blocks.push({ x: g.x, y: top + 0.73, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.75, 0.5, 2.6), color: stoneTones[0] }, { x: g.x, y: top + 1.23, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.9, 0.14, 2.9), color: district },
-        { x: g.x, y: top + 1.37, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.1, 0.42, 1.2), color: stoneTones[0] }, { x: g.x, y: top + 1.79, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.25, 0.12, 1.35), color: district });
+      blocks.push({ x: g.x, y: top + 0.73, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.3, 0.34, 2.0), color: stoneTones[0] }, { x: g.x, y: top + 1.07, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.42, 0.1, 2.15), color: district },
+        { x: g.x, y: top + 1.17, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(0.8, 0.3, 0.85), color: stoneTones[0] }, { x: g.x, y: top + 1.47, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(0.9, 0.08, 0.95), color: district });
       paveRoad(g.x + fx * 3.5, g.z + fz * 3.5, g.x - fx * 3.5, g.z - fz * 3.5, 1.1, 1.15); };
     // ---- the sand flat: the cistern's rim, broken; the market tables at one edge; sea grass round the edge; nothing else stands on it
     { const M = S2.meadow, n = Math.round((Math.PI * 2 * M.r) / 1.2);

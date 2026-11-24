@@ -15,6 +15,7 @@ export const SEE = {
   soft: 0.45, // the outer part of the radius over which the window thins to nothing
   front: 0.7, deep: 1.5, // only what is at least `front` metres nearer the camera than the fish is cut, fully from `front + deep`
   lens: 4.5, lensSoft: 1.2, // anything nearer the lens than `lens` metres is stippled out, fully nearer than `lens - lensSoft`
+  lensK: 0.3, // ...or than this part of the way to the fish, when the camera stands farther back (the tall Keeper's fight pulls it back 7 m)
 };
 
 // a: the head (x, y in a frame where y runs -1 to 1 up the screen and x as far per unit; z its depth from the camera; w the window's radius
@@ -79,4 +80,5 @@ export function aim(camera, joints, width, height, on = true) {
     p.copy(j).project(camera);
     out.set(p.x * asp, p.y, depth, R / (depth * t));
   }
+  SIGHT.v.value.z = Math.max(SEE.lens, SEE.lensK * SIGHT.a.value.z);
 }
