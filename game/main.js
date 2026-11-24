@@ -16,6 +16,7 @@ import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, cre
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 import { SAND_PETS, bringSand } from './sandpets.js';
 import { createBloom, BLOOM } from './bloom.js';
+import { createShapeView } from './shapes.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
 const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
@@ -121,6 +122,7 @@ export async function start(saved = {}) {
   const lamp = new THREE.PointLight('#ffe6ee', 0, 30, 1); // the fish's own glow, all there is in the deep
   const crest = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: '#ffd27a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, fog: false })); // the charge a full-grown fish eats into its crest: seen on the fish, not on the plate
   crest.renderOrder = 5; scene.add(crest);
+  const hitView = createShapeView(scene); // the testing tool 'Show hit shapes' (shapes.js)
   scene.add(hemi, sun, sun.target, lamp);
   const camera = new THREE.PerspectiveCamera(30, 1, 0.3, 260);
 
@@ -331,7 +333,7 @@ export async function start(saved = {}) {
     guard?.dispose(); guard = null;
     if (world.hall) sum = createSum(scene, world, { seed: run.seed }, sumGame); // the palace: its wall is the Sum
     else guard = createGuard(scene, world, { seed: run.seed, floor: index }, guardGame); // every rift has its keeper
-    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); } }; // the Sum is solid, and so is the veil over a kept rift
+    arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); }, bend(items, r) { guard?.bend?.(items, r); } }; // (bend: the Keeper turns the whole body aside, not only the head) // the Sum is solid, and so is the veil over a kept rift
     Object.assign(end, { kind: null, swap: 0, quake: 0, vista: 0, burst: -9 }); cam.shake = 0;
     goalEl.style.display = ''; fade(false);
     applyLook(world.floor);
@@ -1414,6 +1416,7 @@ export async function start(saved = {}) {
   $('dev-bring').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const id = b.dataset.bring, on = !pets[id], name = NPC[id].name.toLowerCase(), many = LIVES[id]?.n > 1; bring(id, on); b.setAttribute('aria-pressed', String(on));
     const sand = SAND_PETS[id]; if (sand) { showDev(on ? sand.here : sand.gone); return; }
     showDev(on ? (many ? `${LIVES[id].n} ${name === 'moon jelly' ? 'moon jellies' : `${name}s`} are in the water just ahead of you. They are only to look at.` : `A ${name} is in the water just ahead of you. It is only to look at.`) : many ? 'They are gone.' : `The ${name} is gone.`); });
+  $('dev-shapes').addEventListener('click', () => { hitView.on = !hitView.on; $('dev-shapes').setAttribute('aria-pressed', String(hitView.on)); if (hitView.on && guard?.shapes) hitView.draw(guard.shapes(sctx)); stir(); showDev(hitView.on ? 'Hit shapes on: blue is your body, white what is solid, green a leg that can be hurt now (grey: not now), amber a blow on its way, red where it lands.' : 'Hit shapes off.'); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
   {
     const ls = $('f-look');
@@ -1885,9 +1888,10 @@ export async function start(saved = {}) {
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {
-      Object.assign(sctx, { pos: rig.pos, joints: rig.joints, pieces: foes.pieces, total: bodyMetres() - 0.05, focus, time: world.time.value, playing: run.state === 'play' });
+      Object.assign(sctx, { rig, pos: rig.pos, joints: rig.joints, pieces: foes.pieces, total: bodyMetres() - 0.05, focus, time: world.time.value, playing: run.state === 'play' });
       sum?.update(dt, sctx); guard?.update(dt, sctx);
     }
+    if (hitView.on) hitView.draw(guard && guard.shapes ? guard.shapes(sctx) : []); // the testing tool: what the fight believes, drawn over the picture
 
     // caught things streak to the mouth
     let eating = false;
@@ -1997,7 +2001,7 @@ export async function start(saved = {}) {
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
     get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
-    get mods() { return mods; }, get field() { return field; }, get guard() { return guard; },
+    get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx,
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
     sim(seconds, forced) { for (let t = 0; t < seconds; t += 1 / 60) { if (forced) step(1 / 60, forced); else tick(1 / 60); } }, // with no forced input, the real devices are read

@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { lerp, clamp, damp } from './geo.js';
+import { fishRadius, FISH } from './shapes.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DS = 0.06; // spacing of trail samples, metres
@@ -178,6 +179,8 @@ export class OarfishRig {
     if (this.pos.y < floor) this.pos.y = floor;
     if (this.pos.y > world.ceiling) this.pos.y = world.ceiling;
     this.snout.copy(this.pos).addScaledVector(this.forward, SNOUT);
+    if (world.bend) { const one = this._tip || (this._tip = [{ p: new THREE.Vector3() }]); one[0].p.copy(this.snout); world.bend(one, () => FISH.head); // the snout, too: pushed out, it takes the head with it
+      if (one[0].p.distanceToSquared(this.snout) > 1e-10) { this.pos.add(one[0].p).sub(this.snout); this.snout.copy(one[0].p); } }
 
     // lay down trail
     const tr = this.trail, step = _ax;
@@ -191,6 +194,9 @@ export class OarfishRig {
       tr.unshift(last);
     }
 
+    // something solid in the water (the Keeper) turns the body aside, not only the head: the trail it follows is pushed out of it, each point as far as
+    // the body is thick there (a point past the tail says -1, and that is the end). The trail is kept, so the body stays on the side it was pushed to.
+    if (world.bend) world.bend(tr, (i) => (i * DS > this.length + 0.3 ? -1 : fishRadius(Math.min(1, (i * DS) / this.length))));
     this.phase += dt * Math.PI * 2 * lerp(0.38, 1.55, sn);
     this.headYaw = damp(this.headYaw, clamp(dYaw * 0.4, -0.4, 0.4), 6, dt);
     this.gape = damp(this.gape, (input.sprint && !input.winded && moving) || input.bite || dashing ? 0.3 : 0.04, dashing ? 20 : 5, dt);
@@ -225,14 +231,17 @@ export class OarfishRig {
       t.p.addScaledVector(side, amp * Math.sin(this.phase - KAPPA * s));
     }
 
+    if (world && world.bend) world.bend(targets, (k) => fishRadius(this.cum[k] / this.length)); // and where each joint wants to be, wave and all
     // aim each bone at the next target from where the chain actually is
     const prev = new THREE.Quaternion().copy(H), w = new THREE.Quaternion(), inv = new THREE.Quaternion();
     const at = new THREE.Vector3().copy(this.pos), d = new THREE.Vector3(), nd = new THREE.Vector3();
     this.joints[0].copy(at);
+    const bent = world && world.bend, one = this._one || (this._one = [{ p: new THREE.Vector3() }]);
     for (let k = 0; k < N; k++) {
       d.subVectors(targets[k + 1].p, at);
       if (d.lengthSq() < 1e-10) d.copy(this.forward).negate();
       d.normalize();
+      if (bent) { const r = fishRadius(this.cum[k + 1] / this.length); one[0].p.copy(at).addScaledVector(d, this.seg[k]); world.bend(one, () => r); d.subVectors(one[0].p, at); if (d.lengthSq() < 1e-10) d.copy(this.forward).negate(); d.normalize(); } // a joint that would land in something solid is turned out of it, and the bone aimed there
       frame(nd.copy(d).negate(), (targets[k].roll + targets[k + 1].roll) / 2, w);
       this.spine[k].quaternion.copy(inv.copy(prev).invert()).multiply(w);
       if (k === 0) this._w0.copy(w);

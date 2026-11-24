@@ -173,15 +173,17 @@ const feeler = (side, long, root, way, n) => ({ side, long, root, way, cuts: Arr
 export const KEEPER = {
   ride: 0.44, // how far the shell's origin is carried over the ground its feet are on
   // front to back down each side. hip: where the leg leaves the shell; rest: where its foot stands, on the ground, as the body sees it
-  legs: side4((s, i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 1.3, l2: 1.6,
+  legs: side4((s, i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 1.7, l2: 2.0, // (longer than they were, 1.3 and 1.6, so that the knees stand over two metres up, where a fish swims: a leg is hit where it is drawn now, and a fish keeps 1.5 m off the bed
     hip: [s * [1.2, 1.33, 1.29, 1.04][i], 0.3, [0.62, 0.1, -0.42, -0.94][i]], rest: [s * [2.5, 3.15, 3.1, 2.4][i], [1.8, 0.58, -0.72, -2.0][i]],
     curl: [s * [0.75, 0.9, 0.9, 0.7][i], -0.55, [0.75, 0.2, -0.4, -0.85][i]] })), // drawn up under the belly, when it is done for
   // Two claws, and not a pair. On its right the crusher: big, slow, and the one it strikes with. On its left the cutter: small and quick, the one it feeds with.
   // A claw is an arm from the shoulder to the elbow, then the hand, which is the forearm and the lower finger in one piece; the upper finger hinges on it.
   // l1, l2: arm and forearm; span: how far the fingers reach past the hinge; stout: how thick it all is
   claws: [
-    { side: -1, big: true, shoulder: [-1.02, 0.32, 1.02], l1: 1.05, l2: 0.95, hinge: [0, 0.16, 0.9], span: 0.95, stout: 1.5 },
-    { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 0.78, l2: 0.62, hinge: [0, 0.07, 0.6], span: 0.6, stout: 0.72 },
+    // (Both were made bigger when the fight was made honest: the great claw had hit a disc three metres across while it was itself a hand's breadth wide.
+    // It is now what it hits with, so it is drawn as great as its blow: a third longer and a third thicker. The small one reaches as far as its jab does.)
+    { side: -1, big: true, shoulder: [-1.04, 0.34, 1.0], l1: 1.35, l2: 1.2, hinge: [0, 0.2, 1.14], span: 1.25, stout: 2.0 },
+    { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 1.1, l2: 0.9, hinge: [0, 0.08, 0.86], span: 0.75, stout: 0.95 },
   ],
   eyes: [1, -1].map((side) => ({ side, socket: [side * 0.37, 0.4, 1.47] })), stalk: 0.56, // where each stalk stands in its socket, and how far up it the eye is
   jaws: [1, -1].map((side) => ({ side, hinge: [side * 0.33, 0.21, 1.645] })), // the two doors of its mouth, each hinged at its outer edge
@@ -218,12 +220,12 @@ export function keeper(pal) {
 // The two lengths of a walking leg. The upper is the thigh, from the joint at the shell to the knee, with a crest of small spines; the lower is the three
 // short lengths a crab's leg ends in, made as one: a wrist, a shin, and after a pale joint the last, which comes to a point.
 export function keeperLeg(pal) {
-  const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.legs[0];
+  const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.legs[0], u = l1 / 1.3, w = l2 / 1.6; // (u, w: how much longer than they were first made; the spines and joints keep their places along them)
   const upper = mesher().limb([0, 0, -0.1], [0, 0, 0.2], 0.21, 0.2, 5, deep).limb([0, 0.01, 0.16], [0, 0.015, l1 - 0.1], 0.185, 0.15, 5, [dark, deep]).limb([0, 0.015, l1 - 0.14], [0, 0, l1], 0.165, 0.17, 5, [deep, dark]), knee = upper.last;
   upper.cap(knee, [0, 0, 1], pale, 0.16); // the knuckle of the knee
-  for (const z of [0.42, 0.72, 1.0]) upper.limb([0, 0.14, z], [0, 0.29, z + 0.1], 0.05, 0.005, 3, [dark, pale]);
-  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3], [0, 0.05, 1.0], 0.14, 0.1, 5, [dark, deep])
-    .limb([0, 0.05, 0.95], [0, 0.05, 1.07], 0.118, 0.11, 5, pale).limb([0, 0.05, 1.04], [0, 0, l2], 0.095, 0.014, 5, [dark, pale]);
+  for (const z of [0.42, 0.72, 1.0]) upper.limb([0, 0.14, z * u], [0, 0.29, z * u + 0.1], 0.05, 0.005, 3, [dark, pale]);
+  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34 * w], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3 * w], [0, 0.05, 1.0 * w], 0.14, 0.1, 5, [dark, deep])
+    .limb([0, 0.05, 0.95 * w], [0, 0.05, 1.07 * w], 0.118, 0.11, 5, pale).limb([0, 0.05, 1.04 * w], [0, 0, l2], 0.095, 0.014, 5, [dark, pale]);
   return { upper: upper.geometry(), lower: lower.geometry() };
 }
 // The three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge, whose pin

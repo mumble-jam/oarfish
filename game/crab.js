@@ -34,6 +34,7 @@ import { clamp, lerp, damp } from './geo.js';
 
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]), UP = new THREE.Vector3(0, 1, 0);
 const AIMED = new Set(['slam', 'stuck', 'sweep', 'sweeping', 'jab', 'jabbed', 'feed']), WINDUP = new Set(['slam', 'sweep', 'jab']); // when its eyes are on the point it was handed, and when it is still winding up
+const SWEEP_Y = 1.35; // how high, in the body's space, the great claw goes across in a sweep: as high as a fish keeps off the bed, which is what it is swept at (it was 0.28, under any fish)
 const FEEL = { long: { stiff: [5, 1.3], drag: [1.0, 3.2], ease: 0.8 }, short: { stiff: [9, 4.5], drag: [1.0, 2.2], ease: 0.85 } };
 
 // a: the creature as npc.js makes it (a.body is the shell, in its material). Returns the rig; a.object becomes the whole animal.
@@ -93,17 +94,17 @@ export function crabRig(a, pal) {
     if (act && act.at) at.copy(act.at).applyMatrix4(walker.inv);
     const sway = Math.sin(t * 1.3), chew = Math.sin(t * 7), up = Math.max(pose.wary, 0.8 * rage * (calm ? 1 : 0)), clack = rage * Math.abs(Math.sin(t * 5.5)); // raging, the claws are up whether a fish is near or not, and clack
     for (const c of claws) {
-      const K = c.side, reach = (short) => { c.to.copy(at).sub(c.shoulder); c.to.setLength(Math.max(0.6, c.to.length() - c.span * short)).add(c.shoulder); c.to.z = Math.max(c.to.z, 1.0); }; // the fingers, not the wrist, are what get there
+      const K = c.side, reach = (short) => reachFor(c, at, short, c.to); // the fingers, not the wrist, are what get there
       let open = 0.25, quick = 9, snap = 10;
       if (pose.limp > 0.5) { c.to.set(K * 0.85, 0.45, 1.35); open = 0.45; quick = 3; }
       else if (s.tuck || id === 'charge') { if (c.big) c.to.set(K * 0.1, 0.18, 2.0); else c.to.set(K * 0.6, 0.1, 1.6); open = 0.03; } // the big one shut across its face like a door
       else if (s.stun) { c.to.set(K * (c.big ? 1.7 : 1.3), -0.15 + 0.05 * Math.sin(t * 16 + K), 1.9); open = 0.6; }
       else if (id === 'slam') { if (c.big) { c.to.set(K * 1.5, 2.2 + 0.45 * k, 1.05); open = 1.05; } else { c.to.set(K * 1.5, 0.9, 1.8); open = 0.8; } quick = 12; }
       else if (id === 'stuck') { if (c.big) { reach(0.6); open = 0.02; quick = 34; snap = 40; } else { c.to.set(K * 1.25, -0.28, 1.7); open = 0.3; } } // the small one braced on the ground, to haul with
-      else if (id === 'sweep') { if (c.big) { c.to.set(K * 2.7, 0.5, 0.25 - 0.6 * k); open = 1.0; quick = 10; } else { c.to.set(K * 0.8, 0.45, 1.6); open = 0.25; } }
-      else if (id === 'sweeping') { if (c.big) { const a2 = 2.75 * k; c.to.set(K * 2.9 * Math.cos(a2), 0.28, 2.9 * Math.sin(a2) + 0.35); open = 0.12; quick = 46; snap = 40; } else { c.to.set(K * 0.5, 0.3, 1.3); open = 0.1; } }
+      else if (id === 'sweep') { if (c.big) { c.to.set(K * 2.7, 0.5 + 0.5 * k, 0.25 - 0.6 * k); open = 1.0; quick = 10; } else { c.to.set(K * 0.8, 0.45, 1.6); open = 0.25; } }
+      else if (id === 'sweeping') { if (c.big) { const a2 = 2.75 * k; c.to.set(K * 2.9 * Math.cos(a2), SWEEP_Y, 2.9 * Math.sin(a2) + 0.35); open = 0.12; quick = 46; snap = 40; } else { c.to.set(K * 0.5, 0.3, 1.3); open = 0.1; } }
       else if (id === 'jab') { if (c.big) { c.to.set(K * 0.9, 0.9, 1.9); open = 0.3; } else { c.to.set(K * 1.0, 0.8, 0.95 - 0.3 * k); open = 1.0; quick = 18; } }
-      else if (id === 'jabbed') { if (c.big) { c.to.set(K * 0.9, 0.9, 1.9); open = 0.3; } else { reach(0.5); open = 0.03; quick = 48; snap = 40; } }
+      else if (id === 'jabbed') { if (c.big) { c.to.set(K * 0.9, 0.9, 1.9); open = 0.3; } else { reach(0.3); open = 0.03; quick = 48; snap = 40; } } // (0.3: KEEPER_FIGHT.jab.short)
       else if (id === 'feed') { if (c.big) { c.to.set(K * 0.3, 0.2 + 0.08 * chew, 1.75); open = 0.25 + 0.2 * chew; } else { c.to.set(K * 0.3, 0.15 - 0.08 * chew, 1.6); open = 0.3 - 0.2 * chew; } }
       else if (id === 'spent') { if (c.big) c.to.set(K * 1.9, -0.25, 1.6); else c.to.set(K * 1.2, -0.28, 1.7); open = 0.5; quick = 5; }
       else if (c.big) { // held low across its front; the nearer a fish, the higher it goes, and open, and it waves it at the fish
@@ -153,6 +154,31 @@ export function crabRig(a, pal) {
         D1.normalize().lerp(DOWN, slack * 0.8 * (0.4 + 0.6 * u)).normalize(); P1.addScaledVector(D1, f.cuts[i + 1] - f.cuts[i]); st.shape[i + 1].copy(P1); }
       st.trail(dt, group, walker.inv, opts); }
   }
+  // A claw brought to `at` (the body's own space) as it is at the end of a blow: the wrist kept back so that the fingers, not the wrist, get there.
+  function reachFor(c, at, short, out) { out.copy(at).sub(c.shoulder); out.setLength(Math.max(0.6, out.length() - c.span * short)).add(c.shoulder); out.z = Math.max(out.z, 1.0); return out; }
+  // The part of a claw that hits, as a capsule in the world (shapes.js): from a third of the way down the hand to the tips of the fingers, as thick as the hand.
+  // From where its elbow and wrist are (the body's own space), laid as lay() lays the hand: along elbow to wrist, its top as near up as it will go.
+  const HZ = new THREE.Vector3(), HX = new THREE.Vector3(), HY = new THREE.Vector3();
+  function clawCap(c, elbow, wrist, out) { HZ.subVectors(wrist, elbow); const l = HZ.length() || 1; HZ.multiplyScalar(1 / l); HX.crossVectors(UP, HZ); if (HX.lengthSq() < 1e-8) HX.set(1, 0, 0); HX.normalize(); HY.crossVectors(HZ, HX);
+    out.a.copy(elbow).addScaledVector(HZ, l * 0.35); out.b.copy(wrist).addScaledVector(HZ, c.span * 0.8).addScaledVector(HY, -0.2 * c.stout); out.r = 0.22 * c.stout;
+    out.a.applyMatrix4(group.matrix); out.b.applyMatrix4(group.matrix); return out; }
+  const claw = (big) => claws.find((c) => c.big === big), E2 = new THREE.Vector3(), W2 = new THREE.Vector3(), A2 = new THREE.Vector3();
+  // where a claw will be when a blow at `atWorld` lands (short: how much of the fingers is kept back: 0.6 for the great claw, 0.5 for a jab). Nothing is moved.
+  function landing(big, atWorld, short, out) { const c = claw(big); A2.copy(atWorld).applyMatrix4(walker.inv); reachFor(c, A2, short, W2); twoBone(c.shoulder, W2, c.l1, c.l2, c.pole, E2); return clawCap(c, E2, W2, out); }
+  // the blow lands: the claw is put there at once (it would have got there in a frame or two), so that what is drawn is what was judged
+  function strike(big, atWorld, short, out) { const c = claw(big); A2.copy(atWorld).applyMatrix4(walker.inv); reachFor(c, A2, short, c.wrist); c.to.copy(c.wrist);
+    twoBone(c.shoulder, c.wrist, c.l1, c.l2, c.pole, c.elbow); lay(c.arm, c.shoulder, c.elbow, UP); lay(c.hand, c.elbow, c.wrist, UP); c.open = 0.02; c.finger.rotation.x = -c.open; return clawCap(c, c.elbow, c.wrist, out); }
+  // a claw as it is drawn now
+  const clawNow = (big, out) => { const c = claw(big); return clawCap(c, c.elbow, c.wrist, out); };
+  // What is solid of it, in the world: the shell (an ellipsoid round the dome, from under its lip to its top) and every leg it still has, a capsule
+  // for each length as it is drawn (a numb leg where it lies, not where its foot is). Each leg's lengths carry its index, `leg`.
+  const SHELL = { c: [0, 0.62, 0], r: [1.6, 1.05, 1.48] }, solid = [], LZ = new THREE.Vector3();
+  function solids() { group.updateMatrix(); const M = group.matrix; let n = 0;
+    const next = (t) => { if (!solid[n]) solid[n] = { t, a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), r: 0, role: 'solid', leg: -1 }; const o = solid[n++]; o.t = t; o.leg = -1; return o; };
+    const sh = next('ell'); sh.c.set(...SHELL.c).applyMatrix4(M); sh.rx = SHELL.r[0] * group.scale.x; sh.ry = SHELL.r[1] * group.scale.x; sh.rz = SHELL.r[2] * group.scale.x; sh.yaw = group.rotation.y;
+    walker.legs.forEach((l, i) => { if (l.gone || !l.upper.visible) return;
+      for (const [piece, len, r] of [[l.upper, l.l1, 0.19], [l.lower, l.l2 - 0.15, 0.12]]) { const o = next('cap'); o.a.copy(piece.position); o.b.copy(piece.position).add(LZ.set(0, 0, len).applyQuaternion(piece.quaternion)); o.a.applyMatrix4(M); o.b.applyMatrix4(M); o.r = r * group.scale.x; o.leg = i; } });
+    solid.length = n; return solid; }
   // a leg comes away: the walker goes on without it, and whoever took it has its two pieces, where they were
   function shed(i) { const l = walker.legs[i]; l.gone = true; l.lame = false; l.upper.material = l.lower.material = mat; group.updateMatrixWorld(true); return [l.upper, l.lower]; }
   // on the stand in the library: the same animal, the ground going by under it when it walks (sideways, as crabs do)
@@ -168,6 +194,6 @@ export function crabRig(a, pal) {
     update(dt, { x: 0, z: 0, yaw: 0, vx: id === 'walk' || id === 'charge' ? speed * sc : 0, vz: 0, treadmill: true, ground: (p) => { p.y = -KEEPER.ride * sc; }, time: stand.time,
       wary: id === 'wary' ? 1 : 0, look: stand.look, act, tuck: id === 'tuck', stun: id === 'stun', limp: id === 'down', rage: id === 'lame', sink: id === 'dig' ? clamp((stand.time % 3.2) / 1.2, 0, 1) : 0 });
   }
-  a.object = group; a.rig = { update, show, shed, walker, claws, eyes, jaws, feelers, cracks, pose, triangles };
+  a.object = group; a.rig = { update, show, shed, walker, claws, eyes, jaws, feelers, cracks, pose, triangles, landing, strike, clawNow, solids, SHELL };
   return a.rig;
 }
