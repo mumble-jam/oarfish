@@ -1485,6 +1485,10 @@ export async function start(saved = {}) {
 
   // The Tuning drawer. Every music slider is one decision about the score. A set of them is a preset:
   // it can apply to every depth or only to the depth you are in, and travels as a short text code.
+  // The turnaround's three sliders and its switch (TURN in music.js) are music sliders like the rest, as shipped here: every 4 bars (66 of
+  // off/8/4/2), a walk-up of three (66 of one passing note/2/3/4), stepwise (20), keepers only (0). A code from before them gives these.
+  const TURN_SHIPPED = { turn: 66, turnsize: 66, turnheight: 20, turnall: 0 };
+  for (const [k, v] of Object.entries(TURN_SHIPPED)) { if (!MUSIC_KEYS.includes(k)) MUSIC_KEYS.push(k); SHIPPED_MUSIC.all[k] ??= v; }
   const prefs = store.get('oarfish.music', {});
   if (!prefs.all) { prefs.all = {}; for (const k of MUSIC_KEYS) if (Number.isFinite(prefs[k])) prefs.all[k] = prefs[k]; } // settings saved by the first version
   prefs.zones ||= {};
@@ -1510,6 +1514,7 @@ export async function start(saved = {}) {
       else if (MUSIC_KEYS.includes(k)) got[k] = clamp(Math.round(n), 0, 100);
     }
     if (!Object.keys(got).length) return 'That code has no settings in it.';
+    if (!Object.keys(TURN_SHIPPED).some((k) => k in got)) Object.assign(got, TURN_SHIPPED); // a code from before the turnaround: its shipped setting
     if (zone === null) Object.assign(prefs.all, got); else prefs.zones[zone] = { ...preset(zone), ...got };
     savePrefs(); showPreset();
     if (zone !== null) return `Applied to ${zoneName(zone)} only.`;

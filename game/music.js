@@ -6,7 +6,9 @@
 // Sliders (all 0..1): volume, dream (reverb, darkness, sustain), energy (tempo, how busy the band is: where it rests
 // in empty water; from there it climbs by itself with what is going on round the fish, see `life` below),
 // menace (which harmony is used, low brass, toms), react (how hard the game pushes the band around),
-// swing (straight to hard swing), band (drummer forward to harmony forward).
+// swing (straight to hard swing), band (drummer forward to harmony forward). And three for the turnaround (TURN, below):
+// turn (how often: off, every 8, 4 or 2 bars), turnsize (one passing note up to a run of four), turnheight (how far below its
+// landing note a walk-up starts), and turnall (0: only the keepers turn round; 1: the other creatures too).
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -43,8 +45,8 @@ export const CAST = {
 };
 
 export function createMusic({ context = null } = {}) {
-  const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5, turn: 0.66, turnsize: 0.66, turnheight: 0.2, turnall: 0 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], turnBy: null, barAt: 0, showEnd: -1, log: null, where: null, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -265,6 +267,9 @@ export function createMusic({ context = null } = {}) {
       for (const m of midis) for (const [k, level] of [[1, 1], [2, 0.5], [3, 0.3], [4, 0.18]]) { const og = ctx.createGain(); og.gain.value = level; osc('sine', mtof(m) * k, t, t + dur + 0.4).connect(og); og.connect(g); }
     },
   };
+  // every note the cast and the keepers' shows play can be written down (st.log, an array, or null for not), with the bar and tick it
+  // was asked for in (and `show` if a keeper's show played it): how the checks and tools/hear_turn.mjs read a line without hearing it
+  for (const k of Object.keys(voices)) { const f = voices[k]; voices[k] = (t, m, dur, v, ...r) => { if (st.log) st.log.push({ voice: k, at: st.where, t, m, dur, v, show: !!st.showing }); return f(t, m, dur, v, ...r); }; }
 
   // ---------------------------------------------------------------- harmony
   const tonic = () => KEYS[Math.min(st.floor, KEYS.length - 1)];
@@ -284,9 +289,84 @@ export function createMusic({ context = null } = {}) {
     return clamp(Math.round(params.menace * 2.4 + depth * 1.1 + (st.low ? 0.4 : 0) - 0.3), 0, MOODS.length - 1);
   }
 
-  // what a member of the cast plays on this tick, if anything: p is how near it is (0 to 1); `sure` plays every chance it has
-  function playCast(id, p, bar, tick, t, sure = false) {
+  // ---------------------------------------------------------------- the turnaround
+  // George liked the Keeper's oom-pah ('it makes him feel big and heavy') but not that every bar went round the same. So every few bars
+  // a line turns round at the end of the bar: 'pam-pam, pam-pam, pam-pam, pam-pa-PAM-pam'. It is not a solo: the same instrument and
+  // weight, the note on beat three a touch louder (1.12), and the next bar's first note is not touched. One rule for any repeating line;
+  // each line says in TURN only what is its own: its instrument, the note its next bar starts on (`land`), the notes it has round beat
+  // three if it has any (`before`, `three`), its lowest note (`low`), how long its notes are against the tuba's (`len`), and `slot`.
+  //   one note (turnsize 0)   a short passing note on the swung eighth before beat three, the note of the scale nearest halfway between
+  //                           the note before it and the beat-three note (the Keeper: root, passing note, fifth). A line with nothing on beat
+  //                           three gets instead one short note a step under its landing, on the last swung eighth.
+  //   two to four notes       the second half of the bar is a walk-up of the scale into the next bar's first note, the last a step under
+  //                           it. turnheight is how many steps under it the walk-up starts: from as close as the notes allow up to seven
+  //                           (about an octave), never under `low`. Where the notes fall: TURN_RHYTHM.
+  // The notes are the scale of the chord the band is on in that bar, aiming at the note the line plays on the next bar's chord.
+  // Bars that are not turnaround bars are played exactly as before; with turn at 0 nothing here is reached at all.
+  // A keeper's fill or solo always wins: in a bar where a show sounds, or into which one rings, nothing turns round.
+  // Only one line turns round in a bar, the first of `st.sitting` whose bar it is (a keeper before a hunter), and each line's `slot` puts
+  // its turnaround on a different odd bar of the interval, so that creatures, when they may (turnall), do not all turn at once.
+  const TURN_RHYTHM = { // [tick, length in beats, loudness against the line's own]: PAM on beat three
+    2: [[6, 0.9, 1.12], [9, 0.9, 1]],
+    3: [[5, 0.3, 0.8], [6, 0.9, 1.12], [9, 0.9, 1]],
+    4: [[5, 0.3, 0.8], [6, 0.9, 1.12], [9, 0.55, 0.95], [11, 0.3, 0.9]],
+  };
+  const lamp = (ch) => voicing(ch, 79), vibe = (ch, b) => { const vo = voicing(ch, 67); return vo[b % vo.length]; }, bell = (ch, b) => { const vo = voicing(ch, 84); return vo[b % vo.length]; };
+  const TURN = {
+    keeper: { voice: 'tuba', slot: 0, low: 26, land: (nx) => bassPitch(nx.root, 36), before: (ch) => bassPitch(ch.root, 36), three: (ch) => bassPitch(ch.root + 7, 36), threeDur: (beat) => beat * 1.25 },
+    shearer: { voice: 'sax', slot: 0, low: 50, len: 0.7, land: (nx) => 55 + nx.root }, // its run starts on the root
+    lamplighter: { voice: 'celesta', slot: 0, low: 70, len: 1.4, land: (nx) => lamp(nx)[3] + 12, before: (ch) => lamp(ch)[2], three: (ch) => lamp(ch)[1], threeDur: () => 1.5 },
+    warden: { voice: 'cello', slot: 0, low: 36, len: 1.2, land: (nx) => bassPitch(nx.root, 45) },
+    sum: { voice: 'organ', slot: 0, low: 31, len: 1.2, land: (nx) => bassPitch(nx.root, 40) },
+    biter: { voice: 'trumpet', slot: 1, low: 58, len: 0.5, land: (nx) => 60 + nx.root + nx.q.scale[4] },
+    angler: { voice: 'vibes', slot: 2, low: 62, len: 1.3, land: vibe },
+    hook: { voice: 'pluck', slot: 3, low: 45, len: 0.8, land: (nx) => bassPitch(nx.root, 46) + 12 },
+    drifter: { voice: 'block', slot: 1, low: 74, len: 0.5, land: () => 86 },
+    leech: { voice: 'clarinet', slot: 2, low: 38, len: 1, land: (nx) => 43 + nx.root + nx.q.scale[2] },
+    squid: { voice: 'pluck', slot: 3, low: 64, len: 0.4, land: (nx) => 72 + nx.root },
+    moonjelly: { voice: 'celesta', slot: 1, low: 80, len: 1.6, land: bell },
+    nettle: { voice: 'cello', slot: 2, low: 30, len: 1.4, land: (nx) => bassPitch(nx.root + nx.q.tones[1], 40) },
+  };
+  const inScale = (ch, m) => ch.q.scale.includes((((m - ch.root) % 12) + 12) % 12);
+  const stepFrom = (ch, m, k) => { let x = m; for (let i = 0; i < Math.abs(k);) { x += Math.sign(k); if (inScale(ch, x)) i++; } return x; }; // k steps of the chord's scale from m (down for k < 0)
+  const turnEvery = () => [0, 8, 4, 2][Math.round(clamp(params.turn, 0, 1) * 3)];
+  const turnSize = () => 1 + Math.round(clamp(params.turnsize, 0, 1) * 3);
+  function turnBar(id, bar) { // may `id` turn round in this bar?
+    const T = TURN[id], every = turnEvery();
+    if (!T || !every || !(CAST[id].lead || params.turnall >= 0.5)) return false;
+    return (((bar % every) + every) % every) === every - 1 - 2 * (T.slot % (every / 2));
+  }
+  function nextChord(bar) { // the next bar's chord as planBar will have it (every eight bars the mood may change)
+    if ((bar + 1) % 8 !== 0) return chordAt(bar + 1);
+    const was = st.mood; st.mood = pickMood(); const nx = chordAt(bar + 1); st.mood = was; return nx;
+  }
+  // the turnaround of `id` in `bar`: [tick, midi, length in seconds, loudness against the line's]
+  function turnNotes(id, bar) {
+    const T = TURN[id], ch = chordAt(bar), beat = st.beatDur, size = turnSize(), len = T.len || 1, land = T.land(nextChord(bar), bar + 1);
+    if (size === 1) {
+      if (!T.three) return [[11, stepFrom(ch, land, -1), 0.3 * beat * len, 0.9]];
+      const a = T.before(ch, bar), b = T.three(ch, bar);
+      let pass = Math.round((a + b) / 2), best = 99; // the note of the scale nearest halfway between them (if two are, the one nearer beat three)
+      for (let x = Math.min(a, b) + 1; x < Math.max(a, b); x++) { const d = Math.abs(x - (a + b) / 2) - (Math.abs(x - b) < Math.abs(x - a) ? 0.01 : 0); if (inScale(ch, x) && d < best) { best = d; pass = x; } }
+      return [[5, pass, 0.3 * beat * len, 0.8], [6, b, T.threeDur(beat), 1.12]];
+    }
+    let h = Math.max(size, Math.round(lerp(2, 7, clamp(params.turnheight, 0, 1))));
+    while (h > size && stepFrom(ch, land, -h) < T.low) h--;
+    return TURN_RHYTHM[size].map(([tick, beats, k], i) => [tick, stepFrom(ch, land, -(h - Math.round((i * (h - 1)) / (size - 1)))), beats * beat * len, k]);
+  }
+  const sound = (voice, t, m, dur, v) => (voice === 'organ' ? voices.organ(t, [m, m + 12], dur, v) : voices[voice](t, m, dur, v));
+
+  // what a member of the cast plays on this tick, if anything: p is how near it is (0 to 1); `sure` plays every chance it has.
+  // `alone`: it is being heard on its own (the library), so it turns round when its bar comes whoever else is near.
+  function playCast(id, p, bar, tick, t, sure = false, alone = false) {
     const ch = chordAt(bar), rnd = Math.random, beat = st.beatDur, v = 0.45 + 0.55 * p;
+    const turn = (alone || st.turnBy === id) && turnBar(id, bar) && !(st.show || (!alone && st.showEnd > st.barAt)) ? turnNotes(id, bar) : null;
+    if (turn) {
+      const mine = turn.find((x) => x[0] === tick);
+      if (mine) sound(TURN[id].voice, t, mine[1], mine[2], v * mine[3]);
+      if (mine || (turnSize() > 1 && tick >= 5)) return; // the line's own notes give way to it
+    }
+    const cap = turn ? beat * (turnSize() > 1 ? 1.55 : 3.5) : Infinity; // a long note is let go before the turnaround
     const may = (chance) => sure || rnd() < chance;
     const deg = (d, base) => base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7); // a step of the chord's scale, above `base`
     if (id === 'biter') { // two quick bites off the beat
@@ -298,7 +378,7 @@ export function createMusic({ context = null } = {}) {
     } else if (id === 'drifter') { // tick, tock
       if (tick % 3 === 1 && may(0.18 + 0.42 * p)) voices.block(t, (tick === 1 || tick === 7) ? 86 : 81, 0.05, v);
     } else if (id === 'leech') { // a low note that slides to the one beside it
-      if ((tick === 0 || tick === 6) && may(0.5 + 0.3 * p)) { const m = deg(tick === 0 ? 2 : 4, 43); voices.clarinet(t, m, beat * 1.7, v, m + (rnd() < 0.5 ? 1 : -1)); }
+      if ((tick === 0 || tick === 6) && may(0.5 + 0.3 * p)) { const m = deg(tick === 0 ? 2 : 4, 43); voices.clarinet(t, m, Math.min(beat * 1.7, cap), v, m + (rnd() < 0.5 ? 1 : -1)); }
     } else if (id === 'squid') { // a skitter of short high notes, three to a beat, now and then
       if (tick % 3 !== 0 && may(0.12 + 0.3 * p)) voices.pluck(t, deg(7 + ((bar + tick) % 5), 60), 0.12, v * 0.6);
     } else if (id === 'moonjelly') { // one small bell at the top of the chord, a bar apart, slow as their beating
@@ -312,9 +392,9 @@ export function createMusic({ context = null } = {}) {
     } else if (id === 'lamplighter') { // the chord, let fall a note at a time from the top
       if (tick % 3 === 0 && may(0.6 + 0.35 * p)) { const vo = voicing(ch, 79); voices.celesta(t, vo[3 - tick / 3] + (bar % 2 ? 0 : 12 * (tick === 0)), 1.5, v); }
     } else if (id === 'warden') { // one long bowed note to the bar, sliding as it circles
-      if (tick === 0) { const m = bassPitch(ch.root + ch.q.tones[bar % 2 ? 2 : 0], 45); voices.cello(t, m, beat * 3.7, v, m + (bar % 4 < 2 ? 2 : -1)); }
+      if (tick === 0) { const m = bassPitch(ch.root + ch.q.tones[bar % 2 ? 2 : 0], 45); voices.cello(t, m, Math.min(beat * 3.7, cap), v, m + (bar % 4 < 2 ? 2 : -1)); }
     } else if (id === 'sum') { // all of it at once
-      if (tick === 0) voices.organ(t, [bassPitch(ch.root, 40), ...voicing(ch, 55)], beat * 3.8, v);
+      if (tick === 0) voices.organ(t, [bassPitch(ch.root, 40), ...voicing(ch, 55)], Math.min(beat * 3.8, cap), v);
     }
   }
 
@@ -345,7 +425,8 @@ export function createMusic({ context = null } = {}) {
   }
   function playTick(bar, tick, t) {
     const I = st.intensity, P = params, rnd = Math.random, beat = Math.floor(tick / 3), sub = tick % 3;
-    if (tick === 0) planBar(bar, t);
+    if (tick === 0) { planBar(bar, t); st.barAt = t; st.turnBy = st.sitting.find((id) => turnBar(id, bar)) ?? null; } // who may turn round in this bar
+    st.where = [bar, tick];
     const human = () => (rnd() - 0.5) * 0.012;
     // --- drummer
     const fillNow = plan.fill && tick >= 6;
@@ -420,7 +501,7 @@ export function createMusic({ context = null } = {}) {
   };
   function playShow(bar, tick, t) {
     const sh = st.show, S = SHOW[sh.id], ch = chordAt(bar), beat = st.beatDur, rnd = Math.random;
-    const deg = (d) => S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), say = (d, dur, v) => { voices[S.voice](t, deg(d), dur, Math.min(1.25, v)); st.licks++; };
+    const deg = (d) => S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), say = (d, dur, v) => { st.showing = true; voices[S.voice](t, deg(d), dur, Math.min(1.25, v)); st.showing = false; st.licks++; st.showEnd = Math.max(st.showEnd, t + dur); };
     if (sh.wait > 0) { if (tick % 3 === 0) sh.wait--; return; } // it comes in on a beat
     if (sh.kind === 'fill') {
       const i = sh.i++, n = S.fill.length, v = 0.75 + 0.5 * (i / n); // swelling as it goes
@@ -496,7 +577,32 @@ export function createMusic({ context = null } = {}) {
     // what the band is doing right now, for the drawer
     describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow(), sitting: st.sitting.map((id) => CAST[id].name) } : null; },
     // one creature's instrument on its own, two bars of it, for the library
-    audition(id) { if (!CAST[id] || !api.unlock() || !n) return false; const t0 = now() + 0.06; for (let bar = 0; bar < 2; bar++) for (let tick = 0; tick < 12; tick++) playCast(id, 1, st.bar + bar, tick, t0 + (bar * 12 + tick) * st.tickLen, true); return true; },
+    // where it would turn round (TURN), four bars ending on its turnaround and the note that lands it
+    audition(id) {
+      if (!CAST[id] || !api.unlock() || !n) return false;
+      const t0 = now() + 0.06, turns = turnEvery() && TURN[id] && (CAST[id].lead || params.turnall >= 0.5);
+      let from = st.bar; if (turns) while (!turnBar(id, from + 3)) from++;
+      const bars = turns ? 4 : 2, at = (bar, tick) => t0 + ((bar - from) * 12 + tick) * st.tickLen;
+      for (let bar = from; bar < from + bars; bar++) for (let tick = 0; tick < 12; tick++) { st.where = [bar, tick]; playCast(id, 1, bar, tick, at(bar, tick), true, true); }
+      if (turns) { st.where = [from + 4, 0]; playCast(id, 1, from + 4, 0, at(from + 4, 0), true, true); }
+      return true;
+    },
+    // One creature's line with nothing else playing: `bars` bars from bar `from`, in the band's swing at `bpm`, as near as `p`. It goes
+    // through the band's own rules (a keeper's show still wins, see TURN). For tools/hear_turn.mjs and the checks, which read st.log.
+    // Returns the time it ends.
+    line(id, bars, { from = 0, p = 1, bpm = 120, at = null } = {}) {
+      if (!CAST[id]) return null;
+      begin(); if (!n) return null;
+      st.beatDur = 60 / bpm;
+      const late = lerp(0.5, 0.74, params.swing), frac = [0, 1 / 3, late, 1];
+      let t = at ?? now() + 0.05;
+      for (let bar = from; bar < from + bars; bar++) for (let tick = 0; tick < 12; tick++) {
+        if (tick === 0) { st.barAt = t; st.turnBy = turnBar(id, bar) ? id : null; }
+        st.where = [bar, tick]; playCast(id, p, bar, tick, t);
+        t += (frac[(tick % 3) + 1] - frac[tick % 3]) * st.beatDur;
+      }
+      return t;
+    },
     get energy() { return energyNow(); },
     get muted() { return st.muted; },
     get running() { return st.started && ctx?.state === 'running'; },

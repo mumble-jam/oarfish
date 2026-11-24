@@ -406,11 +406,15 @@ button:disabled { opacity: 0.4; cursor: default; }
     <div class="dial"><label for="m-react">Reaction</label><input type="range" id="m-react" min="0" max="100" value="70"><span class="lo">steady band</span><span class="hi">follows every move</span><p>How hard speed, wrapping, danger and catches push the band around.</p></div>
     <div class="dial"><label for="m-swing">Swing</label><input type="range" id="m-swing" min="0" max="100" value="60"><span class="lo">straight</span><span class="hi">hard swing</span></div>
     <div class="dial"><label for="m-band">Balance</label><input type="range" id="m-band" min="0" max="100" value="50"><span class="lo">drummer forward</span><span class="hi">harmony forward</span></div>
+    <div class="dial"><label for="m-turn">Turnaround</label><input type="range" id="m-turn" min="0" max="99" step="33" value="66"><span class="lo">off · every 8</span><span class="hi">every 4 · every 2 bars</span><p>Every few bars a line turns round at the end of the bar, pam-pa-PAM-pam, into the next. The keepers always; the other creatures with the switch below.</p></div>
+    <div class="dial"><label for="m-turnsize">Turnaround size</label><input type="range" id="m-turnsize" min="0" max="99" step="33" value="66"><span class="lo">one passing note</span><span class="hi">a short run</span></div>
+    <div class="dial"><label for="m-turnheight">Turnaround height</label><input type="range" id="m-turnheight" min="0" max="100" value="20"><span class="lo">step by step</span><span class="hi">from an octave down</span></div>
+    <div class="dial"><label for="m-turnall">Creatures turn round too</label><input type="range" id="m-turnall" min="0" max="100" step="100" value="0"><span class="lo">keepers only</span><span class="hi">every creature</span></div>
     <div class="preset">
       <button type="button" id="preset-copy">Copy preset</button>
       <label for="preset-in">Paste a preset</label>
       <div class="row"><input type="text" id="preset-in" placeholder="oarfish-music:1:..." autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" id="preset-apply">Apply</button></div>
-      <p id="preset-msg" aria-live="polite">A preset is the six sliders above as a line of text. Volume is not part of it.</p>
+      <p id="preset-msg" aria-live="polite">A preset is the sliders above as a line of text. Volume is not part of it.</p>
     </div>
     <div class="feel">
       <h2>The feel</h2>
