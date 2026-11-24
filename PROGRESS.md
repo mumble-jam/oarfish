@@ -7,10 +7,15 @@ Brief: a front page made from the old plate, with music cut only from George's b
 - [x] `game/title.js` (the page, its print look, menu, input, music, diving in, coming back); hooks: one block in `main.js` (the hold), one in `index.html` (the decision and the boot); local Fell faces in `title/fonts/`.
 - [x] `tools/test_title.mjs` (its own checks, forced on), `tools/shot_title.mjs` (pictures).
 
+- [x] Pictures looked at against the plate, three rounds (fins flat pink with hatched rays and four deeper bands; runs stacked tight as on the plate; finer stipple; the model's spots lightened; the water soaks in under the fish from the edges).
+- [x] `tools/test_title.mjs`: all 28 checks pass. Sheet: `/home/claude/title-sheet.jpg`.
+- [x] CLAUDE.md, README; squid-play merged in (clean).
+
 ## To do
-- [ ] Pictures, looked at against the plate; adjust.
-- [ ] Its checks; then the five suites, one at a time under the lock.
-- [ ] CLAUDE.md, README file map; merge into squid-play; copy to pub-copy.
+- [ ] The game suite after the merge (the coordinator asked for the game suite only, plus the page's own checks), then fast-forward squid-play, copy to pub-copy.
+
+## Notes
+- The machine restarted twice mid-run; one check run of mine looped for ever on a test bug (a getter copied once by Object.assign) and I ended it myself.
 
 ## Decisions (and why)
 - The dive is built behind the page as soon as the page has drawn its first picture, and held: nothing stepped, nothing drawn, its band silent, until Dive. Building is not running; it is what makes Dive instant.
