@@ -996,7 +996,7 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {};
     out.gentle = { bluffs, mood: L.mood, inks: b.debug.inks.length, shoal: b.debug.shoal.mode, gave: +gave.toFixed(2), segs: g.run.segs }; }
   { const { b, L, o } = meet(); const home = b.squid.map((q) => q.pos.clone()); let t = 0;
     for (; t < 6 && !b.debug.inks.length; t += 0.05) { const tx = L.pos.x + o.x - g.rig.pos.x, tz = L.pos.z + o.z - g.rig.pos.z, td = Math.hypot(tx, tz); g.sim(0.05, { ...T.none(), dir: { x: tx / td, y: 0, z: tz / td }, amount: 1, dashNow: td < 5.5 && !out.dashed }); if (td < 5.5) out.dashed = true; }
-    const inked = b.debug.inks.length, copy = b.debug.inks[0] && b.debug.inks[0].m.geometry === L.a.body.geometry; g.sim(1.5, T.none());
+    const inked = b.debug.inks.length, copy = b.debug.inks[0] && b.debug.inks[0].c.from === L; g.sim(1.5, T.none());
     const spread = b.squid.map((q, i) => Math.hypot(q.pos.x - home[i].x, q.pos.z - home[i].z)), apart = Math.min(...b.squid.flatMap((q, i) => b.squid.slice(i + 1).map((r) => Math.hypot(q.pos.x - r.pos.x, q.pos.z - r.pos.z))));
     out.hard = { inked, copy, shoal: b.debug.shoal.mode, steps: b.squid.map((q) => q.step).join(), moved: +Math.min(...spread).toFixed(1), apart: +apart.toFixed(1), pale: +Math.max(...b.squid.map((q) => q.a.rig.pose.blanch)).toFixed(2) };
     T.from(0, 0, 3); g.sim(g.BLOOM.squid.scatter.regroup + 2, T.none()); g.sim(10, T.none()); out.later = { shoal: b.debug.shoal.mode, inks: b.debug.inks.length, home: +Math.max(...b.squid.map((q) => Math.hypot(q.pos.x - b.plan.home.x, q.pos.z - b.plan.home.z))).toFixed(1) }; }
@@ -1004,6 +1004,32 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {};
 check('the squid answer pressure in steps: come on gently and they make themselves big and dark and give ground, and nothing more; dash at them and one leaves a copy of itself in ink while every one of them jets off pale, each its own way; the ink fades, and later the shoal is together at home again',
   s.gentle.bluffs >= 1 && s.gentle.inks === 0 && s.gentle.shoal !== 'scatter' && s.gentle.gave > 0.5
   && s.hard.inked === 1 && s.hard.copy && s.hard.shoal === 'scatter' && /^(scatter,){4}scatter$/.test(s.hard.steps) && s.hard.moved > 3 && s.hard.apart > 2 && s.hard.pale > 0.5 && s.later.shoal === 'rest' && s.later.inks === 0 && s.later.home < 8, JSON.stringify(s));
+
+// the ink is ink in water, not a dark solid (George: 'the current model looks like a dark solid object, not as a liquid in liquid'). It is drawn see-through,
+// writes no depth and casts no shadow, and every puff of it thins to nothing at its rim; it is laid along the squid that left it and dense at first, and over
+// its life it spreads, rounds out and thins; the fish swimming through stirs and tears it; it costs at most two draw calls a cloud; and it is gone, with
+// nothing left in the scene, before the shoal gathers again. (Taken from the adventure camera, as the game will open on it; the plate's is the same ink.)
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, mode = g.feel.mode; g.setMode('look'); g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); const b = g.bloom, L = b.squid[0], o = b.debug.off, ink = b.debug.ink, Lk = g.BLOOM.ink;
+  T.put(L.pos.x + o.x + 6, L.pos.y, L.pos.z + o.z, -Math.PI / 2); g.sim(0.1, T.none()); b.debug.scatter(L); g.sim(0.05, T.none());
+  const fades = () => Array.from(ink.mesh.geometry.attributes.fade.array.slice(0, ink.mesh.count));
+  const mine = []; g.scene.traverse((x) => { if (x.name === 'ink' || x.name === 'ink-stain') mine.push(x); });
+  const c = ink.clouds[0], first = ink.shape(c), f0 = fades(), S = L.a.object.scale.x * 2.4; // the squid's length, arms and all
+  out.drawn = { clouds: ink.clouds.length, objects: mine.length, visible: mine.filter((x) => x.visible).length, see: mine.every((x) => x.material.transparent && !x.material.depthWrite && !x.castShadow), edge: ink.material.userData.edge,
+    most: +Math.max(...f0).toFixed(2), puffs: ink.mesh.count, from: c.from === L, long: +first.long.toFixed(2), squid: +S.toFixed(2), near: +Math.hypot(first.mid.x - L.pos.x, first.mid.z - L.pos.z).toFixed(2), instanced: !!ink.mesh.isInstancedMesh };
+  g.sim(6, T.none()); const later = ink.shape(c), f6 = fades();
+  out.later = { long: +later.long.toFixed(2), short: +later.short.toFixed(2), short0: +first.short.toFixed(2), most: +Math.max(...f6).toFixed(2), mean0: +(f0.reduce((a, x) => a + x, 0) / f0.length).toFixed(3), mean: +(f6.reduce((a, x) => a + x, 0) / f6.length).toFixed(3), spread0: +first.spread.toFixed(2), spread: +later.spread.toFixed(2) };
+  T.from(0, 0, 3); g.sim(g.BLOOM.squid.scatter.regroup - 6.4, T.none()); const left = []; g.scene.traverse((x) => { if (x.name === 'ink-stain' || (x.name === 'ink' && x.visible && x.count > 0)) left.push(x.name); });
+  out.end = { clouds: ink.clouds.length, inks: b.debug.inks.length, left, shoal: b.debug.shoal.mode, life: Lk.life, regroup: g.BLOOM.squid.scatter.regroup };
+  // stirred: the fish swims through a fresh cloud at a swim, and what it went through is torn and pushed along
+  g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); const b2 = g.bloom, L2 = b2.squid[0], o2 = b2.debug.off; b2.debug.scatter(L2); g.sim(1, T.none()); const c2 = b2.debug.ink.clouds[0], m = c2.mid.clone();
+  T.put(m.x + o2.x + 6, m.y, m.z + o2.z, -Math.PI / 2); g.sim(0.05, T.none()); const was = c2.body.map((p) => p.p.clone());
+  g.sim(2.2, { ...T.none(), dir: { x: -1, y: 0, z: 0 }, amount: 1 });
+  out.stir = { torn: c2.body.filter((p) => p.torn > 0.05).length, moved: Math.max(...c2.body.map((p, i) => Math.hypot(p.p.x - was[i].x, p.p.z - was[i].z))).toFixed(2) * 1, streamers: c2.crumbs.filter((p) => p.age < p.life && p.r.z < 0.5 && p.kind === 'crumb').length };
+  g.setMode(mode); return out; });
+check('a squid\'s ink is ink in water: drawn see-through, writing no depth and casting no shadow, every puff thinning to nothing at its rim; left as a dense copy along the squid, it spreads, rounds out and thins over its life; a fish swimming through tears it and drags it along; two draw calls at most; gone, with nothing left, before the shoal gathers again',
+  s.drawn.clouds === 1 && s.drawn.instanced && s.drawn.objects === 2 && s.drawn.see && s.drawn.edge >= 1.5 && s.drawn.most <= 0.8 && s.drawn.most >= 0.5 && s.drawn.from && s.drawn.long > s.drawn.squid * 0.6 && s.drawn.long < s.drawn.squid * 1.6 && s.drawn.near < 1.5
+  && s.later.long > s.drawn.long * 1.25 && s.later.short > s.later.short0 * 1.5 && s.later.most < s.drawn.most * 0.6 && s.later.mean < s.later.mean0 * 0.5 && s.later.spread > s.later.spread0 * 1.3
+  && s.end.clouds === 0 && s.end.inks === 0 && s.end.left.length === 0 && s.end.life < s.end.regroup && s.stir.torn >= 3 && s.stir.moved > 0.5, JSON.stringify(s));
 
 // the mini-game: settle the shoal by coming close slowly enough. Its best is kept in the nest, shown there as lit stones, and the shoal raids no more in that dive
 s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest);
@@ -1093,6 +1119,20 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
   const bad = Object.entries(fail).filter(([, v]) => v.length);
   check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
     !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
+
+// a fish rising beside a column and over its flat top: the body follows the head's path, so the head lifted onto the top at once (up to 0.67 m) lurched
+// the whole body, and the wave, sideways to a path going straight up the column's side, flipped from frame to frame. No joint may jump (tools/probe_tail.mjs)
+s = await page.evaluate(() => { const g = window.__game, W = g.world, out = []; g.startRun(4242); g.run.safe = 1e9;
+  const tall = W.solids.filter((c) => c.top !== undefined && c.r > 0.7 && c.r < 0.9 && c.top - W.height(c.x, c.z) > 3), c = tall.find((c) => W.solids.every((d) => d === c || Math.hypot(d.x - c.x, d.z - c.z) > 6));
+  for (const [speed, below] of [['swim', 1.5], ['swim', 3], ['sprint', 1.5], ['sprint', 3]]) {
+    g.run.segs = 18; g.buildFish(18); const yaw = 0.5 + Math.PI, rig = g.rig; rig.reset(rig.pos.clone().set(c.x + Math.sin(0.5) * 2.6, c.top - below, c.z + Math.cos(0.5) * 2.6), yaw);
+    const inp = { dir: { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) }, amount: 1, vertical: 1, sprint: speed === 'sprint', gentle: false, coil: 0, tight: false, bite: false };
+    let a = null, b = null, worst = 0, over = false;
+    for (let t = 0; t < 5; t += 1 / 60) { if (rig.pos.y > c.top + 1.2) inp.vertical = 0; g.sim(1 / 60, inp); const J = rig.joints.map((j) => j.clone());
+      if (a) for (let k = 1; k < J.length; k++) worst = Math.max(worst, J[k].clone().sub(b[k]).sub(b[k]).add(a[k]).length()); a = b || J; b = J; if (J[J.length - 1].y > c.top) over = true; }
+    out.push({ speed, below, over, worst: +worst.toFixed(3) }); }
+  g.startRun(4242); return out; });
+check('a fish rising beside a column and over its top: the tail goes over with it, and no joint jumps (most a joint\'s step changes in a frame under 0.3 m; it was 0.66)', s.every((o) => o.over && o.worst < 0.3), JSON.stringify(s));
 
 await page.close();
 
