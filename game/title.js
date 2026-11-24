@@ -30,7 +30,7 @@ export const FRONT = {
   fps: 30, idle: 90, // at most this many frames a second; nothing drawn after this many seconds untouched
   colours: { paper: '#f3eedb', ink: '#3b3026', water: '#1d5a68', deep: '#c94d5d', line: '#4a3a30' },
   tones: { // the fish in the plate's colours, not the game's: the game keeps its own (oarfish.js PALETTE) for the dive
-    Body: '#b49a79', BodyTop: '#a68b6c', Belly: '#c9bfae', Spots: '#7c6249', Face: '#9a958f', Gill: '#b9aea3', Jaw: '#7f766f', Mouth: '#5b3b3a',
+    Body: '#b49a79', BodyTop: '#a68b6c', Belly: '#c9bfae', Spots: '#98805f', Face: '#9a958f', Gill: '#b9aea3', Jaw: '#7f766f', Mouth: '#5b3b3a',
     FinPale: '#efc4bd', FinPink: '#e9b6b1', FinMid: '#e4aba8', FinRed: '#d98e93', EyeRing: '#3f3429', Eye: '#e3c13a', Pupil: '#241c16',
   },
   bands: [0.3, 0.47, 0.63, 0.8], // where the dorsal fin runs deeper pink, along the body (0 the neck, 1 the tail), as on the plate
