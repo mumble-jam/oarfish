@@ -8,10 +8,10 @@ Worktree `/home/claude/oarfish-kelp`, from `squid-play` 26b7785. Scratch and log
 - [x] main.js hooks (kelpHooks, create after the shell field, dispose x2, update, Empty the nest, `__game.kelp`); npc.js box jelly to Hunters, band 1.
 - [x] checks (game suite: seven kelp checks), existing checks' counts filtered for the forest's own shell and fragment; library checks moved the box jelly; box jelly has an instrument (music.js)
 - [x] fill counts (deterministic): kelp fragments down about 60% (plate) / 45% (adventure), faces 9,844 -> 2,275
-- [ ] frame time at 9a7f568 / 26b7785 / final, both cameras, under /tmp/oarfish-heavy.lock (kelp-work/final.sh -> perf3.txt)
-- [ ] pictures: /home/claude/kelp-sheet.jpg
+- [x] frame time under the lock (kelp-work/perf3.txt): look +25%/+14%, plate +27%/+31% over 9a7f568 (was +33%/+27%, +37%/+43%). 15% NOT reached.
+- [x] pictures: /home/claude/kelp-sheet.jpg (both cameras)
 - [x] CLAUDE.md, CREATURES.md
-- [ ] game + library suites under the lock (kelp-work/game3.txt, library3.txt); teach, boss passed earlier on 59c8db9 (before eddc9d0)
+- [x] game and library suites pass under the lock on eddc9d0 (kelp-work/game3.txt, library3.txt); teach and boss passed on 59c8db9; controls not run (coordinator: merger runs all five)
 
 ## Decisions (and why)
 - Kelp lowered to 0.7 of its height (4.9-6.7 m) and thinned one row in three away from the lanes; lane walls (2.4 m from a lane's edge) all kept. Blades marked to give light (translucent), so undersides are golden, not dark.
