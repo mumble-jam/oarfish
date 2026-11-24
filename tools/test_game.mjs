@@ -1432,6 +1432,37 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   check('the kelp forest made lighter moved nothing else in the first band: in ten worlds every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
     r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
+// the frame gauge (game/gauge.js): off, it adds nothing and draws nothing differently; on, the readout says what the renderer counted; the tour visits every spot from both cameras and puts the player back
+s = await ev(async () => { const g = window.__game, T = window.T, G = window.__gauge, R = g.renderer;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms)), frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const ours = () => ['gauge', 'gauge-tour', 'gauge-table'].filter((id) => document.getElementById(id));
+  g.startRun(4242); g.run.safe = 0; T.idle(0.3); await frame(); await frame();
+  const off = { ours: ours(), own: window.__gauge.armed, nodes: document.body.querySelectorAll('*').length, calls: R.info.render.calls, tris: R.info.render.triangles };
+  document.getElementById('dev-frametime').click(); await wait(1600); await frame();
+  const ro = G.readout, on = { ours: ours(), pressed: document.getElementById('dev-frametime').getAttribute('aria-pressed'), text: ro?.textContent, shown: { calls: +ro?.dataset.calls, tris: +ro?.dataset.tris }, calls: R.info.render.calls, tris: R.info.render.triangles, stats: G.stats() };
+  document.getElementById('dev-frametime').click(); await frame(); await frame();
+  const after = { ours: ours(), own: window.__gauge.armed, nodes: document.body.querySelectorAll('*').length, calls: R.info.render.calls, tris: R.info.render.triangles };
+  return { off, on, after }; });
+check('with "Show frame time" off the gauge adds nothing to the page and leaves the renderer alone; on, its readout shows the frame\'s draw calls and triangles as the renderer counted them (the same as with it off), a frame time and frames a second; off again, all of it is gone',
+  !s.off.ours.length && !s.off.own && s.on.ours.join() === 'gauge' && s.on.pressed === 'true' && /^frame\s+[\d.]+ ms\s+worst [\d.]+ ms\nfps\s+\d+\ndraws\s+[\d,]+\s+tris [\d,]+\nstep\s+[\d.]+ ms$/.test(s.on.text)
+  && s.on.shown.calls === s.on.calls && s.on.shown.tris === s.on.tris && s.on.calls === s.off.calls && s.on.tris === s.off.tris && s.on.text.includes(s.on.calls.toLocaleString('en-US')) && s.on.stats.avg > 0 && s.on.stats.fps > 0
+  && !s.after.ours.length && !s.after.own && s.after.nodes === s.off.nodes && s.after.calls === s.off.calls, JSON.stringify(s));
+s = await ev(async () => { const g = window.__game, T = window.T, G = window.__gauge;
+  g.startRun(4242); g.setMode('point', true); g.run.safe = 0; T.from(9, -6, 3, 0.7); T.idle(0.4); g.cam.yaw = 1.1; g.cam.zoom = 0.8; g.setPaused(true);
+  const before = { pos: g.rig.pos.toArray(), yaw: g.rig.yaw, mode: g.feel.mode, paused: g.paused, cam: [g.cam.yaw, g.cam.pitch, g.cam.zoom], hold: window.__hold, floor: g.run.floor };
+  const r = await G.tour({ settle: 0.25, measure: 0.6 });
+  const after = { pos: g.rig.pos.toArray(), yaw: g.rig.yaw, mode: g.feel.mode, paused: g.paused, cam: [g.cam.yaw, g.cam.pitch, g.cam.zoom], hold: window.__hold, floor: g.run.floor };
+  const box = document.getElementById('gauge-table'), shown = box?.querySelector('textarea')?.value === r.text; box?.remove();
+  // and a key stops it early, and puts the player back all the same
+  const p2 = G.tour({ settle: 0.2, measure: 5 }); await new Promise((res) => setTimeout(res, 1500)); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true })); const r2 = await p2;
+  const after2 = { pos: g.rig.pos.toArray(), paused: g.paused, mode: g.feel.mode }; document.getElementById('gauge-table')?.remove(); g.setPaused(false);
+  return { before, after, after2, shown, touring: G.touring, own: G.armed, rows: r.rows, lines: r.text.split('\n'), stopped: r2.stopped, rows2: r2.rows.length }; });
+{ const want = ['adventure', 'plate'].flatMap((c) => ['start', 'bloom', 'sandflat', 'reef', 'kelp', 'keeper'].map((p) => `${c}:${p}`)), got = s.rows.map((o) => `${o.cam}:${o.spot}`), same = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
+  check('"Measure the first band" visits the start, the bloom water, the sand flat, the reef head, a kelp lane and the Keeper\'s ground from the adventure camera and then the plate camera, measures frames at each, writes a table with a row for each under what it was measured on, and puts the player back where and how they were (place, heading, camera, paused); a key stops it early and puts them back too',
+    got.join() === want.join() && s.rows.every((o) => o.frames > 0 && o.avg > 0 && o.calls > 0 && o.tris > 0) && s.shown && ['Graphics: ', 'Browser: ', 'Picture: ', 'Lighter picture: ', 'Game version: '].every((h) => s.lines.some((l) => l.startsWith(h))) && s.lines.filter((l) => /^(adventure|plate)\s/.test(l)).length === 12
+    && same(s.before.pos, s.after.pos) && Math.abs(s.before.yaw - s.after.yaw) < 1e-9 && s.after.mode === s.before.mode && s.after.paused === true && same(s.before.cam, s.after.cam) && s.after.hold === s.before.hold && s.after.floor === 0 && !s.touring && !s.own
+    && s.stopped && s.rows2 < 12 && same(s.before.pos, s.after2.pos) && s.after2.paused && s.after2.mode === 'point', JSON.stringify({ ...s, lines: s.lines.slice(0, 12) })); }
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }

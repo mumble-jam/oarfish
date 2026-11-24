@@ -2047,6 +2047,10 @@ export async function start(saved = {}) {
   function openLibrary(id) { if (!paused && !ended()) setPaused(true); stage.classList.add('lib'); lib.open(id); }
   $('btn-library').addEventListener('click', () => openLibrary());
   if (/^#library/.test(location.hash)) openLibrary(location.hash.split('/')[1]);
+  // ---- the frame gauge (gauge.js): "Show frame time" and "Measure the first band" in the testing tools. It wraps the animation loop set
+  // just below, and the renderer's render() only while one of them is on; off, it adds nothing to the page and draws nothing differently
+  { const { createGauge } = await import('./gauge.js');
+    window.__gauge = createGauge({ renderer, step, focus, ended, levels: { look: LOOK_LEVEL, point: PLATE_LEVEL }, game: () => window.__game }); }
   renderer.setAnimationLoop((now) => {
     if (light.on && now - last < light.gap) return; // a lighter picture: on a fast screen, every other frame
     const dt = Math.min((now - last) / 1000, 0.05);
