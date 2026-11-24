@@ -58,7 +58,7 @@ const CSS = `
 @font-face { font-family: "Front Fell"; src: url(title/fonts/fell-italic.woff2) format("woff2"); font-style: italic; font-display: block; }
 @font-face { font-family: "Front Fell SC"; src: url(title/fonts/fell-sc.woff2) format("woff2"); font-display: block; }
 html.front, html.front body { background: ${FRONT.colours.paper}; }
-#front { position: fixed; inset: 0; z-index: 7; overflow: hidden; color: ${FRONT.colours.ink}; background: ${FRONT.colours.paper}; font: 400 16px/1.3 "Front Fell", Georgia, serif; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+#front { --lozenge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 7'%3E%3Cpath d='M3 0L6 3.5L3 7L0 3.5Z' fill='%233b3026'/%3E%3C/svg%3E"); position: fixed; inset: 0; z-index: 7; overflow: hidden; color: ${FRONT.colours.ink}; background: ${FRONT.colours.paper}; font: 400 16px/1.3 "Front Fell", Georgia, serif; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 #front[hidden] { display: none; }
 #front canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #front .sheet { position: absolute; inset: 0; display: grid; padding: clamp(12px, 2.6vh, 30px) clamp(14px, 3.4vw, 54px) clamp(10px, 2vh, 22px);
@@ -79,7 +79,8 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front .invite { margin: 0; font: italic 400 clamp(14px, 1.45vw, 20px)/1.2 "Front Fell", serif; opacity: 0.78; transition: opacity 0.5s; }
 #front .invite::before, #front .invite::after { content: "\\2009\\2014\\2009"; opacity: 0.6; }
 #front.awake .invite { opacity: 0; pointer-events: none; }
-#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; position: absolute; inset: 0; align-content: center; }
+#front .foot > * { grid-area: 1 / 1; }
+#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; align-content: center; }
 #front.awake .menu { visibility: visible; }
 #front .menu button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; padding: 0.32em 0.15em 0.42em; font: 400 clamp(12px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.2em; color: inherit;
   clip-path: inset(-20% 100% -20% 0); opacity: 0; transition: clip-path 0.75s cubic-bezier(.3,.1,.2,1), opacity 0.5s; touch-action: manipulation; }
@@ -90,7 +91,7 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 /* the focus: an engraver's rule drawn under the word, with a lozenge at each end */
 #front .menu button::after { content: ""; position: absolute; left: 0.05em; right: 0.2em; bottom: 0.08em; height: 1px; background: currentColor; transform: scaleX(0); transition: transform 0.28s cubic-bezier(.3,.1,.2,1); }
 #front .menu button::before { content: ""; position: absolute; left: -0.6em; right: -0.45em; bottom: calc(0.08em - 2.5px); height: 6px; opacity: 0; transition: opacity 0.2s;
-  background: conic-gradient(from 45deg at 3px 3px, currentColor 25%, transparent 0) left / 6px 6px no-repeat, conic-gradient(from 45deg at 3px 3px, currentColor 25%, transparent 0) right / 6px 6px no-repeat; transform: scaleY(0.75); }
+  background: var(--lozenge) left center / 6px 7px no-repeat, var(--lozenge) right center / 6px 7px no-repeat; }
 #front .menu button.dive::after { bottom: 0.12em; }
 #front .menu button.dive::before { bottom: calc(0.12em - 2.5px); }
 #front .menu button.cur::after, #front .menu button:hover::after { transform: scaleX(1); }
@@ -118,7 +119,7 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 /* a phone on its side, or any short window: the picture and its caption at the left, the menu as a column at the right */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
   #front .sheet { grid-template: "head head" auto "pic menu" minmax(0, 1fr) "credit menu" auto "caption menu" auto / minmax(0, 1fr) minmax(150px, 26%); column-gap: 18px; row-gap: 4px; }
-  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; position: static; }
+  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; }
   #front .foot { place-items: center start; }
   #front .invite { text-align: left; font-size: 14px; }
   #front .menu .sep { display: none; }
