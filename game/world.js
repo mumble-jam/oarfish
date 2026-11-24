@@ -2047,18 +2047,6 @@ float seaLight(vec2 p, float t) {
     flat(0, 15, 12, rift.y - rift.step - 0.25, 0.4, -3.4, '#ffd9a0', true);
     lamps.loom = lamp(lamps.house, 26, 14, rift.y + 2.4, 0.42, -2, '#ffb45a', true);
   }
-  // light across the mouth of the rift, for whoever keeps it (guards.js): bars from wall to wall, and a line along each wall
-  function riftVeil() {
-    const m = mesher(), y = rift.y - rift.step + 0.35, slot = (u) => riftW(u) - rift.ledge - 0.3;
-    const P = (u, a) => { const k = a + riftMid(u); return [rift.x + rift.tx * u + rift.nx * k, y, rift.z + rift.tz * u + rift.nz * k]; };
-    for (let u = -rift.half; u < rift.half; u += 2.2) {
-      const s0 = slot(u), s1 = slot(u + 0.13), s2 = slot(u + 2.2);
-      if (s0 < 0.5 || s2 < 0.5) continue;
-      m.quad(P(u, -s0), P(u, s0), P(u + 0.13, s1), P(u + 0.13, -s1), '#ffffff');
-      for (const sg of [-1, 1]) m.quad(P(u, sg * s0), P(u, sg * (s0 - 0.11)), P(u + 2.2, sg * (s2 - 0.11)), P(u + 2.2, sg * s2), '#ffffff');
-    }
-    return m.geometry();
-  }
   // has the fish gone down the rift, or through the palace gate?
   function atGoal(p) {
     const dx = wrapD(p.x - goal.x), dz = wrapD(p.z - goal.z), d = Math.hypot(dx, dz);
@@ -2091,6 +2079,6 @@ float seaLight(vec2 p, float t) {
   const sorting = (on) => { sight.on = on; sight.fx = NaN; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
   // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed
-  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, quiet, nibble, revive,
+  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, quiet, nibble, revive,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

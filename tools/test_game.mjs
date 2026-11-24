@@ -28,6 +28,7 @@ async function open(vp, touch = false) {
   page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
   await page.addInitScript(() => { window.__noNursery = true; });
+  await page.addInitScript(() => { try { const f = JSON.parse(localStorage.getItem('oarfish.feel') || '{}'); if (!f.mode) localStorage.setItem('oarfish.feel', JSON.stringify({ ...f, mode: 'point' })); } catch {} }); // made on the plate camera, the default when this was written: ask for it, unless a camera was chosen in this page
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
   await page.evaluate(() => { window.__hold = true; });
@@ -138,6 +139,30 @@ check('while its keeper lives, the rift is shut: the fish may swim over the ledg
 const lit = await ev(() => { const g = window.__game, T = window.T, r = g.world.rift; let lo = 9, hi = 0; for (let i = 0; i < 45; i++) { T.idle(0.1); const v = r.light(); lo = Math.min(lo, v); hi = Math.max(hi, v); } return { lo: +lo.toFixed(2), hi: +hi.toFixed(2) }; });
 check('a light under the rift\'s cloud swells and sinks, and never goes out', lit.lo > 0.25 && lit.lo < 0.4 && lit.hi > 0.95, JSON.stringify(lit));
 check('with the keeper gone, diving into the rift anywhere along it leads to the next band', s.s0 === 'play' && s.s1 === 'descend' && s.f2 === 3 && s.s3 === 'play', JSON.stringify(s));
+// no marker points the way (George: 'the player should explore everything on their own'), in any band; the testing switch brings it back
+s = await ev(() => { const g = window.__game, T = window.T, shown = () => { const el = document.getElementById('goal'); return !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; }, out = { bands: [], label: '', after: null };
+  g.startRun(4242); for (let f = 0; f < 5; f++) { if (f) g.enterFloor(f, false); T.idle(4); out.bands.push(shown()); }
+  g.enterFloor(1, false); T.idle(1); document.getElementById('dev-marker').click(); T.idle(0.3); out.on = shown(); out.label = document.getElementById('goal-label').textContent; out.pressed = document.getElementById('dev-marker').getAttribute('aria-pressed');
+  document.getElementById('dev-marker').click(); T.idle(0.3); out.after = shown(); return out; });
+check('no marker is on screen in a dive, in any of the five bands; the testing switch shows the old one (the rift and how far), and hides it again', s.bands.every((b) => b === false) && s.bands.length === 5 && s.on && /^the rift · \d+ m$/.test(s.label) && s.pressed === 'true' && s.after === false, JSON.stringify(s));
+// the closed rift is sealed in either look (seal.js), the seal is gone once its keeper falls, and the rule is the rule it was: over the ledges, never between the walls
+s = await ev(() => { const g = window.__game, T = window.T, out = { looks: [], old: [], cycle: [] };
+  for (const look of ['glass', 'shoal']) for (let f = 0; f < 4; f++) {
+    g.startRun(4242); if (f) g.enterFloor(f, false); g.run.segs = 14; g.buildFish(14); g.run.safe = 1e9; g.devSee.seal = look; g.guard.reseal(look); T.idle(0.5);
+    const r = g.world.rift, w = g.world.goal, G = g.guard, seal = G.seal, inScene = () => { let o = seal.mesh; while (o.parent) o = o.parent; return o === g.scene; };
+    const shut = { look: seal.look, shown: seal.group.visible && inScene(), drawn: g.renderer.info.render.calls >= 0 };
+    T.put(w.x, r.ledgeY + 1.2, w.z, 0); T.idle(0.2); const over = +(g.rig.pos.y - r.ledgeY).toFixed(2); T.put(w.x - 1, r.y - 9, w.z, 0); T.idle(0.3); const held = +(g.rig.pos.y - r.ledgeY).toFixed(2), state = g.run.state;
+    const touched = seal.state.touched;
+    G.debug.fall(); T.put(w.x, r.y + 3, w.z, 0); T.idle(1.0); const opening = seal.group.visible && seal.state.open > 0; T.idle(3.5); const gone = !seal.group.visible && seal.state.gone;
+    let s1 = 'skip'; if (f === 0) { T.put(w.x + r.tx * 14 + r.nx * r.mid(14), r.y - 9, w.z + r.tz * 14 + r.nz * r.mid(14), 0); T.idle(0.1); s1 = g.run.state; }
+    out.looks.push({ look, f, ...shut, over, held, state, touched, opening, gone, s1 });
+    out.old.push(g.world.rift.veil === undefined && !!G.seal); // the web's builder is gone from the world, and the keeper holds a seal in its place
+  }
+  g.devSee.seal = 'glass'; g.startRun(4242); T.idle(0.3); for (let i = 0; i < 3; i++) { document.getElementById('dev-seal').click(); out.cycle.push(`${g.guard.seal.look}|${document.getElementById('dev-seal').textContent}`); }
+  g.devSee.seal = 'glass'; g.guard.reseal('glass'); return out; });
+check('a closed rift is sealed in both looks, glass and shoal, in all four bands that have one; the fish rests on it over the mouth and is held over it between the walls, and touching it is felt; when the keeper falls it opens, is gone in a few seconds, and the rift leads down; the old web is nowhere; the testing switch goes glass, shoal, glass',
+  s.looks.length === 8 && s.looks.every((x) => x.shown && x.over > 0.5 && x.held > 0.5 && x.state === 'play' && x.touched > 0 && x.opening && x.gone) && s.looks.filter((x) => x.f === 0).every((x) => x.s1 === 'descend') && s.looks.map((x) => x.look).join() === 'glass,glass,glass,glass,shoal,shoal,shoal,shoal' && s.old.every(Boolean)
+  && s.cycle.join() === 'shoal|Closed rift: shoal,glass|Closed rift: glass,shoal|Closed rift: shoal', JSON.stringify(s));
 await ev(() => window.T.swim(1.5, 0.6, -0.8)); await snap(page, 'g-band4');
 
 // 8b. stamina, dash and ram
@@ -870,11 +895,11 @@ s = await ev(() => { const g = window.__game, T = window.T, out = { sizes: [], m
     out.laps.push(Math.max(...[[3, 7], [50, 91], [120, 33]].map(([x, z]) => Math.abs(w.height(x + w.size, z - w.size) - w.height(x, z)))) < 1e-6 && Math.abs(w.height(3, 7) - w.height(3 + 144, 7)) > 1e-6 === (w.size !== 144)); }
   // the first band, a whole lap away from where it was built: everything that is moved to the copy of the world nearest the fish has to come too, each by this world's size
   g.startRun(4242); g.run.safe = 1e9; const w = g.world, c = w.spawn, r = w.rift, L = w.size, here = () => ({ sw: Math.hypot(w.schools[0].x - g.rig.pos.x, w.schools[0].z - g.rig.pos.z), shell: Math.hypot(g.field.items[0].group.position.x - g.rig.pos.x, g.field.items[0].group.position.z - g.rig.pos.z),
-    hook: Math.max(...g.foes.hooks.map((h) => Math.max(Math.abs(h.pos.x - g.rig.pos.x), Math.abs(h.pos.z - g.rig.pos.z)))), keeper: Math.hypot(g.guard.pos.x - g.rig.pos.x, g.guard.pos.z - g.rig.pos.z), shown: w.tally().shown, veil: g.guard.mesh.parent.children.find((o) => o.isMesh && o.material.blending === 2).position.x });
+    hook: Math.max(...g.foes.hooks.map((h) => Math.max(Math.abs(h.pos.x - g.rig.pos.x), Math.abs(h.pos.z - g.rig.pos.z)))), keeper: Math.hypot(g.guard.pos.x - g.rig.pos.x, g.guard.pos.z - g.rig.pos.z), shown: w.tally().shown, veil: g.guard.seal.group.position.x });
   T.from(0, 0, 3); T.idle(0.4); const near = here(); T.from(L, -L, 3); T.idle(0.4); const far = here();
   Object.assign(out, { goal: +Math.hypot(w.goal.x - c.x, w.goal.z - c.z).toFixed(1), keeperHome: +Math.hypot(r.x - r.nx * 24 - c.x, r.z - r.nz * 24 - c.z).toFixed(1), near: Object.fromEntries(Object.entries(near).map(([k, v]) => [k, +v.toFixed(1)])), far: Object.fromEntries(Object.entries(far).map(([k, v]) => [k, +v.toFixed(1)])) });
   return out; });
-check('bands 2 to 5 are 144 m across and the first band 204, each world saying so itself; the first band\'s rift lies 100 m from the start; and a whole lap from where it was built, its swarms, shells, hooks, keeper, veil and stonework have all come round with it',
+check('bands 2 to 5 are 144 m across and the first band 204, each world saying so itself; the first band\'s rift lies 100 m from the start; and a whole lap from where it was built, its swarms, shells, hooks, keeper, the seal over its rift and stonework have all come round with it',
   s.sizes.join() === '204,144,144,144,144' && s.mids.every(Boolean) && s.laps.every(Boolean) && s.goal === 100 && s.keeperHome === 76
   && Math.abs(s.near.sw - s.far.sw) < 1.5 && s.near.sw < 22 && Math.abs(s.near.shell - s.far.shell) < 0.5 && s.far.shell < 19 && s.far.hook <= 102.1 && Math.abs(s.near.keeper - s.far.keeper) < 3 && s.far.keeper < 95 && s.near.shown > 2000 && Math.abs(s.near.shown - s.far.shown) < 6 && s.near.veil === 0 && s.far.veil === 204, JSON.stringify(s));
 

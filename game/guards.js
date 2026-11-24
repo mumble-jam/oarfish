@@ -11,6 +11,7 @@ import { canWrap } from './world.js';
 import { rng, lerp, clamp, damp, glowTexture } from './geo.js';
 import { make, paintOf } from './npc.js';
 import { fishBody, struck as takes, gap, pushOut as pushFrom, onSeg as onLeg, FISH } from './shapes.js';
+import { createSeal, SEAL } from './seal.js';
 
 const KINDS = ['keeper', 'shearer', 'lamplighter', 'warden'];
 // The Keeper's fight, made the way a Souls boss is. Every blow is shown before it lands, lands where it was aimed and not where the fish has got to,
@@ -79,7 +80,7 @@ export const SHEARER_FIGHT = {
   bait: 10, front: 1.0, stun: 1.5, snap: 2, // front: how far round from dead ahead, in radians, the saw still turns a ram
 };
 
-export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
+export function createGuard(scene, world, { seed = 1, floor = 0, seal: look = SEAL.looks[0] } = {}, game) {
   const kind = KINDS[floor], tint = paintOf(floor);
   const rand = rng(seed * 61 + floor * 311 + 7), rr = (a, b) => a + (b - a) * rand();
   const rift = world.rift, T = world.size; // T: how far across this world is (the first band is wider than the others)
@@ -93,9 +94,8 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
   const sprite = (color, size) => { const s = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: glowMap, color, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }))); s.scale.setScalar(size); root.add(s); return s; };
   const warn = sprite('#ff7f96', 1), lure = actor.parts.glow || null; // the Lamplighter's lamp comes with it
   const rig = actor.rig || null, was = new THREE.Vector3(), fishWas = new THREE.Vector3(); // the Keeper walks on its own legs (crab.js): it is told where it is, and stands there as its feet find the ground
-  // the veil: bars of light across the mouth of the rift while its keeper lives
-  const lid = new THREE.Mesh(keep(rift.veil()), keep(new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
-  lid.frustumCulled = false; root.add(lid);
+  // the seal over the rift while its keeper lives (seal.js): only the picture of it; what keeps the fish out is pushOut, below
+  let seal = createSeal(root, world, { floor, look });
   // what it has left, as beads over its back
   const F = KEEPER_FIGHT, Z = SHEARER_FIGHT, HP = { keeper: F.legs, shearer: Z.rows, lamplighter: 3, warden: 4 }[kind];
   const beadGeo = keep(new THREE.SphereGeometry(0.16, 6, 5)), beadMat = keep(new THREE.MeshBasicMaterial({ color: '#f2faf7', fog: false }));
@@ -401,7 +401,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
         if (engaged && S.cool <= 0) { set('stalk'); if (!S.met) { S.met = true; S.cool = F.wave.bluff; } } // the first time a fish comes near, it waves at it a while before it fights: the bluff
       }
     } else if (kind === 'shearer') { // it sweeps its saw over the rift and feels a fish that comes near; then the fight (SHEARER_FIGHT)
-      const J = ctx.joints, N = J.length - 1, tail = J[N], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the veil it keeps
+      const J = ctx.joints, N = J.length - 1, tail = J[N], floor = (p) => Math.max(world.height(p.x, p.z), rift.ledgeY); // the bed, or over the mouth of the rift the seal it keeps
       const raging = S.hp <= Z.rage, q = raging ? Z.haste : 1, k = S.T > 0 ? clamp(1 - S.t / S.T, 0, 1) : 0, fx = Math.sin(yaw), fz = Math.cos(yaw);
       const tailSpeed = dt > 1e-5 ? Math.min(tail.distanceTo(tailWas) / dt, 20) : 0, moving = tailSpeed > Z.still;
       if (dt > 1e-5) { v.subVectors(tail, tailWas).multiplyScalar(1 / dt); if (v.length() > 8) v.setLength(8); tailV.lerp(v, 1 - Math.exp(-6 * dt)); } tailWas.copy(tail); // which way the tail is going, and how fast: it aims ahead of it
@@ -544,8 +544,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     warn.position.copy(pos).y += kind === 'keeper' ? 2.4 : 0.6; // over the Keeper's back, where it can be seen from above warn.scale.setScalar(Math.max(0.01, warnSize * (1 + 0.15 * Math.sin(ctx.time * 30)))); warn.visible = warnSize > 0 && !S.done;
     if (lure) { const lit = !S.done && S.state !== 'dim' && S.stun <= 0; lure.scale.setScalar(damp(lure.scale.x, lit ? (S.state === 'windup' ? 5 : 3) : 0.4, 8, dt)); }
     beads.forEach((b, i) => { b.visible = !S.done && i < S.hp && !(S.sink > 0.5); b.position.set(pos.x + (i - (HP - 1) / 2) * 0.5, pos.y + (kind === 'keeper' ? 3 : 2.1), pos.z); });
-    lid.position.set(T * Math.round((ctx.focus.x - rift.x) / T), 0, T * Math.round((ctx.focus.z - rift.z) / T)); // the veil is laid out where the rift is; this puts it on the nearest copy of the world
-    lid.material.opacity = damp(lid.material.opacity, S.done ? 0 : 0.36 + 0.1 * Math.sin(ctx.time * 2), 3, dt); lid.visible = lid.material.opacity > 0.01;
+    seal.update(dt, ctx, S.done); // it opens when the keeper falls
 
     S.wrap = null;
     if (kind === 'keeper') { // what a body can be drawn round is a numb leg: the one nearest the head
@@ -557,7 +556,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     else if (wrappable() && ctx.playing) { const out = kind === 'shearer' && S.stuck ? 1.9 : 0; target.x = pos.x + Math.sin(yaw) * out; target.y = pos.y; target.z = pos.z + Math.cos(yaw) * out; // (the Shearer's saw, when that is what is stuck)
       target.can = canWrap(ctx.total, target.room); S.wrap = target; } else target.progress = 0;
   }
-  // while the keeper lives the veil holds: the ledges can be swum over, but nothing goes down between the walls
+  // while the keeper lives the rift is sealed: the ledges can be swum over, but nothing goes down between the walls (seal.js draws it)
   function pushOut(p, radius) {
     if (kind === 'keeper' && SOL.length && S.sink < 0.5 && Math.abs(p.x - pos.x) < 7 && Math.abs(p.z - pos.z) < 7) for (let pass = 0; pass < 2; pass++) for (const sh of SOL) pushFrom(sh, p, FISH.head); // the Keeper is solid: its shell and legs turn the head aside
     if (S.done) return;
@@ -570,7 +569,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     if (kind !== 'keeper' || !SOL.length || S.sink >= 0.5) return;
     for (let i = 0; i < items.length; i++) { const p = items[i].p; if (Math.abs(p.x - pos.x) > 7 || Math.abs(p.z - pos.z) > 7) continue; const r = radiusOf(i); if (r < 0) break; for (const sh of SOL) pushFrom(sh, p, r); }
   }
-  function dispose() { for (const m of bedMarks) { m.fill.geometry.dispose(); m.rim.geometry.dispose(); } scene.remove(root); for (const o of trash) o.dispose(); }
+  function dispose() { seal.dispose(); for (const m of bedMarks) { m.fill.geometry.dispose(); m.rim.geometry.dispose(); } scene.remove(root); for (const o of trash) o.dispose(); }
   const wrapped = () => { if (kind === 'shearer') { S.snapped = true; target.progress = 0; game.event('snap', pos); return tooth(Z.snap, 2.6); } // the saw goes, and two rows with it
     if (kind !== 'keeper') return fall(); const i = S.wrapLeg; if (i >= 0 && S.leg[i] === 1) tear(i, true); else if (i >= 0 && S.leg[i] !== 2) { letGo(i); S.held = { leg: i, t: 0, out: 0, loose: 0 }; game.event('held', LEGS[i].foot); } target.progress = 0; }; // round the Keeper's numb leg, it comes off; round any of the others, it is held, and can be hauled
   // What the fight believes, as shapes (shapes.js), for the testing tool that draws them over the picture: the fish's body, what is solid of the crab, each
@@ -594,5 +593,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0 } = {}, game) {
     return SHOWN;
   }
   const fadeStrikes = (dt) => { for (let i = strikes.length - 1; i >= 0; i--) if ((strikes[i].life -= dt) <= 0) strikes.splice(i, 1); };
-  return { update, ram, pushOut, bend, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, get view() { return kind === 'keeper' && !S.done && S.near ? F.view : 0; }, debug: { set, fall, hurt, numb, tear, crack, legAt, solids: () => SOL, body: () => BODY, forget: () => { strikes.length = 0; }, limbs: () => limbs, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
+  // reseal: the testing tools' 'Closed rift: glass / shoal'. A rift already open stays open
+  const reseal = (to) => { seal.dispose(); seal = createSeal(root, world, { floor, look: to }); if (S.done) seal.gone(); };
+  return { update, ram, pushOut, reseal, get seal() { return seal; }, bend, dispose, wrapped, shapes, state: S, kind, pos, rig, mesh, get yaw() { return yaw; }, get ring() { return S.wrap; }, get done() { return S.done; }, get view() { return kind === 'keeper' && !S.done && S.near ? F.view : 0; }, debug: { set, fall, hurt, numb, tear, crack, legAt, solids: () => SOL, body: () => BODY, forget: () => { strikes.length = 0; }, limbs: () => limbs, leg: (i) => rig.walker.legs[i].foot, charge(x, y, z) { aim.set(x, y, z); vel.subVectors(aim, pos).setLength(10.5); S.mode = 'slash'; S.stuck = false; S.cut = 0; set('charge', 1.4); }, tooth } }; // (debug.charge: for the checks, a slash at a point)
 }
