@@ -1098,7 +1098,7 @@ float seaLight(vec2 p, float t) {
   // the band moves. What grows here that the band also grows is handed to the band's own scatter (`more`); what is new to it (coral heads, sea rods,
   // giant kelp) is gathered in `quietGrown` and scattered after the rest.
   const quietGrown = { heads: [], rods: [], tall: [] }, QUIET_GRASS = QUIET.sandflat.grass;
-  const KELP_TALL = 0.7, KELP_WALL = 2.4, KELP_THIN = 2, KELP_GLOW = 0.4; // the giant kelp: of its first height (7 to 9.5 m); how far from a lane's edge every stem stands; one in this many elsewhere; how much of the sun comes through a blade
+  const KELP_TALL = 0.7, KELP_WALL = 2.4, KELP_THIN = 3, KELP_GLOW = 0.4; // the giant kelp: of its first height (7 to 9.5 m); how far from a lane's edge every stem stands; one in this many elsewhere; how much of the sun comes through a blade
   function buildQuiet(Q) {
     const ownR = randNow, ownD = drandNow; randNow = rng(seed * 977 + 52713); drandNow = rng(seed * 977 + 52717);
     const fingersBefore = grownFingers.length;

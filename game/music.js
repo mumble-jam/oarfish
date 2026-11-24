@@ -39,6 +39,7 @@ const RIDE = [0, 3, 5, 6, 9, 11];
 export const CAST = {
   biter: { name: 'muted trumpet' }, angler: { name: 'vibraphone' }, hook: { name: 'plucked string' }, drifter: { name: 'woodblock' }, leech: { name: 'bass clarinet' },
   squid: { name: 'pizzicato' }, moonjelly: { name: 'music box' }, nettle: { name: 'bowed bass' }, // the bloom water's three (bloom.js): quiet, and only near
+  boxjelly: { name: 'glass' }, // the kelp forest's box jelly (kelpwood.js)
   keeper: { name: 'tuba', lead: true }, shearer: { name: 'tenor saxophone', lead: true }, lamplighter: { name: 'celesta', lead: true }, warden: { name: 'bowed cello', lead: true }, sum: { name: 'organ', lead: true },
 };
 
@@ -305,6 +306,8 @@ export function createMusic({ context = null } = {}) {
       if (tick === 0 && may(0.45 + 0.4 * p)) { const vo = voicing(ch, 84); voices.celesta(t, vo[bar % vo.length], 1.6, v * 0.45); }
     } else if (id === 'nettle') { // a long low bowed note every other bar, leaning down a step
       if (tick === 0 && bar % 2 === 0 && may(0.6 + 0.4 * p)) { const m = bassPitch(ch.root + ch.q.tones[1], 40); voices.cello(t, m, beat * 5, v * 0.55, m - 1); }
+    } else if (id === 'boxjelly') { // two high glassy notes a step apart, held, on the off-beats: closer, and they come every beat
+      if ((tick === 3 || tick === 9 || (p > 0.6 && (tick === 0 || tick === 6))) && may(0.35 + 0.5 * p)) { const m = deg(6, 72); voices.vibes(t, m, beat * 0.9, v * 0.5); voices.vibes(t + 0.06, m + 1, beat * 0.8, v * 0.35); }
     } else if (id === 'keeper') { // oom, pah: the root and its fifth, slow and heavy
       if (tick === 0 || tick === 6) voices.tuba(t, bassPitch(ch.root + (tick === 0 ? 0 : 7), 36), beat * 1.25, v);
     } else if (id === 'shearer') { // a run up the scale, then two jabs

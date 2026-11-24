@@ -839,6 +839,7 @@ export async function start(saved = {}) {
     if (guard && !guard.done) most(guard.kind, nearBy(guard.pos, 30));
     if (sum) most('sum', sum.state.awake ? 1 : 0.35 * nearBy(world.hall, 40));
     bloom?.cast(most, nearBy);
+    kelp?.cast(most, nearBy);
     return c;
   }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it

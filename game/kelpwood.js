@@ -180,6 +180,8 @@ export function createKelpwood(scene, world, hooks) {
     hooks.took({ time, stings, best, kept: state.best });
   }
 
+  // who sits in with the band: the box jelly, by how near it is (its instrument is in music.js)
+  function cast(most) { most('boxjelly', a.object.visible ? clamp(1 - Math.hypot(box.pos.x + off.x - rig.pos.x, box.pos.z + off.z - rig.pos.z) / 16, 0, 1) : 0); }
   function dispose() {
     for (const o of owned) { if (o.isObject3D) scene.remove(o); else o.dispose?.(); }
     scene.remove(a.object); a.dispose();
@@ -191,5 +193,5 @@ export function createKelpwood(scene, world, hooks) {
     put(x, z, yaw = box.yaw, mode = 'wait') { box.pos.set(x, bed(x, z) + J.high, z); box.yaw = yaw; box.mode = mode; box.quiet = 0; box.speed = 0; for (const s of box.strands) s.st.fresh = true; },
     // where the tentacles are drawn: every joint of every one, in the band's first copy
     tentacles: () => box.strands.flatMap((s) => s.st.joints.map((q) => ({ x: q.x - off.x, y: q.y, z: q.z - off.z }))) };
-  return { update, dispose, plan: K, box, shell, find, state, debug, jelly: a };
+  return { update, cast, dispose, plan: K, box, shell, find, state, debug, jelly: a };
 }

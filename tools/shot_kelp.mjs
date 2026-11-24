@@ -2,6 +2,7 @@
 // camera as it is, and pulled back), the box jelly on patrol, turning away from the body, herded out of the middle, a sting, the shell taken, the
 // fragment in the nook, and the nest's glass box.
 //   node tools/shot_kelp.mjs [prefix] [seed] [name…]      writes out/shots/<prefix>-<name>.png and prints each path
+//   CAMERA=look (the adventure camera: lower, tilted, sees further) or CAMERA=point (the plate's camera, high and steep; the default here) sets the camera
 //   GAME_ROOT=<another checkout> photographs the game there (only the forest's own pictures, `lane` and `over`, are taken where there is no kelpwood.js)
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright';
@@ -17,7 +18,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-const prefix = process.argv[2] || 'kelp', seed = +(process.argv[3] || 4242), only = process.argv.slice(4);
+const CAMERA = process.env.CAMERA === 'look' ? 'look' : 'point', prefix = process.argv[2] || 'kelp', seed = +(process.argv[3] || 4242), only = process.argv.slice(4);
 const out = (n) => path.resolve(import.meta.dirname, `../out/shots/${prefix}-${n}.png`);
 fs.mkdirSync(path.resolve(import.meta.dirname, '../out/shots'), { recursive: true });
 const page = await (await browser.newContext({ viewport: { width: 1200, height: 750 } })).newPage();
@@ -27,15 +28,15 @@ await page.goto(`http://localhost:${server.address().port}/`, { waitUntil: 'domc
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 const hide = await page.addStyleTag({ content: '#stage > :not(canvas):not(#library) { display: none !important; }' });
 const frame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-const life = await page.evaluate(async (seed) => { window.__hold = true; const g = window.__game;
+const life = await page.evaluate(async ([seed, CAMERA]) => { window.__hold = true; const g = window.__game; const PITCH = CAMERA === 'look' ? 0.34 : 0.56; // (LOOK_LEVEL and PLATE_LEVEL in main.js)
   window.S = { none: { dir: null, amount: 0, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false },
-    fresh(segs = 14) { g.setMode('point'); g.startRun(seed); g.run.segs = segs; g.buildFish(segs); g.run.safe = 1e9; g.sim(0.2, this.none); return g.world.quiet.kelpwood; },
+    fresh(segs = 14) { g.setMode(CAMERA); g.startRun(seed); g.run.segs = segs; g.buildFish(segs); g.run.safe = 1e9; g.sim(0.2, this.none); return g.world.quiet.kelpwood; },
     // the head at (x, z) in the band's first copy, `y` high (or `lift` over the bed), facing `yaw`, the camera behind it and as the dive has it
-    put(x, z, yaw, lift = 3, y = null) { g.rig.reset(g.rig.pos.clone().set(x, y ?? g.world.height(x, z) + lift, z), yaw); g.cam.yaw = yaw + Math.PI; g.cam.pitch = 0.56; g.cam.zoom = 1; g.snap(); },
+    put(x, z, yaw, lift = 3, y = null) { g.rig.reset(g.rig.pos.clone().set(x, y ?? g.world.height(x, z) + lift, z), yaw); g.cam.yaw = yaw + Math.PI; g.cam.pitch = PITCH; g.cam.zoom = 1; g.cam.ease = null; g.snap(); },
     // the fish `back` metres short of the clearing's middle on the forest's line (and `side` to one side), facing it
     toClearing(back = 9, side = 0) { const q = this.fresh(), C = q.clearing, a = q.axis, x = C.x - a.ux * back + a.uz * side, z = C.z - a.uz * back - a.ux * side; this.put(x, z, Math.atan2(C.x - x, C.z - z)); return q; },
     swim(yaw, s, k = 0.45) { g.sim(s, { ...this.none, dir: { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) }, amount: k }); } };
-  return !!g.kelp || 'kelp' in g; }, seed);
+  return !!g.kelp || 'kelp' in g; }, [seed, CAMERA]);
 const shots = [];
 const shot = async (name, what, setup, arg, keepHud = false) => { if (only.length && !only.includes(name)) return;
   if (keepHud) await hide.evaluate((el) => { el.disabled = true; }); const ok = await page.evaluate(setup, arg); if (ok === false) { if (keepHud) await hide.evaluate((el) => { el.disabled = false; }); return; }
