@@ -20,6 +20,7 @@ fs.mkdirSync(path.join(ROOT, 'out/shots'), { recursive: true });
 const page = await (await browser.newContext({ viewport: { width: 640, height: 420 } })).newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.addInitScript(() => { window.__noNursery = true; });
+await page.addInitScript(() => { try { const f = JSON.parse(localStorage.getItem('oarfish.feel') || '{}'); if (!f.mode) localStorage.setItem('oarfish.feel', JSON.stringify({ ...f, mode: 'point' })); } catch {} }); // made on the plate camera, the default when this was written: ask for it, unless a camera was chosen in this page
 await page.goto(`http://localhost:${server.address().port}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.addStyleTag({ content: '#stage > :not(canvas):not(#library) { display: none !important; }' });
