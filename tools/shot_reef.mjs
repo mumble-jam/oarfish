@@ -42,7 +42,7 @@ await page.evaluate((seed) => { window.__hold = true; const g = window.__game;
 for (const view of ['look', 'plate']) { VIEWNOW = view; await page.evaluate((v) => { S.view = v; }, view);
 // 0. the station mending: two segments lost, held still over it, the work half done
 let info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), P = r.plan; g.run.longest = 12; g.run.segs = 10; g.buildFish(10);
-  S.put(P.station.x, P.station.z - 1.6, 0, 1.7); g.sim(3.8, S.none); return S.info(); });
+  const L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))), cr = (L + 0.8) / (2 * Math.PI); S.put(P.station.x - cr, P.station.z, 0, 1.4); g.sim((L + 0.8) / v, { ...S.none, coil: 1 }); g.sim(3.8, S.none); S.cam(); g.snap(); return S.info(); }); // curled up inside the ring
 await shot(0, 'the station at work: held still over it, the ring half full, the cleaners along the body', info);
 // 1. the trumpetfish hanging by the rods: the fish still, a few metres from the nearest, which is in the middle of the picture
 info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), P = r.plan, f = r.fish[0], a = Math.atan2(f.home.x - P.x, f.home.z - P.z) + 0.6;
@@ -68,7 +68,8 @@ await shot(5, 'a dash shakes it off: flung aside, its colours coming back', info
 // 6 to 8. the reef with 0, 5 and 14 corals grown (all seen before): the fish at the station, the camera drawn back as far as the player can draw it
 for (const [n, k] of [[6, 0], [7, 5], [8, 14]]) {
   info = await page.evaluate((k) => { const g = window.__game, r = S.fresh({ grown: k, seen: k }), P = r.plan, G = P.gate;
-    S.put(P.station.x, P.station.z, G.yaw + Math.PI, 1.8); g.sim(0.5, S.none); S.wide = true; S.cam(); S.wide = false; g.snap(); const out = `${S.info()} pieces ${r.debug.pieces.length}`; return out; }, k);
+    S.put(P.station.x, P.station.z, G.yaw, 1.8); g.sim(0.5, S.none); S.wide = true; // (facing out, so the camera is on the far side and the arch's lintel is not between it and the reef)
+    S.cam(); S.wide = false; g.snap(); const out = `${S.info()} pieces ${r.debug.pieces.length}`; return out; }, k);
   await shot(n, `the reef with ${k} corals grown`, info); }
 // 9, 10. one growing in: five seen before, a sixth won since; the fish comes to the reef and it grows
 for (const [n, secs] of [[9, 1.4], [10, 4]]) {
