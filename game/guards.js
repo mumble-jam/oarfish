@@ -98,7 +98,7 @@ export function createGuard(scene, world, { seed = 1, floor = 0, seal: look = SE
   let seal = createSeal(root, world, { floor, look });
   // what it has left, as beads over its back
   const F = KEEPER_FIGHT, Z = SHEARER_FIGHT, HP = { keeper: F.legs, shearer: Z.rows, lamplighter: 3, warden: 4 }[kind];
-  const beadGeo = keep(new THREE.SphereGeometry(0.16, 6, 5)), beadMat = keep(new THREE.MeshBasicMaterial({ color: '#f2faf7', fog: false }));
+  const beadGeo = keep(new THREE.SphereGeometry(0.16, 6, 5)), beadMat = keep(new THREE.MeshBasicMaterial({ color: '#f2faf7' })); // in the fog like the rest of it: unfogged, the four beads showed from across the band, a marker to the Keeper
   const beads = Array.from({ length: HP }, () => { const b = new THREE.Mesh(beadGeo, beadMat); root.add(b); return b; });
   // the warden's body
   const slabs = [];

@@ -267,6 +267,12 @@ ${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   const shadeGeo = new THREE.CircleGeometry(def.wide * 0.5, 12).rotateX(-Math.PI / 2).translate(0, (def.top + def.rim) * 0.5, 0), shadeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
   const shade = new THREE.InstancedMesh(shadeGeo, shadeMat, n); shade.instanceMatrix = mesh.instanceMatrix; shade.count = 0; shade.frustumCulled = false; shade.castShadow = true; shade.receiveShadow = false; shade.name = `crowd-${kind}-shadow`; shade.userData.shadowOnly = true;
   shade.onBeforeShadow = () => { shade.count = n; }; shade.onAfterShadow = () => { shade.count = 0; }; mesh.add(shade);
+  // A bell is clear, so its shadow is half a shadow: the disc is drawn into the shadow map as a chequer of texels, and the soft shadow filter
+  // averages that to a shadow about half as dark as a stone's (seventy solid discs read as a spotted bed, not as light through glass)
+  const shadeDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+  shadeDepth.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'void main() {\n  if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;'); };
+  shadeDepth.customProgramCacheKey = () => 'jelly-shade-half';
+  shade.customDepthMaterial = shadeDepth;
   function set(i, matrix, q, lag, clock) { mesh.setMatrixAt(i, matrix); beat.setXYZW(i, q, lag, clock, 0); }
-  return { mesh, shade, geometry, material, triangles: total / 3, stroke: T, set, done() { mesh.instanceMatrix.needsUpdate = true; beat.needsUpdate = true; }, dispose() { geometry.dispose(); material.dispose(); mesh.dispose(); shadeGeo.dispose(); shadeMat.dispose(); } };
+  return { mesh, shade, geometry, material, triangles: total / 3, stroke: T, set, done() { mesh.instanceMatrix.needsUpdate = true; beat.needsUpdate = true; }, dispose() { geometry.dispose(); material.dispose(); mesh.dispose(); shadeGeo.dispose(); shadeMat.dispose(); shadeDepth.dispose(); } };
 }

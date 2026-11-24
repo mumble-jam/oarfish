@@ -96,7 +96,7 @@ export function createKelpwood(scene, world, hooks) {
   function nestMark() {
     const nest = world.react?.nest; if (!nest) return;
     if (mark) nest.group.remove(mark);
-    const g = new THREE.Group(), yaw = nest.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)], f = 3.1, r0 = 2.9;
+    const g = new THREE.Group(), yaw = nest.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)], f = 3.6, r0 = 2.9; // (3.1 left it 0.4 m from the squid's slab, all but touching)
     const sx = world.spawn.x + fw[0] * f + rt[0] * r0, sz = world.spawn.z + fw[1] * f + rt[1] * r0, y = world.drawn(sx, sz);
     const stone = new THREE.MeshLambertMaterial({ color: '#7d8a80', flatShading: true }), slab = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.54, 0.12, 4), stone); owned.push(stone, slab.geometry);
     slab.position.set(sx - world.spawn.x, y + 0.04, sz - world.spawn.z); slab.rotation.y = yaw + Math.PI / 4; slab.castShadow = slab.receiveShadow = true; g.add(slab);
