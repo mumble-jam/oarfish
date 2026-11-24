@@ -9,7 +9,8 @@ Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfis
 ## To do
 - [x] checks in test_game.mjs (three); library checks updated for the moved trumpetfish; CLAUDE.md, CREATURES.md.
 - [x] perf before/after (see CLAUDE.md, *The reef's cost*); sheet /home/claude/reef-sheet.jpg.
-- [ ] final run of all five suites after the last code change (trumpetfish pieces no longer cast; empty coral meshes hidden).
+- [x] Final runs (coordinator: game, boss and library only, one at a time under /tmp/oarfish-heavy.lock): boss 30/30, library 17/17; game see hand-back. An earlier game run under load timed out after 98 passes, none failing; a run before that failed the two fingerprint checks because the station's new numbers were fingerprinted (fixed: kept in `st.whole`).
+- [ ] Cost not measured again after the whole-body ring (two more draw calls a station near it: the bright arc and the warm points).
 
 ## Decisions (and why)
 - (Mid-task, from George through the coordinator) Every cleaning station, in every band: the whole body has to be in the ring. Ring 3.5 m for the starting body (was 3.2) and 0.3 m wider per metre of body past it (5.0 m at 26 segments), because a resting fish creeps at 0.22 m/s and a scripted curl-and-rest reached 3.3 m (10 segs) to 4.6 m (26) from the middle. Shown by a bright arc as far round as the share in, warm points on what is out. Checks: head only, half in, curled in at 10 and 26, at the reef and in band 3.
