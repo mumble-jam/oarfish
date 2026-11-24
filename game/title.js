@@ -304,7 +304,7 @@ const PRESS_F = `${NOISE}
     if (uWash > 0.0) {
       vec2 q = vUv - 0.5; q.x *= uCss.x / uCss.y;
       float r0 = length(q) / length(vec2(0.5 * uCss.x / uCss.y, 0.5)) + (fbm(p * 0.006 + 3.0) - 0.5) * 0.45;
-      float th = (1.0 - uWash) * 1.3;
+      float th = (1.0 - uWash) * 1.3 - 0.4 * uWash; // at the end even the driest spot is wet
       float wet = smoothstep(th - 0.06, th + 0.01, r0);
       vec3 water = uWater * (0.93 + 0.07 * paper.a + 0.08 * (fbm(p * 0.01 + uTime * 0.05) - 0.5));
       float edge = smoothstep(0.0, 0.05, abs(r0 - th)) ; // the wet front is a shade darker, as wet paper is
