@@ -1002,6 +1002,28 @@ check('the squid\'s mini-game: a fish that comes close slowly, and waits when th
   s.before.grade === 0 && s.before.lit === 0 && s.before.stones === 5 && s.won.settled && s.won.run.grade >= 1 && s.won.saved && s.won.saved.grade === s.won.run.grade && s.won.saved.time === s.won.run.time && s.won.mark === s.won.run.grade && s.won.lit === s.won.run.grade && s.won.turned >= 3
   && s.tame.shoal === 'rest' && s.next.grade === s.won.run.grade && s.next.lit === s.won.run.grade && s.next.inNest && !s.rushed.settled && s.rushed.kept && s.forgot === null, JSON.stringify(s));
 
+// ---- the quiet side (quiet.js, world.quiet): three places and a colonnade, built for the creatures to come; nothing lives there yet
+// the Go to buttons put the fish outside each place's arch, facing in, from any band; and from there it swims in through the arch (for the kelp forest,
+// on down the main lane to the clearing at the far end) with nothing stopping it
+s = await ev(() => { const g = window.__game, out = [], Q = (n) => g.world.quiet[n];
+  for (const [name, from] of [['sandflat', 0], ['reef', 2], ['kelpwood', 0]]) { g.startRun(4242); if (from) g.enterFloor(from, false); g.setPaused(true); document.getElementById(`dev-${name}`).click();
+    const q = Q(name), gt = q.gate, h = g.rig.joints[0], d = Math.hypot(h.x - gt.x, h.z - gt.z), facing = Math.cos(g.rig.yaw - (gt.yaw + Math.PI));
+    const route = name === 'kelpwood' ? [[gt.x, gt.z], ...q.lanes[0].points.slice(1), [q.clearing.x, q.clearing.z]] : [[gt.x, gt.z], [q.x, q.z]];
+    let leg = 0, threaded = 9, t = 0; g.run.safe = 1e9;
+    for (; t < 40 && leg < route.length; t += 0.1) { const p = g.rig.joints[0], [tx, tz] = route[leg], dx = tx - p.x, dz = tz - p.z, dd = Math.hypot(dx, dz);
+      threaded = Math.min(threaded, Math.hypot(p.x - gt.x, p.z - gt.z)); if (dd < (leg === route.length - 1 ? (name === 'kelpwood' ? q.clearing.r * 0.6 : q.R * 0.35) : 2.2)) { leg++; continue; }
+      g.sim(0.1, { dir: { x: dx / dd, y: 0, z: dz / dd }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false }); }
+    out.push({ name, floor: g.run.floor, paused: g.paused, d: +d.toFixed(1), facing: +facing.toFixed(2), arrived: leg >= route.length, t: +t.toFixed(1), threaded: +threaded.toFixed(2) }); }
+  g.startRun(4242); return out; });
+check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish in the first band, outside the place\'s arch, facing in through it, and from there it swims through the arch into the place (and down the kelp forest\'s main lane to its clearing) without being stopped',
+  s.every((o) => o.floor === 0 && !o.paused && o.d < 9 && o.facing > 0.95 && o.arrived && o.threaded < 1.6 && o.t < 35), JSON.stringify(s));
+// the layout, in Node over many worlds: each place and anchor inside the square, out of the rift, off the Keeper's ground, out of the bloom, off every swarm's home;
+// no overlaps; the arches threadable; the lanes clear; twelve or more spots for coral; the colonnade spaced; and everything the band had before where it was
+{ const { quietAudit } = await import('./quiet_fn.mjs'); const { fail, why, stats } = await quietAudit({ worlds: 40 });
+  const bad = Object.entries(fail).filter(([, v]) => v.length);
+  check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
+    !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }
@@ -1009,5 +1031,8 @@ if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.ev
 { const run = (...a) => execFileSync('node', [path.join(import.meta.dirname, 'digest.mjs'), ...a, '1,2,3,777,4242', '1,2,3,4'], { cwd: ROOT, maxBuffer: 1 << 24 }).toString().split('\n').filter((l) => l.startsWith('seed')).join('\n');
   let before = '', now = ''; try { before = run('--ref', '2c586ca'); now = run(); } catch (e) { before = `could not be read: ${e.message}`; }
   check('the bloom water moved nothing in bands 2 to 5: twenty worlds fingerprint the same as before it was built (commit 2c586ca)', before === now && now.split('\n').length === 20, before === now ? '' : `before:\n${before}\nnow:\n${now}`); }
+{ const run = (...a) => execFileSync('node', [path.join(import.meta.dirname, 'digest.mjs'), ...a, '1,2,3,777,4242', '1,2,3,4'], { cwd: ROOT, maxBuffer: 1 << 24 }).toString().split('\n').filter((l) => l.startsWith('seed')).join('\n');
+  let before = '', now = ''; try { before = run('--ref', '5428c39'); now = run(); } catch (e) { before = `could not be read: ${e.message}`; }
+  check('the quiet side moved nothing in bands 2 to 5: twenty worlds fingerprint the same as before it was built (commit 5428c39)', before === now && now.split('\n').length === 20, before === now ? '' : `before:\n${before}\nnow:\n${now}`); }
 await browser.close(); server.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

@@ -39,7 +39,7 @@ export const QUIET = {
     lane: 1.7, // half the width of a lane: kelp keeps this far from its line
     clearing: 6, nook: 1.7, stem: 2.0 }, // the clearing at the far end (radius), the nook (radius), and how far apart the stems of the forest stand
   colonnade: { from: 28, every: [12, 15], before: 8, most: 40, tall: [6.5, 8.6], broken: [2.4, 3.8] }, // from: where the town ends, metres out; before: it stops this short of the arch
-  gate: { span: 6.6, tall: 5.8 }, // the arch: between the middles of its two columns, and how tall the columns are
+  gate: { span: 6.6, tall: 4.3 }, // the arch: between the middles of its two columns, and how tall the columns are
 };
 
 const TAU = Math.PI * 2;
@@ -50,7 +50,7 @@ const ang = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 //   sites: the ground claimed so far, [x, z, r, what]; field: [x, z] the middle of the old kelp field (its own site is not in the forest's way)
 //   swarms: [{ hx, hz, ball }]; bloom: { x, z, R } or null; shells: [[x, z]] where the band's shells will lie; riftIn(x, z); keeper: { x, z, r }
 // Returns the plan (world.quiet; see CLAUDE.md for every name in it).
-export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, field, swarms, bloom, shells, riftIn, keeper }) {
+export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, field, swarms, bloom, shells, riftIn, keeper, solids = [] }) {
   const r = rng(seed * 977 + QUIET.seed), rr = (a, b) => a + (b - a) * r();
   const far = (x, z, cx, cz, d) => Math.hypot(wrap(x - cx), wrap(z - cz)) > d;
   const P = (rel, d, from = spawn) => [from.x + Math.sin(goalAngle + rel) * d, from.z + Math.cos(goalAngle + rel) * d];
@@ -58,19 +58,20 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
   const inSquare = (x, z, pad) => x - pad >= 1 && z - pad >= 1 && x + pad <= size - 1 && z + pad <= size - 1;
   const claimed = []; // what this phase has claimed so far, [x, z, r]
   // clear of everything laid before (`skip`: a site that does not count), of the rift by `pad` + 8, of the Keeper's ground, the bloom, the swarms and their pens
-  const free = (x, z, pad, skip = null) => inSquare(x, z, Math.min(pad, 4)) && sites.every((s) => s === skip || far(x, z, s[0], s[1], s[2] + pad))
+  const free = (x, z, pad, skip = null, own = false) => inSquare(x, z, Math.min(pad, 4)) && sites.every((s) => s === skip || far(x, z, s[0], s[1], s[2] + pad))
     && far(x, z, spawn.x, spawn.z, 8 + pad) && riftIn(x, z) < -(pad + 8) && (!keeper || far(x, z, keeper.x, keeper.z, keeper.r + pad + 4))
     && (!bloom || far(x, z, bloom.x, bloom.z, bloom.R + pad + 6)) && swarms.every((s) => far(x, z, s.hx, s.hz, s.ball * 2.6 + 2 + pad))
-    && claimed.every(([cx, cz, cr]) => far(x, z, cx, cz, cr + pad + 3));
+    && (own || claimed.every(([cx, cz, cr]) => far(x, z, cx, cz, cr + pad + 3))) && solids.every((c) => far(x, z, c.x, c.z, c.r + pad));
   const near = (x, z, d) => shells.some(([sx, sz]) => !far(x, z, sx, sz, d));
   // a place's frame: u toward where the fish arrives from (`facing`), v to its right as it comes in
   const frame = (x, z, facing) => { const fx = Math.sin(facing), fz = Math.cos(facing), vx = Math.cos(facing), vz = -Math.sin(facing);
     return { fx, fz, at: (u, v) => [x + fx * u + vx * v, z + fz * u + vz * v] }; };
   // look for a middle: `tries` goes over the place's own ground in a fixed order of rings and then by chance; R shrinks to `least` if it must
   const seek = (S, R, test) => {
-    for (const k of [1, 0.9, 0.8]) for (let t = 0; t < 160; t++) {
-      const rel = t < 40 ? (S.rel[0] + S.rel[1]) / 2 + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * (S.rel[1] - S.rel[0]) / 40 : rr(S.rel[0], S.rel[1]);
-      const d = t < 40 ? (S.dist[0] + S.dist[1]) / 2 : rr(S.dist[0], S.dist[1]), [x, z] = P(rel, d);
+    for (const [k, wide] of [[1, 0], [0.9, 0], [0.8, 0], [0.9, 0.4], [0.8, 0.4]]) for (let t = 0; t < 160; t++) { // (at last on wider ground: a little further round and nearer in)
+      const r0 = S.rel[0] - wide, r1 = S.rel[1] + wide, d0 = S.dist[0] - wide * 25, d1 = S.dist[1] + wide * 10;
+      const rel = t < 40 ? (r0 + r1) / 2 + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * (r1 - r0) / 40 : rr(r0, r1);
+      const d = t < 40 ? (d0 + d1) / 2 : rr(d0, d1), [x, z] = P(rel, d);
       if (test(x, z, R * k)) return { x, z, R: R * k };
     }
     return null;
@@ -79,7 +80,7 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
 
   // ---------------------------------------------------------------- the sand flat
   { const S = QUIET.sandflat;
-    let at = seek(S, S.R, (x, z, R) => free(x, z, R + S.blend) && !near(x, z, R + S.blend + 3));
+    let at = seek(S, S.R, (x, z, R) => inSquare(x, z, R + S.grass[1] + 1) && free(x, z, R + S.blend) && !near(x, z, R + S.blend + 3));
     if (!at) { const [x, z] = P(Math.PI, 94); at = { x, z, R: S.R * 0.7, fallback: true }; } // nowhere clear: straight behind the start, smaller (never seen in a thousand worlds)
     const { x, z, R } = at, facing = bearing(x, z, spawn.x, spawn.z), f = frame(x, z, facing), k = R / S.R, side = r() < 0.5 ? 1 : -1, V = (v) => v * side * k;
     const [mx, mz] = f.at(S.meadow.at[0] * k, V(S.meadow.at[1]));
@@ -94,7 +95,7 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
 
   // ---------------------------------------------------------------- the reef head
   { const S = QUIET.reef;
-    let at = seek(S, S.R, (x, z, R) => free(x, z, R + 2) && !near(x, z, R + 3));
+    let at = seek(S, S.R, (x, z, R) => inSquare(x, z, R + 1) && free(x, z, R + 2) && !near(x, z, R + 3));
     if (!at) { const [x, z] = P(2.05, 82); at = { x, z, R: S.R * 0.7, fallback: true }; }
     const { x, z, R } = at, facing = bearing(x, z, spawn.x, spawn.z), f = frame(x, z, facing), k = R / S.R;
     // the heads: round the middle, leaving the arrival side open (the gate looks straight in at the station)
@@ -130,7 +131,7 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
     for (const from of S.froms) for (const W of [S.W, S.W - 1.5, S.W - 3]) for (let L = S.long[0]; L >= S.long[1] && !made; L -= 2) for (let t = 0; t < 40 && !made; t++) {
       const rel = (S.rel[0] + S.rel[1]) / 2 + (t % 2 ? 1 : -1) * Math.ceil(t / 2) * (S.rel[1] - S.rel[0]) / 40, dir = goalAngle + rel, ux = Math.sin(dir), uz = Math.cos(dir);
       const A = [fx0 + ux * from, fz0 + uz * from], B = [A[0] + ux * L, A[1] + uz * L];
-      let ok = true; for (let s = 0; s <= L && ok; s += 3) ok = free(A[0] + ux * s, A[1] + uz * s, W, fieldSite); ok = ok && free(B[0], B[1], W, fieldSite);
+      let ok = true; for (let s = 0; s <= L && ok; s += 3) ok = free(A[0] + ux * s, A[1] + uz * s, W, fieldSite); ok = ok && free(B[0], B[1], Math.max(W, S.clearing + 1), fieldSite) && inSquare(A[0], A[1], W + 1) && inSquare(B[0], B[1], Math.max(W, S.clearing + 1) + 1); // (the clearing reaches round the far end)
       if (ok) made = { W, L, dir, ux, uz, A, B };
     }
     if (!made) { const dir = goalAngle - 1.5, ux = Math.sin(dir), uz = Math.cos(dir), A = [fx0 + ux * S.from, fz0 + uz * S.from]; made = { W: S.W - 3, L: S.long[1], dir, ux, uz, A, B: [A[0] + ux * S.long[1], A[1] + uz * S.long[1]], fallback: true }; }
@@ -141,8 +142,8 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
     // to one side and comes back to the clearing; the third crosses from the main lane out through the other side, a way out of the forest
     const sw = r() < 0.5 ? 1 : -1, wob = rr(0, TAU), end = L - S.clearing * 0.6;
     const main = Array.from({ length: 9 }, (_, i) => { const s = (i / 8) * end; return pt(s, Math.sin(wob + s * 0.18) * W * 0.18 * Math.sin(Math.PI * s / end)); });
-    const loop = Array.from({ length: 9 }, (_, i) => { const s = 2 + (i / 8) * (end - 2); return pt(s, sw * W * 0.62 * Math.pow(Math.sin(Math.PI * Math.min(1, s / (end - 1))), 0.7)); });
-    const cs = end * rr(0.42, 0.55), cross = Array.from({ length: 5 }, (_, i) => pt(cs + i * 1.2, -sw * (i / 4) * (W + 1.5)));
+    const loop = Array.from({ length: 9 }, (_, i) => { const s = 5 + (i / 8) * (end - 5); return pt(s, sw * W * 0.62 * Math.pow(Math.sin(Math.PI * Math.min(1, s / (end - 1))), 0.7)); });
+    const cs = end * rr(0.42, 0.55), cross = Array.from({ length: 5 }, (_, i) => pt(cs + i * 1.2, -sw * (i / 4) * (W - 0.3)));
     cross[0] = main.reduce((b, p) => (Math.hypot(p[0] - cross[1][0], p[1] - cross[1][1]) < Math.hypot(b[0] - cross[1][0], b[1] - cross[1][1]) ? p : b), main[0]);
     const lanes = [{ name: 'main', points: main, half: S.lane }, { name: 'loop', points: loop, half: S.lane }, { name: 'across', points: cross, half: S.lane }];
     const [cx, cz] = pt(L, 0);
@@ -157,10 +158,10 @@ export function layQuiet({ seed, spawn, goalAngle, size, wrap, height, sites, fi
 
   // ---------------------------------------------------------------- the colonnade
   { const C = QUIET.colonnade, cols = [], places = [out.sandflat, out.reef, out.kelpwood];
-    // a column's spot: on the line or a little to one side of it, clear of all that was before and of the places themselves (except the forest, whose
+    // a column's spot: beside the way and not on it (to its right going out, so that nothing stands across the line to the arch; the forest's on its flank line), clear of all that was before and of the places themselves (except the forest, whose
     // flank it walks), three metres from any shell, and not within ten metres of another column
-    const spot = (x, z, nx, nz, own) => { for (const o of [0, 2.5, -2.5, 5, -5, 7.5, -7.5]) { const px = x + nx * o, pz = z + nz * o;
-      if (!free(px, pz, 2.5) && !(own && ownOk(px, pz))) continue;
+    const spot = (x, z, nx, nz, own) => { for (const a of [0, 3, -3, 5.5, -5.5]) for (const o of own ? [0, 2.5, -2.5, 5, -5] : [3.5, 6, 1.5, 8.5, -3.5, -6]) { const px = x + nx * o - nz * a, pz = z + nz * o + nx * a; // (and a little along it, if it must)
+      if (!free(px, pz, 2.5, null, !!own) || (own && !ownOk(px, pz))) continue;
       if (near(px, pz, 3.5) || cols.some((c) => !far(px, pz, c.x, c.z, 10))) continue;
       if (places.some((p) => p !== own && !far(px, pz, p.x, p.z, p.R + 2))) continue;
       return [px, pz]; } return null; };

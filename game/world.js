@@ -270,16 +270,20 @@ function geometries() {
     return m.geometry(); })();
   // --- what grows only on the quiet side (quiet.js), made from a run of numbers of their own so that the models above stay as they were
   const qrand = rng(52711);
-  // a coral head: a massive coral, a cluster of rounded lobes with the brain coral's ridges, paler on top, a few short branches where it is still growing.
-  // About a unit across and a unit tall; scattered at two to four metres
+  // a coral head: a mound of the brain coral's ridged lobes with pillars standing up out of it, as pillar coral grows, each pillar grooved and rounded
+  // at its tip, paler where it is growing; a plate grown out from one side. About a unit across and a unit tall; scattered at two to four metres
   const coralHead = (() => { const m = mesher(), ico = new THREE.IcosahedronGeometry(1, 1).toNonIndexed(), a = ico.attributes.position;
     const lobe = (cx, cy, cz, rx, ry, rz, ph) => { for (let i = 0; i < a.count; i += 3) { const p = [0, 1, 2].map((k) => [a.getX(i + k), a.getY(i + k), a.getZ(i + k)]), my = (p[0][1] + p[1][1] + p[2][1]) / 3;
       if (my < -0.45) continue; const mx = (p[0][0] + p[1][0] + p[2][0]) / 3, mz = (p[0][2] + p[1][2] + p[2][2]) / 3, ridge = Math.sin(Math.atan2(mx, mz) * 4 + my * 7 + ph) > 0;
-      const q = p.map(([x, y, z]) => [cx + x * rx, cy + Math.max(y, -0.45) * ry, cz + z * rz]), k = 0.62 + 0.38 * clamp((my + 0.4) / 1.2, 0, 1);
-      m.tri(q[0], q[1], q[2], ridge ? grey(k) : grey(k * 0.78)); } };
-    lobe(0, 0.3, 0, 0.95, 0.55, 0.9, 0); lobe(0.28, 0.66, 0.12, 0.6, 0.38, 0.55, 1.3); lobe(-0.3, 0.6, -0.16, 0.55, 0.36, 0.6, 2.4); lobe(0.02, 0.86, -0.04, 0.42, 0.22, 0.42, 3.1);
-    for (let i = 0; i < 6; i++) { const yaw = i * 1.05 + qrand() * 0.6, d = 0.2 + qrand() * 0.3, b = [Math.sin(yaw) * d, 0.82 + qrand() * 0.12, Math.cos(yaw) * d], t = add3(b, aim(yaw, 0.35 + qrand() * 0.4), 0.12 + qrand() * 0.12);
-      m.limb(b, t, 0.05, 0.025, 4, [grey(0.9), bright(1.45)]); }
+      const q = p.map(([x, y, z]) => [cx + x * rx, cy + Math.max(y, -0.45) * ry, cz + z * rz]), k = 0.6 + 0.4 * clamp((my + 0.3) / 1.2, 0, 1);
+      m.tri(q[0], q[1], q[2], ridge ? grey(k) : grey(k * 0.7)); } };
+    lobe(0, 0.12, 0, 0.95, 0.36, 0.9, 0); lobe(0.42, 0.18, -0.3, 0.45, 0.28, 0.45, 2);
+    const pillar = (x, z, h, r) => { const n = 7, groove = (y, rr) => Array.from({ length: n * 2 }, (_, k) => { const t = (k / (n * 2)) * Math.PI * 2, d = rr * (k % 2 ? 0.82 : 1); return [x + Math.sin(t) * d, y, z + Math.cos(t) * d]; });
+      const rings = [groove(0.15, r * 1.1), groove(h * 0.55, r), groove(h, r * 0.92)]; m.skin(rings, (i2, k) => (k % 2 ? [grey(0.62 + i2 * 0.15), grey(0.7 + i2 * 0.18)] : [grey(0.78 + i2 * 0.12), grey(0.88 + i2 * 0.12)]));
+      m.cap(rings[2], [0, 1, 0], bright(1.35), r * 0.7); };
+    for (const [x, z, h, r] of [[0, 0, 1.0, 0.17], [0.3, 0.18, 0.78, 0.15], [-0.28, 0.22, 0.7, 0.15], [-0.12, -0.32, 0.86, 0.16], [0.36, -0.22, 0.55, 0.13], [-0.45, -0.08, 0.5, 0.13], [0.1, 0.45, 0.6, 0.13]]) pillar(x, z, h, r);
+    { const rim = (sc, dy) => Array.from({ length: 9 }, (_, i) => { const t = 2.2 + (i / 8) * 1.9, d = sc * (0.85 + 0.15 * Math.sin(i * 2.1)); return [Math.sin(t) * d, 0.3 + dy, Math.cos(t) * d]; });
+      const inner = rim(0.75, 0.02), outer = rim(1.3, 0.09); for (let i = 0; i < 8; i++) m.quad(inner[i], outer[i], outer[i + 1], inner[i + 1], [grey(0.7), bright(1.25), bright(1.25)]); }
     return m.geometry(); })();
   // a sea rod: a soft coral, a few tall thin stems that fork once and stand up into the water, the polyps paler toward the tips. A unit tall
   const seaRod = (() => { const m = mesher();
@@ -290,13 +294,13 @@ function geometries() {
   // giant kelp: one long stipe with a blade on a float every little way up it, by turns to either side, and at the top a spray of long fronds
   // lying out on the water. A unit tall; scattered at nine to thirteen metres. Paler at the top, where the light is
   const giantKelp = (() => { const m = mesher(), stipe = (t) => [0.05 * Math.sin(t * 3.1), t, 0.04 * Math.sin(t * 2.3 + 1)];
-    for (let i = 0; i < 4; i++) m.limb(stipe(i / 4), stipe((i + 1) / 4), 0.01, 0.008, 3, [grey(0.36 + 0.1 * i), grey(0.46 + 0.1 * i)]);
+    for (let i = 0; i < 4; i++) m.limb(stipe(i / 4), stipe((i + 1) / 4), 0.009, 0.007, 3, [grey(0.3 + 0.07 * i), grey(0.37 + 0.07 * i)]);
     const blade = (t, yaw, len, wide, droop, k) => { const b = stipe(t), o = [Math.sin(yaw), Math.cos(yaw)], side = [Math.cos(yaw), -Math.sin(yaw)];
       const at = (u, w) => [b[0] + o[0] * len * u + side[0] * w, b[1] + 0.04 * u - droop * u * u, b[2] + o[1] * len * u + side[1] * w];
       m.quad(at(0.08, -wide * 0.5), at(0.08, wide * 0.5), at(0.6, wide), at(0.6, -wide), [grey(k * 0.8), grey(k * 0.8), grey(k)]).tri(at(0.6, -wide), at(0.6, wide), at(1, 0), [grey(k), grey(k), bright(k * 1.2)]);
       m.tri([b[0], b[1] - 0.006, b[2]], at(0.08, -wide * 0.5), at(0.08, wide * 0.5), '#e8de8a'); }; // the float at its root
-    for (let i = 0; i < 9; i++) { const t = 0.14 + i * 0.085; blade(t, i * 2.4 + qrand() * 0.5, 0.2 + 0.03 * qrand(), 0.035, 0.05, 0.55 + 0.45 * t); }
-    for (let i = 0; i < 5; i++) blade(0.97, i * 1.26 + qrand() * 0.4, 0.3 + 0.08 * qrand(), 0.045, 0.1, 1.05);
+    for (let i = 0; i < 14; i++) { const t = 0.1 + i * 0.062; blade(t, i * 2.4 + qrand() * 0.5, 0.26 + 0.05 * qrand(), 0.05, 0.08, 0.5 + 0.5 * t); }
+    for (let i = 0; i < 6; i++) blade(0.97, i * 1.05 + qrand() * 0.4, 0.34 + 0.08 * qrand(), 0.055, 0.12, 1.05);
     return m.geometry(); })();
   GEO = {
     coralHead, seaRod, giantKelp,
@@ -326,8 +330,8 @@ function geometries() {
   const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
-  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, three times as tall as the kelp of the old field.', ['#4f9e74', '#5aa97d', '#6aa864', '#469687', '#62b38c'], { scale: [3, 11, 3], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
-  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A massive coral: rounded lobes with ridges in two tones, paler where the light falls, and a few short branches where it is still growing. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9b07a', '#d99a8a', '#c9b07f', '#e8c39a', '#b9a3c9'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
+  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#a8923f', '#9c8a3c', '#b59b48', '#8f8a3e', '#a39a4a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
+  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with grooved pillars standing up out of it, as pillar coral grows, paler at the tips, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#f0a868', '#ec8a8a', '#c08ae8', '#e9c25a', '#7fc9b8'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
   grows('searod', 'Sea rod', 'seaRod', [0], 2.8, 'A soft coral of a few tall thin stems that fork once, the polyps paler toward the tips. They stand among the coral heads of the reef head.', ['#b66fb0', '#8f5aa8', '#d0875f', '#c99a6a'], { scale: [1.8, 2.8, 1.8], n: 3, spread: 1.2 }, { sway: 0.6, give: 0.2 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
@@ -1099,7 +1103,8 @@ float seaLight(vec2 p, float t) {
     // what grows by chance keeps off: all of the sand flat and the reef (which grow their own), the forest and its clearing, the arches and the columns
     const axisD = (x, z) => { const a = KW.axis, dx = wrapD(x - a.ax), dz = wrapD(z - a.az), L = Math.hypot(a.bx - a.ax, a.bz - a.az), t = clamp(dx * a.ux + dz * a.uz, 0, L); return Math.hypot(dx - a.ux * t, dz - a.uz * t); };
     keeps.push((x, z) => farFrom(x, z, S2.x, S2.z, S2.R + 0.5) && farFrom(x, z, RF.x, RF.z, RF.R) && axisD(x, z) > KW.axis.half + 0.5 && farFrom(x, z, KW.clearing.x, KW.clearing.z, KW.clearing.r + 1)
-      && Q.places.every((p) => farFrom(x, z, p.gate.x, p.gate.z, 4.5)) && Q.colonnade.every((c) => farFrom(x, z, c.x, c.z, 2.2)));
+      && Q.places.every((p) => { const g = p.gate, dx = wrapD(x - g.x), dz = wrapD(z - g.z), f = dx * Math.sin(g.yaw) + dz * Math.cos(g.yaw), v = dx * Math.cos(g.yaw) - dz * Math.sin(g.yaw); return !(f > -4 && f < 12 && Math.abs(v) < 4.5); }) // the way in: open water before each arch
+      && Q.colonnade.every((c) => farFrom(x, z, c.x, c.z, 2.2)) && KW.lanes.every((ln) => laneDistance(ln, x, z) > ln.half + 0.6));
     const tones = (id) => tonesOf(id);
     const root = (id, x, z, s0, s1, sink = 0.06) => { const sz = dr(s0, s1); return { x, y: drawnY(x, z) - sink * sz, z, q: qY(drand() * 6.28, dr(-0.1, 0.1), dr(-0.1, 0.1)), s: S(sz), color: dpick(tones(id)) }; };
     // an arch to come in by: two tall columns and a lintel, wide and tall enough for the fish to thread, and a little paving through it
@@ -1142,13 +1147,13 @@ float seaLight(vec2 p, float t) {
     { const a = KW.axis, L = Math.hypot(a.bx - a.ax, a.bz - a.az), step = QUIET.kelpwood.stem, vx = a.uz, vz = -a.ux, kt = tones('giantkelp');
       const open = (x, z) => KW.lanes.some((ln) => laneDistance(ln, x, z) < ln.half + 0.5) || !farFrom(x, z, KW.clearing.x, KW.clearing.z, KW.clearing.r + 0.5)
         || !farFrom(x, z, KW.nook.x, KW.nook.z, KW.nook.r + 0.4) || !farFrom(x, z, KW.gate.x, KW.gate.z, 4.2);
-      const stem = (x, z, k) => quietGrown.tall.push({ x, y: drawnY(x, z) - 0.2, z, q: qY(drand() * 6.28), s: S(dr(2.5, 3.3), dr(9, 13.5) * k, dr(2.5, 3.3)), color: dpick(kt) });
+      const stem = (x, z, k) => quietGrown.tall.push({ x, y: drawnY(x, z) - 0.2, z, q: qY(drand() * 6.28), s: S(dr(2.4, 3.1), dr(7, 9.5) * k, dr(2.4, 3.1)), color: dpick(kt) });
       for (let s = -a.half; s <= L + a.half; s += step) for (let v = -a.half; v <= a.half; v += step * 0.87) {
         const x = a.ax + a.ux * s + vx * (v + (Math.round(s / step) % 2 ? step * 0.43 : 0)) + dr(-0.5, 0.5), z = a.az + a.uz * s + vz * (v + (Math.round(s / step) % 2 ? step * 0.43 : 0)) + dr(-0.5, 0.5), e = axisD(x, z);
         if (e > a.half || open(x, z) || !clearNow(x, z, 0.6)) continue;
         stem(x, z, 0.7 + 0.3 * smooth(clamp((a.half - e) / 3.5, 0, 1))); }
       { const fx = KW.field.x, fz = KW.field.z, d = Math.hypot(a.ax - fx, a.az - fz); // the run back to the field, when the forest begins away from it
-        if (d > 16) for (let s = 12; s < d - 3; s += 3.2) { const x = fx + (a.ax - fx) * (s / d) + dr(-2, 2), z = fz + (a.az - fz) * (s / d) + dr(-2, 2); if (clearNow(x, z, 1)) stem(x, z, dr(0.55, 0.75)); } }
+        if (d > 16) for (let s = 12; s < d - 3; s += 3.2) { const x = fx + (a.ax - fx) * (s / d) + dr(-2, 2), z = fz + (a.az - fz) * (s / d) + dr(-2, 2); if (clearNow(x, z, 1) && !open(x, z)) stem(x, z, dr(0.55, 0.75)); } }
       // the clearing's rim is the band's own kelp, lower, so the giant kelp stands back from it
       const rim = []; for (let i = 0; i < 14; i++) { const t = (i / 14) * 6.28, x = KW.clearing.x + Math.sin(t) * (KW.clearing.r + 0.9), z = KW.clearing.z + Math.cos(t) * (KW.clearing.r + 0.9); if (drand() < 0.75 && !KW.lanes.some((ln) => laneDistance(ln, x, z) < ln.half + 0.3) && clearNow(x, z, 0.5)) rim.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(drand() * 6.28), s: S(1.7, dr(3.5, 5), 1.7), color: dpick(tones('kelp')) }); }
       more(G.kelp, rim);
@@ -1171,7 +1176,7 @@ float seaLight(vec2 p, float t) {
   const quiet = floor === 0 ? layQuiet({ seed, spawn: SPAWN, goalAngle, size: T, wrap: wrapD, height, sites, field: polar(goalAngle - 1.1, 22),
     swarms: schools.filter((sc) => sc.n > 0).map((sc) => ({ hx: sc.hx, hz: sc.hz, ball: sc.ball })), bloom,
     shells: shellSpots({ spawn: SPAWN, wrap: wrapD, goal, rift: rift && { in: riftIn }, hall }, { seed, floor, count: hall ? 2 : 3 }),
-    riftIn, keeper: rift ? { x: rift.x - rift.nx * 24, z: rift.z - rift.nz * 24, r: 14 } : null }) : null;
+    riftIn, keeper: rift ? { x: rift.x - rift.nx * 24, z: rift.z - rift.nz * 24, r: 14 } : null, solids: colliders }) : null; // (solids: what stands that claimed no ground, such as the fallen columns of the town)
   if (quiet) buildQuiet(quiet);
   if (keeps.length) keepOff = (x, z) => keeps.every((k) => k(x, z));
   const total = schools.reduce((a, sc) => a + sc.n, 0) + (bloom ? bloom.fry.n : 0);

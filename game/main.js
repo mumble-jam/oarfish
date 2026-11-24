@@ -1420,6 +1420,11 @@ export async function start(saved = {}) {
   $('dev-bloom').addEventListener('click', (e) => { if (ended()) return; if (run.floor !== 0) enterFloor(0, false); const b = world.bloom; if (!b) return; // to the edge of the bloom water, on the side toward the start, facing in
     const dx = b.x - world.spawn.x, dz = b.z - world.spawn.z, d = Math.hypot(dx, dz), x = b.x - (dx / d) * (b.R + 9), z = b.z - (dz / d) * (b.R + 9);
     rig.reset(new THREE.Vector3(x, world.height(x, z) + 3.3, z), Math.atan2(dx, dz)); focus.copy(rig.joints[0]); run.safe = 1.5; setPaused(false); if (e.isTrusted) grab(true); });
+  // to one of the quiet side's places (world.quiet, quiet.js): outside its gate arch, on the side the fish arrives from, facing in through it
+  const goQuiet = (name) => (e) => { if (ended()) return; if (run.floor !== 0) enterFloor(0, false); const q = world.quiet && world.quiet[name]; if (!q) return;
+    const g = q.gate, fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), x = g.x + fx * 7, z = g.z + fz * 7;
+    rig.reset(new THREE.Vector3(x, world.height(x, z) + 3, z), g.yaw + Math.PI); focus.copy(rig.joints[0]); run.safe = 1.5; setPaused(false); if (e.isTrusted) grab(true); };
+  for (const name of ['sandflat', 'reef', 'kelpwood']) $(`dev-${name}`).addEventListener('click', goQuiet(name));
   $('dev-bring').innerHTML = BRING.map((n) => `<button type="button" data-bring="${n.id}"${n.id === 'squid' ? ' id="dev-squid"' : ''} aria-pressed="false">${n.name}</button>`).join('');
   $('dev-bring').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const id = b.dataset.bring, on = !pets[id], name = NPC[id].name.toLowerCase(), many = LIVES[id]?.n > 1; bring(id, on); b.setAttribute('aria-pressed', String(on));
     const sand = SAND_PETS[id]; if (sand) { showDev(on ? sand.here : sand.gone); return; }
