@@ -174,7 +174,12 @@ export class OarfishRig {
 
     this.forward.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     this.pos.addScaledVector(this.forward, this.speed * dt);
+    const x0 = this.pos.x, y0 = this.pos.y, z0 = this.pos.z, lift = Math.max(0.04, this.speed * dt);
     world.pushOut(this.pos, 0.42);
+    // a flat top (a column's) lifts the head straight onto it at once, up to 0.25 + 0.42 m: spread that over frames, so the body, which follows the head's
+    // path, does not lurch. Only that: a push with any sideways part, or a bigger one (the veil over a kept rift), is left as it is
+    const up = this.pos.y - y0;
+    if (up > lift && up < 0.7 && this.pos.x === x0 && this.pos.z === z0) this.pos.y = y0 + lift;
     const floor = world.height(this.pos.x, this.pos.z) + 0.7;
     if (this.pos.y < floor) this.pos.y = floor;
     if (this.pos.y > world.ceiling) this.pos.y = world.ceiling;
@@ -226,8 +231,11 @@ export class OarfishRig {
       tan.subVectors(a.p, b.p);
       side.crossVectors(UP, tan);
       if (side.lengthSq() < 1e-8) continue;
+      // where the path stands near upright (pressed up the side of a column) 'sideways' has no steady meaning and flips from frame to frame:
+      // there the wave fades out, as it does nowhere a fish can swim of its own accord (it is whole up to 60 degrees off level)
+      const level = Math.min(1, side.length() / tan.length() / 0.5);
       side.normalize();
-      const amp = ampTail * Math.pow(Math.min(s / 4.4, 1), 1.25);
+      const amp = ampTail * Math.pow(Math.min(s / 4.4, 1), 1.25) * level;
       t.p.addScaledVector(side, amp * Math.sin(this.phase - KAPPA * s));
     }
 
