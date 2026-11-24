@@ -1069,6 +1069,20 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
   check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
     !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
 
+// a fish rising beside a column and over its flat top: the body follows the head's path, so the head lifted onto the top at once (up to 0.67 m) lurched
+// the whole body, and the wave, sideways to a path going straight up the column's side, flipped from frame to frame. No joint may jump (tools/probe_tail.mjs)
+s = await page.evaluate(() => { const g = window.__game, W = g.world, out = []; g.startRun(4242); g.run.safe = 1e9;
+  const tall = W.solids.filter((c) => c.top !== undefined && c.r > 0.7 && c.r < 0.9 && c.top - W.height(c.x, c.z) > 3), c = tall.find((c) => W.solids.every((d) => d === c || Math.hypot(d.x - c.x, d.z - c.z) > 6));
+  for (const [speed, below] of [['swim', 1.5], ['swim', 3], ['sprint', 1.5], ['sprint', 3]]) {
+    g.run.segs = 18; g.buildFish(18); const yaw = 0.5 + Math.PI, rig = g.rig; rig.reset(rig.pos.clone().set(c.x + Math.sin(0.5) * 2.6, c.top - below, c.z + Math.cos(0.5) * 2.6), yaw);
+    const inp = { dir: { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) }, amount: 1, vertical: 1, sprint: speed === 'sprint', gentle: false, coil: 0, tight: false, bite: false };
+    let a = null, b = null, worst = 0, over = false;
+    for (let t = 0; t < 5; t += 1 / 60) { if (rig.pos.y > c.top + 1.2) inp.vertical = 0; g.sim(1 / 60, inp); const J = rig.joints.map((j) => j.clone());
+      if (a) for (let k = 1; k < J.length; k++) worst = Math.max(worst, J[k].clone().sub(b[k]).sub(b[k]).add(a[k]).length()); a = b || J; b = J; if (J[J.length - 1].y > c.top) over = true; }
+    out.push({ speed, below, over, worst: +worst.toFixed(3) }); }
+  g.startRun(4242); return out; });
+check('a fish rising beside a column and over its top: the tail goes over with it, and no joint jumps (most a joint\'s step changes in a frame under 0.3 m; it was 0.66)', s.every((o) => o.over && o.worst < 0.3), JSON.stringify(s));
+
 await page.close();
 
 if (shots) { const m = await open({ width: 390, height: 780 }, true); await m.evaluate(() => window.__game.sim(1.5, { dir: { x: 0.6, y: 0, z: -0.8 }, amount: 1, vertical: 0, sprint: false, gentle: false, coil: 0, tight: false, bite: false })); await snap(m, 'g-mobile'); console.log('mobile overflow', await m.evaluate(() => document.documentElement.scrollWidth > innerWidth)); await m.close(); }
