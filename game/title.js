@@ -21,17 +21,17 @@ import { OarfishRig, SPEED } from './rig.js';
 
 // ---------------------------------------------------------------- every number of the page
 export const FRONT = {
-  bones: 30, // the fish is long, as on the plate: the plate's body is about 26 times as long as it is deep
+  bones: 36, // the fish is long, as on the plate: the plate's body is about 26 times as long as it is deep
   crest: 1.15, // the crest against the model's own (CREST in oarfish.js)
   // The S. Three runs one above and behind the other, joined by two turns. The page is drawn in an oblique projection, as old
   // plates were: a flank is seen square on, and what is farther back is drawn higher by `k` of its depth.
-  s: { k: 0.5, lift: 0.36, R: 0.42, runs: [7.4, 6.3, 6.5] }, // lift and R in metres (the body is 0.4 m deep at the neck); runs: the plate's own proportions
+  s: { k: 0.5, lift: 0.4, R: 0.42, runs: [7.4, 6.3, 6.5] }, // lift and R in metres (the body is 0.4 m deep at the neck); runs: the plate's own proportions
   breathe: { rate: 0.16, wave: 0.55, curl: 0.035 }, // how fast the body's slow wave goes (beats a second), how big against an idle swim, how much the S swells
   fps: 30, idle: 90, // at most this many frames a second; nothing drawn after this many seconds untouched
   colours: { paper: '#f3eedb', ink: '#3b3026', water: '#1d5a68', deep: '#c94d5d', line: '#4a3a30' },
   tones: { // the fish in the plate's colours, not the game's: the game keeps its own (oarfish.js PALETTE) for the dive
     Body: '#b49a79', BodyTop: '#a68b6c', Belly: '#c9bfae', Spots: '#7c6249', Face: '#9a958f', Gill: '#b9aea3', Jaw: '#7f766f', Mouth: '#5b3b3a',
-    FinPale: '#f1c9c2', FinPink: '#e8aaa8', FinMid: '#dc8f93', FinRed: '#cf6371', EyeRing: '#3f3429', Eye: '#e3c13a', Pupil: '#241c16',
+    FinPale: '#efc4bd', FinPink: '#e9b6b1', FinMid: '#e4aba8', FinRed: '#d98e93', EyeRing: '#3f3429', Eye: '#e3c13a', Pupil: '#241c16',
   },
   bands: [0.3, 0.47, 0.63, 0.8], // where the dorsal fin runs deeper pink, along the body (0 the neck, 1 the tail), as on the plate
   dive: { wash: 0.95, straighten: 0.85, swim: 1.5, release: 1.3, reveal: 0.55, skip: 0.22 }, // seconds: the event of diving in
@@ -203,14 +203,16 @@ function printMaterial(name, colour, shared) {
           float u = -vRest.z / uLen;
           float band = 0.0;
           for (int i = 0; i < 4; i++) { float c = uBands[i]; band = max(band, smoothstep(0.075, 0.0, abs(u - c)) * (i == 3 ? 0.6 : 1.0)); }
-          base = mix(base, uDeep, band * 0.85 * step(vRest.z, 0.02));
-          tone = mix(tone, 1.0, 0.6);
+          base = mix(base, uDeep, band * 0.72 * step(vRest.z, 0.02));
+          float ray = smoothstep(0.32, 0.47, abs(fract(vRest.z * 24.0) - 0.5)) * step(vRest.z, 0.02) * smoothstep(0.0, 0.03, vRest.y);
+          base *= 1.0 - 0.13 * ray; // the fin's rays, as the plate hatches them
+          tone = 1.0;
         #endif
         #ifdef BODY
           float top = smoothstep(-0.05, 0.12, vRest.y);
-          float s = stip(vec2(vRest.z * 26.0, vRest.y * 26.0 + vRest.x * 7.0));
+          float s = stip(vec2(vRest.z * 34.0, vRest.y * 34.0 + vRest.x * 7.0));
           float s2 = stip(vec2(vRest.z * 47.0 + 3.7, vRest.y * 47.0 + 1.3));
-          base *= 1.0 - (s * mix(0.22, 0.4, top) + s2 * 0.16 * top);
+          base *= 1.0 - (s * mix(0.16, 0.3, top) + s2 * 0.14 * top);
         #endif
         vec4 diffuseColor = vec4(base * tone, opacity);`);
   };
@@ -336,7 +338,7 @@ export async function openFront({ boot }) {
   shared.uLen.value = rig.length;
   const fishRT = new THREE.WebGLRenderTarget(4, 4, { samples: 4 });
   const paperRT = new THREE.WebGLRenderTarget(4, 4);
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); quad.frustumCulled = false;
   const flat = new THREE.Scene(); flat.add(quad); const flatCam = new THREE.Camera();
   const paperMat = new THREE.ShaderMaterial({ vertexShader: QUAD_V, fragmentShader: PAPER_F, uniforms: { uCss: { value: new THREE.Vector2() }, uPx: { value: 1 }, uPaper: { value: lin(FRONT.colours.paper) } } });
   const press = new THREE.ShaderMaterial({ vertexShader: QUAD_V, fragmentShader: PRESS_F, uniforms: {
@@ -357,7 +359,9 @@ export async function openFront({ boot }) {
     void head;
   }
   rig.speed = SPEED.idle * FRONT.breathe.wave; rig.coiling = 0.4; rig.headYaw = 0; rig.gape = 0.04;
-  lay(); rig._pose(1e-3, null); for (let i = 0; i < 40; i++) rig._pose(1 / 30, null); // let the long ray settle before the first picture
+  lay(); rig._pose(1e-3, null);
+  for (const f of rig.filaments) f.joints.forEach((j, i) => j.copy(f.rest[i]).applyQuaternion(rig._w0).add(rig.pos)); // the long ray starts where it hangs (as rig.reset does)
+  for (let i = 0; i < 40; i++) rig._pose(1 / 30, null); // and settles before the first picture
   const shear = new THREE.Matrix4(), ortho = new THREE.Matrix4();
   const k = FRONT.s.k;
   shear.set(1, 0, 0, 0, 0, 1, -k, 0, 0, k, 1, 0, 0, 0, 0, 1); // in the camera's frame: what is farther back is drawn higher, the depth kept for what hides what
