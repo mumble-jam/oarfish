@@ -17,6 +17,7 @@ import { clamp, damp, lerp, glowTexture } from './geo.js';
 import { SAND_PETS, bringSand } from './sandpets.js';
 import { createBloom, BLOOM } from './bloom.js';
 import { createShapeView } from './shapes.js';
+import { createReef, REEF } from './reef.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
 const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
@@ -302,6 +303,9 @@ export async function start(saved = {}) {
   const bloomHooks = { rig, safe: () => game.safe(), bite: (n, joint, from) => game.bite(n, joint, from, 'sting'), hurt: () => { pulse('hurt'); moment('bite'); }, segs: () => run.segs, playing: () => run.state === 'play',
     moment: (k, v) => moment(k, v), gulp: (i, n, v) => music.gulp(i, n, v), say: (id, text) => say(id, text, 8, 'warn'), get best() { return nest.squid; },
     settled(r) { run.settled = r; moment('cache'); buzz(0.2, 0.4, 200); if (r.best) { nest.squid = r.kept; store.set('oarfish.nest', nest); tell(`${r.time} seconds${r.bluffs ? '' : ', and not one of them bluffed'}.`, 6, { kind: 'note', kick: 'A new best', title: 'The squid let you stay' }); } } };
+  // the reef head (reef.js): its station mends what this dive has lost, its trumpetfish ride and take, its coral is the nest's record of mural goals won
+  let reef = null; const reefHooks = { rig, playing: () => run.state === 'play', safe: () => game.safe(), lost: () => Math.max(0, run.longest - run.segs), say: (id, text) => say(id, text, 8), moment: (k, v) => moment(k, v), gulp: (i, n, v) => music.gulp(i, n, v), get nest() { return nest; }, keep: () => store.set('oarfish.nest', nest),
+    mend() { run.cleaned++; run.segs = Math.min(MAX_SEGS, run.segs + 1); buildFish(run.segs); remember(); growPulse(1, false); music.gulp(6, 7, 0.8); pulse('grow'); moment('grow', 0.7); } };
 
   function applyLook(F) {
     scene.background.set(F.water); scene.fog.color.set(F.water);
@@ -326,6 +330,7 @@ export async function start(saved = {}) {
     if (world.react?.nest) for (const p of world.react.nest.places) if (p.found) { const m = kit.mesh(p.type, 0.95); m.position.set(p.x, p.y, p.z); world.react.nest.group.add(m); nestShells.push({ m, p, ph: nestShells.length * 1.7 }); }
     foes = createFoes(scene, world, { seed: run.seed }, game);
     bloom?.dispose(); bloom = world.bloom ? createBloom(scene, world, bloomHooks) : null;
+    reef = createReef(scene, world, reefHooks); // (it goes when the world does)
     field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3, types: run.pool || SHELL_TYPES });
     Object.assign(tut, { on: !!world.nursery, step: 0, stall: 0, told: false, was: 0, prize: null });
     if (tut.on && field.items[0]) { const it = field.items[0]; it.taken = true; it.group.visible = false; tut.prize = it.type; } // the band's first shell waits in the sealed jar
@@ -1416,6 +1421,7 @@ export async function start(saved = {}) {
   $('dev-bands').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || ended()) return; enterFloor(+b.dataset.band, false); setPaused(false); if (e.isTrusted) grab(true); });
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
   $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
+  $('dev-forget').addEventListener('click', () => { nest.reef = null; }); // the reef's coral (reef.js) is forgotten with the rest
   $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {}, squid: null }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked, no best with the squid. It shows from the next dive.'); });
   $('dev-bloom').addEventListener('click', (e) => { if (ended()) return; if (run.floor !== 0) enterFloor(0, false); const b = world.bloom; if (!b) return; // to the edge of the bloom water, on the side toward the start, facing in
     const dx = b.x - world.spawn.x, dz = b.z - world.spawn.z, d = Math.hypot(dx, dz), x = b.x - (dx / d) * (b.R + 9), z = b.z - (dz / d) * (b.R + 9);
@@ -1898,6 +1904,7 @@ export async function start(saved = {}) {
     ctx.fear = clamp(0.45 * rig.length, 0.6, 1.75); // a short body cannot hide its tail behind its own head
     foes.update(dt, ctx);
     bloom?.update(dt, camera);
+    reef?.update(dt);
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {
@@ -2019,5 +2026,6 @@ export async function start(saved = {}) {
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
     sim(seconds, forced) { for (let t = 0; t < seconds; t += 1 / 60) { if (forced) step(1 / 60, forced); else tick(1 / 60); } }, // with no forced input, the real devices are read
   };
+  Object.defineProperties(window.__game, { reef: { get: () => reef }, REEF: { value: REEF } }); // the reef head (reef.js)
   return true;
 }
