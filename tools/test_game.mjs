@@ -558,11 +558,51 @@ const floor = await ev(() => { const g = window.__game, m = g.music, quiet = { s
   const solo = m.flourish('keeper', 'solo'), now = m.state.show && m.state.show.kind, nobody = m.flourish('biter', 'fill');
   return { first, again, kind, solo, now, nobody, licks: m.state.licks - l0 }; });
 check('a keeper’s instrument can take the floor: a fill, which is turned away if another was played a moment ago so that they stay rare, and a solo, which is not; a hunter has neither', floor.first === true && floor.again === false && floor.kind === 'fill' && floor.solo === true && floor.now === 'solo' && floor.nobody === false, JSON.stringify(floor));
+// ---- the turnaround (TURN in music.js): the Keeper's line on its own, read note by note from st.log, with no sound card (an OfflineAudioContext)
+const turn = await ev(async () => {
+  const M = await import('/game/music.js'), fresh = () => M.createMusic({ context: new OfflineAudioContext(2, 44100, 44100) });
+  const line = (set, bars = 9, extra = null) => { const m = fresh(); for (const [k, v] of Object.entries(set)) m.set(k, v); if (extra) extra(m); m.state.log = []; m.line('keeper', bars, { bpm: 120 }); return m.state.log.map((e) => [e.at[0], e.at[1], e.m, +(e.dur / 0.5).toFixed(3), +e.v.toFixed(3)]); };
+  const byBar = (L) => { const o = {}; for (const x of L) (o[x[0]] ||= []).push(x); return o; };
+  const off = line({ turn: 0 }), def = line({}), pass = line({ turnsize: 0 }), big = line({ turnsize: 1 }), lo = line({ turnheight: 0 }), hi = line({ turnheight: 1 });
+  const same = (A, b) => JSON.stringify(byBar(A)[b] || []) === JSON.stringify(byBar(off)[b] || []);
+  const differs = (L) => [...Array(9).keys()].filter((b) => !same(L, b)).map((b) => b + 1).join();
+  const figure = (L, b) => (byBar(L)[b] || []).map((x) => x[1]).join(), at = (L, b, tick) => (byBar(L)[b] || []).find((x) => x[1] === tick);
+  const lands = (L, b) => { const f = byBar(L)[b], next = at(off, b + 1, 0)[2], last = f[f.length - 1][2]; return next - last; };
+  const today = off.every((x) => (x[1] === 0 || x[1] === 6) && x[3] === 1.25 && x[4] === 1) && off.length === 18;
+  const p4 = at(pass, 3, 5)[2], root4 = at(off, 3, 0)[2], fifth4 = at(off, 3, 6)[2];
+  const flourished = differs(line({}, 9, (m) => { m.state.showEnd = 1e9; })); // a show still ringing: nothing turns round
+  // the band as it plays, with the Keeper sitting in: a solo in the fourth bar takes it over, and the eighth still turns round
+  const band = async (solo, cast = { keeper: 1 }, set = {}) => { const m = fresh(); for (const [k, v] of Object.entries(set)) m.set(k, v); m.state.log = []; let fired = false; const turns = {};
+    await m.render(24, () => { if (solo && !fired && m.state.bar === 3) fired = m.flourish('keeper', 'solo'); turns[m.state.bar] = m.state.turnBy; return { cast }; });
+    const tub = (b) => m.state.log.filter((e) => e.voice === 'tuba' && !e.show && e.at[0] === b && (e.at[1] === 5 || e.at[1] === 9)).length;
+    return { bar4: tub(3), bar8: tub(7), shown: m.state.log.filter((e) => e.show).length, fired, turns: Object.entries(turns).filter(([b]) => b > 0 && b < 12).map(([b, id]) => `${+b + 1}:${id || '-'}`).join(' ') }; };
+  const plain = await band(false), soloed = await band(true), crowd = await band(false, { keeper: 1, biter: 0.9, angler: 0.8 }, { turnall: 1 }), keepersOnly = await band(false, { keeper: 1, biter: 0.9, angler: 0.8 });
+  const g = window.__game; g.music.unlock(); g.music.state.show = null; g.music.state.log = []; const heard = g.music.audition('keeper'), aud = g.music.state.log.map((e) => e.at.join('.')); g.music.state.log = null;
+  return { today, def: differs(def), pass: differs(pass), every2: differs(line({ turn: 1 })), every8: differs(line({ turn: 0.33 })), never: differs(line({ turn: 0 })), figDef: figure(def, 3), figPass: figure(pass, 3), figBig: figure(big, 3), figLo: figure(lo, 3), figHi: figure(hi, 3),
+    passBetween: (p4 - root4) * (p4 - fifth4) < 0, passKeeps: at(pass, 3, 6)[2] === fifth4 && at(pass, 3, 6)[3] === 1.25, accent: at(def, 3, 6)[4], loudest: Math.max(...[def, pass, big, lo, hi].flat().map((x) => x[4])),
+    lands: [lands(def, 3), lands(def, 7), lands(big, 3), lands(lo, 3), lands(hi, 3)], rootKept: [def, pass, big, lo, hi].every((L) => at(L, 3, 0)[2] === root4 && at(L, 3, 0)[3] === 1.25),
+    starts: [at(lo, 3, 5)[2], at(hi, 3, 5)[2]], nextKept: [def, pass, big, lo, hi].every((L) => same(L, 4) && same(L, 8)), flourished, plain, soloed, crowd: crowd.turns, keepersOnly: keepersOnly.turns, heard, aud: aud.length, audTurn: aud.filter((x) => /\.(5|9)$/.test(x)).length };
+});
+check('the Keeper’s line turns round every fourth bar, pam-pa-PAM-pam: bars 1 to 3 and the next bar’s first note are as they were, the walk-up ends a step under it, beat three a touch louder; off, it is note for note today’s',
+  turn.today && turn.def === '4,8' && turn.never === '' && turn.figDef === '0,5,6,9' && turn.lands.every((d) => d >= 1 && d <= 2) && turn.rootKept && turn.nextKept && turn.accent === 1.12 && turn.loudest <= 1.12, JSON.stringify(turn));
+check('the turnaround’s sliders: one passing note between root and fifth up to a run of four; a higher walk-up starts lower; every 2, 4 or 8 bars, or never',
+  turn.pass === '4,8' && turn.figPass === '0,5,6' && turn.passBetween && turn.passKeeps && turn.figBig === '0,5,6,9,11' && turn.starts[1] < turn.starts[0] && turn.every2 === '2,4,6,8' && turn.every8 === '8', JSON.stringify(turn));
+check('a keeper’s show wins over a turnaround: a solo in the fourth bar leaves no turnaround there, and the eighth still has one; one line turns round in a bar, the creatures only with the switch and not on the Keeper’s bars; Hear it plays the turnaround',
+  turn.flourished === '' && turn.plain.bar4 === 2 && turn.plain.bar8 === 2 && turn.soloed.fired && turn.soloed.shown > 0 && turn.soloed.bar4 === 0 && turn.soloed.bar8 === 2
+  && /4:keeper/.test(turn.crowd) && /2:biter/.test(turn.crowd) && !/(^| )(4|8):(biter|angler)/.test(turn.crowd) && !/biter|angler/.test(turn.keepersOnly) && turn.heard && turn.audTurn >= 2, JSON.stringify(turn));
 check('the Music drawer opens and its sliders reach the band', s.open && Math.abs(s.menace - 0.9) < 0.01, JSON.stringify(s));
 s = await ev(() => { const g = window.__game; const code = g.presetCode(); const r1 = g.applyCode('hey try this one oarfish-music:1:dream=90,energy=20,menace=10,react=40,swing=75,band=80 :)'); const p1 = { ...g.music.params };
   const r2 = g.applyCode('oarfish-music:1:dream=30,menace=95,zone=3'); const here = { ...g.music.params }; g.enterFloor(2, false); const there = { ...g.music.params }; const code3 = g.presetCode(); const r3 = g.applyCode('nonsense'); g.enterFloor(0, false);
   return { code, r1, dream1: p1.dream, r2, dreamHere: here.dream, dreamThere: there.dream, menaceThere: there.menace, code3, r3 }; });
 check('preset codes copy, paste for all depths, and paste for one depth', /^oarfish-music:1:dream=\d+/.test(s.code) && s.dream1 === 0.9 && s.dreamHere === 0.9 && s.dreamThere === 0.3 && s.menaceThere === 0.95 && /zone=3$/.test(s.code3) && /not a preset/.test(s.r3), JSON.stringify(s));
+s = await ev(() => { const g = window.__game, P = () => ({ ...g.music.params }), saved = () => JSON.parse(localStorage.getItem('oarfish.music') || '{}').all || {};
+  const el = document.getElementById('m-turnsize'); el.value = 0; el.dispatchEvent(new Event('input')); const slid = { size: g.music.params.turnsize, saved: saved().turnsize, code: g.presetCode() };
+  const r1 = g.applyCode('oarfish-music:1:dream=60,turn=99,turnsize=33,turnheight=80,turnall=100'); const p1 = P(), code1 = g.presetCode(), s1 = saved(), ui1 = ['turn', 'turnsize', 'turnheight', 'turnall'].map((k) => document.getElementById(`m-${k}`).value).join();
+  const r2 = g.applyCode('oarfish-music:1:dream=60,energy=50,menace=50,react=70,swing=60,band=50'); const p2 = P(), ui2 = ['turn', 'turnsize', 'turnheight', 'turnall'].map((k) => document.getElementById(`m-${k}`).value).join();
+  return { slid, r1, p1: [p1.turn, p1.turnsize, p1.turnheight, p1.turnall], code1, s1: [s1.turn, s1.turnsize, s1.turnheight, s1.turnall], ui1, r2, p2: [p2.turn, p2.turnsize, p2.turnheight, p2.turnall], ui2 }; });
+check('the turnaround’s sliders are saved, go into a preset code and come back out of one; a code from before them gives the shipped turnaround',
+  s.slid.size === 0 && s.slid.saved === 0 && /turnsize=0/.test(s.slid.code) && s.p1.join() === '0.99,0.33,0.8,1' && /turn=99,turnsize=33,turnheight=80,turnall=100/.test(s.code1) && s.s1.join() === '99,33,80,100' && s.ui1 === '99,33,80,100'
+  && s.p2.join() === '0.66,0.66,0.2,0' && s.ui2 === '66,66,20,0', JSON.stringify(s));
 // ---- the oars: pulled in turn on the beat they build a chord and speed; out of time they lose it. Rowed here against a plain count
 // kept from the dive's own clock (oars.metronome), since the band's clock is the sound card's and does not stop for a scripted dive.
 s = await ev(() => { const g = window.__game, T = window.T, O = g.OARS, dur = O.tempo, east = { ...T.none(), dir: { x: 1, y: 0, z: 0 } }; g.startRun(4242); g.run.safe = 1e9; g.oars.metronome = true;
