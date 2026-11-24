@@ -39,7 +39,7 @@ export const KELPWOOD = {
     // first touch, by the most joints (a joint to about 0.31 m) touching at once: fewer than more[0] costs cost[0] segments (a brush), fewer than more[1]
     // costs cost[1] (crossing it), and more than that cost[2] (lying along it, or wrapped through it). Never below `keep` segments. Then it stings
     // nothing for `rest` seconds and jets away from the body at `flee` metres a second.
-    sting: { reach: 0.3, look: 0.35, more: [4, 9], cost: [1, 2, 3], keep: 6, rest: 3, flee: 1.9 } },
+    sting: { reach: 0.35, look: 0.35, more: [4, 8], cost: [1, 2, 3], keep: 6, rest: 3, flee: 1.9 } },
   shell: { lift: 1.1 }, // the shell in the clearing's middle, this far over the bed
   // the try: it starts when the head first comes within `near` metres of the clearing's middle (its radius and this much more), and ends when the shell
   // is taken. A clean take is one with no sting in it. The best is kept in the nest: the fewest stings, and then the quickest
@@ -73,7 +73,7 @@ export function createKelpwood(scene, world, hooks) {
   const route = [0, 1, 2, 3].map(corner);
   const bed = (x, z) => world.height(x, z);
   const box = { pos: new THREE.Vector3(route[0].x, bed(route[0].x, route[0].z) + J.high, route[0].z), yaw: Math.atan2(route[1].x - route[0].x, route[1].z - route[0].z), speed: 0, tilt: 1.2,
-    mode: 'patrol', leg: 1, quiet: 99, rest: 0, weight: 0, push: { x: 0, z: 0 }, touch: null, mood: 'pulse', strands: a.rig.strands };
+    mode: 'patrol', held: null, leg: 1, quiet: 99, rest: 0, weight: 0, push: { x: 0, z: 0 }, touch: null, mood: 'pulse', strands: a.rig.strands };
 
   // ---- the shell it keeps, in the middle of the clearing: laid by main.js, so that it is one of the shells lying in this band and is taken as any is
   const shell = hooks.prize(C.x, C.z, KELPWOOD.shell.lift); if (shell) shell.kelp = true;
@@ -96,12 +96,12 @@ export function createKelpwood(scene, world, hooks) {
   function nestMark() {
     const nest = world.react?.nest; if (!nest) return;
     if (mark) nest.group.remove(mark);
-    const g = new THREE.Group(), yaw = nest.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)], f = -0.75, r0 = 2.9;
+    const g = new THREE.Group(), yaw = nest.yaw, fw = [Math.sin(yaw), Math.cos(yaw)], rt = [Math.cos(yaw), -Math.sin(yaw)], f = 3.1, r0 = 2.9;
     const sx = world.spawn.x + fw[0] * f + rt[0] * r0, sz = world.spawn.z + fw[1] * f + rt[1] * r0, y = world.drawn(sx, sz);
     const stone = new THREE.MeshLambertMaterial({ color: '#7d8a80', flatShading: true }), slab = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.54, 0.12, 4), stone); owned.push(stone, slab.geometry);
     slab.position.set(sx - world.spawn.x, y + 0.04, sz - world.spawn.z); slab.rotation.y = yaw + Math.PI / 4; slab.castShadow = slab.receiveShadow = true; g.add(slab);
-    const b = state.best, clean = !!b && !b.stings, lit = !!b, cube = new THREE.BoxGeometry(0.26, 0.26, 0.26), glass = new THREE.MeshLambertMaterial({ color: lit ? resolve('boxjelly').palette.bell : '#3a4148', flatShading: true, emissive: lit ? '#9fd8ff' : '#000000', emissiveIntensity: clean ? 0.9 : lit ? 0.25 : 0 }); owned.push(cube, glass);
-    const c = new THREE.Mesh(cube, glass); c.position.set(slab.position.x, y + 0.24, slab.position.z); c.rotation.y = yaw + Math.PI / 4; c.castShadow = true; g.add(c);
+    const b = state.best, clean = !!b && !b.stings, lit = !!b, cube = new THREE.BoxGeometry(0.34, 0.34, 0.34), glass = new THREE.MeshLambertMaterial({ color: lit ? resolve('boxjelly').palette.bell : '#3a4148', flatShading: true, emissive: lit ? '#9fd8ff' : '#000000', emissiveIntensity: clean ? 0.9 : lit ? 0.25 : 0 }); owned.push(cube, glass);
+    const c = new THREE.Mesh(cube, glass); c.position.set(slab.position.x, y + 0.28, slab.position.z); c.rotation.y = yaw + Math.PI / 4; c.castShadow = true; g.add(c);
     g.userData = { kelp: true, clean, lit }; nest.group.add(g); mark = g;
   }
   nestMark();
@@ -139,8 +139,9 @@ export function createKelpwood(scene, world, hooks) {
         const n = route[box.leg]; goal = Math.atan2(n.x - box.pos.x, n.z - box.pos.z); } }
     // it keeps to the clearing: past `roam` it is turned back in, along the edge
     if (goal !== null && fromMid > J.roam - 1) { const inward = Math.atan2(C.x - box.pos.x, C.z - box.pos.z), k = clamp((fromMid - (J.roam - 1)) / 1.5, 0, 1); want.set(Math.sin(goal) * (1 - k) + Math.sin(inward) * k * 1.6, Math.cos(goal) * (1 - k) + Math.cos(inward) * k * 1.6); goal = Math.atan2(want.x, want.y); }
+    if (box.held) { goal = null; speed = box.held.speed; mood = box.held.mood; rate = box.held.rate; } // (held by a check: it goes on as it was, seeing nothing)
     if (goal !== null) box.yaw += clamp(wrapPi(goal - box.yaw), -P.turn * dt, P.turn * dt);
-    else box.yaw += dt * 0.5; // fenced: it turns about, looking for a way out
+    else if (!box.held) box.yaw += dt * 0.5; // fenced: it turns about, looking for a way out
     box.speed = damp(box.speed, speed, 2.5, dt); box.mood = mood;
     box.pos.x += Math.sin(box.yaw) * box.speed * dt; box.pos.z += Math.cos(box.yaw) * box.speed * dt;
     box.pos.y = damp(box.pos.y, bed(box.pos.x, box.pos.z) + J.high, 1.5, dt);

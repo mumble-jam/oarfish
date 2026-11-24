@@ -301,7 +301,7 @@ function geometries() {
     const blade = (t, yaw, len, wide, droop, k) => { const b = stipe(t), o = [Math.sin(yaw), Math.cos(yaw)], side = [Math.cos(yaw), -Math.sin(yaw)];
       const at = (u, w, lift = 0) => [b[0] + o[0] * len * u + side[0] * w, b[1] + 0.03 * u - droop * u * u + lift, b[2] + o[1] * len * u + side[1] * w];
       const root = at(0.04, 0), L = at(0.4, -wide, -0.014), R = at(0.4, wide, -0.014), tip = at(1, 0);
-      m.tri(root, L, tip, ['#e8de8a', grey(k * 0.78), bright(k * 1.15)]).tri(root, tip, R, ['#e8de8a', bright(k * 1.2), grey(k)]); };
+      m.tri(root, L, tip, ['#e8de8a', grey(k * 0.78), bright(k * 1.15)], true).tri(root, tip, R, ['#e8de8a', bright(k * 1.2), grey(k)], true); }; // (marked to give light: kelp is thin and lets the sun through, so a blade seen from under is golden, not dark)
     // the blades stream one way, as kelp does in a current, long and hanging: that, and not their number, is what tells it from a reed
     for (let i = 0; i < 7; i++) { const t = 0.16 + i * 0.105; blade(t, (i % 2 ? 0.42 : -0.42) + qrand() * 0.3 - 0.15, 0.4 + 0.06 * qrand(), 0.068, 0.26, 0.5 + 0.5 * t); }
     for (let i = 0; i < 3; i++) blade(0.97, -0.32 + i * 0.32 + qrand() * 0.12, 0.6 + 0.08 * qrand(), 0.06, 0.12, 1.05); // the crown, lying out downstream on the water
@@ -335,7 +335,7 @@ function geometries() {
   const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
-  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#8f7d34', '#9a8a3e', '#7f7a35', '#a08a40', '#86803a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
+  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#8f7d34', '#9a8a3e', '#7f7a35', '#a08a40', '#86803a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25, glow: 0.4 });
   grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with grooved pillars standing up out of it, as pillar coral grows, paler at the tips, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9a86f', '#e38f8a', '#b99ad6', '#e2c46a', '#86c2b0'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
   grows('searod', 'Sea rod', 'seaRod', [0], 2.8, 'A soft coral of a few tall thin stems that fork once, the polyps paler toward the tips. They stand among the coral heads of the reef head.', ['#b66fb0', '#8f5aa8', '#d0875f', '#c99a6a'], { scale: [1.8, 2.8, 1.8], n: 3, spread: 1.2 }, { sway: 0.6, give: 0.2 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
@@ -1098,7 +1098,7 @@ float seaLight(vec2 p, float t) {
   // the band moves. What grows here that the band also grows is handed to the band's own scatter (`more`); what is new to it (coral heads, sea rods,
   // giant kelp) is gathered in `quietGrown` and scattered after the rest.
   const quietGrown = { heads: [], rods: [], tall: [] }, QUIET_GRASS = QUIET.sandflat.grass;
-  const KELP_TALL = 0.7, KELP_WALL = 2.4, KELP_THIN = 2; // the giant kelp: of its first height (7 to 9.5 m); how far from a lane's edge every stem stands; one in this many elsewhere
+  const KELP_TALL = 0.7, KELP_WALL = 2.4, KELP_THIN = 2, KELP_GLOW = 0.4; // the giant kelp: of its first height (7 to 9.5 m); how far from a lane's edge every stem stands; one in this many elsewhere; how much of the sun comes through a blade
   function buildQuiet(Q) {
     const ownR = randNow, ownD = drandNow; randNow = rng(seed * 977 + 52713); drandNow = rng(seed * 977 + 52717);
     const fingersBefore = grownFingers.length;
@@ -1312,7 +1312,7 @@ float seaLight(vec2 p, float t) {
   if (quiet) { // what grows only on the quiet side
     scatter(G.coralHead, plant({ double: false }), (grownAt.coralhead = quietGrown.heads));
     scatter(G.seaRod, plant({ sway: 0.6, give: 0.2 }), (grownAt.searod = quietGrown.rods), { receive: false });
-    scatter(G.giantKelp, plant({ sway: 1, give: 0.25 }), (grownAt.giantkelp = quietGrown.tall), { receive: false }); } // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
+    scatter(G.giantKelp, plant({ sway: 1, give: 0.25, glow: KELP_GLOW }), (grownAt.giantkelp = quietGrown.tall), { receive: false }); } // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
 
   // ------------------------------------------------------------ drifting specks and slow light shafts
   const SPECKS = 320, BOX = new THREE.Vector3(46, 16, 46);

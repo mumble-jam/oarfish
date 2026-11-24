@@ -43,7 +43,7 @@ await ev(() => {
 
 // ---- a first dive opens in the nursery
 let s = await ev(() => { const g = window.__game, n = g.world.nursery; g.sim(3.6, window.N.none); const h = n.hoops[0], f = g.rig.forward; // once the band's title card has gone
-  return { on: g.tut.on, hoops: n.hoops.length, ahead: f.x * h.ux + f.z * h.uz, label: window.N.label(), chip: window.N.chip(), skip: !document.getElementById('btn-skip').hidden, shells: g.field.items.filter((i) => !i.taken).length, kept: [0, 1, 2, 5].map((i) => g.world.schools[i].tier).join('') }; });
+  return { on: g.tut.on, hoops: n.hoops.length, ahead: f.x * h.ux + f.z * h.uz, label: window.N.label(), chip: window.N.chip(), skip: !document.getElementById('btn-skip').hidden, shells: g.field.items.filter((i) => !i.taken && !i.kelp).length, kept: [0, 1, 2, 5].map((i) => g.world.schools[i].tier).join('') }; });
 check('a first dive opens in the nursery, facing the first hoop, with the marker on it and the swim keys shown', s.on && s.hoops === 3 && s.ahead > 0.95 && /the hoop/.test(s.label) && /W.*swim/.test(s.chip) && s.skip && s.shells === 2 && s.kept === 'sssm', JSON.stringify(s));
 s = await ev(() => { const shown = (q) => { const el = document.querySelector(q); return !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
   return { full: document.getElementById('stage').classList.contains('full'), chip: shown('#prompt .in'), skip: shown('#btn-skip'), pause: shown('#btn-pause'), marker: shown('#goal-label'), keys: shown('#keys'), tools: shown('.tools'), tuning: shown('#music-tab') }; });

@@ -193,7 +193,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.run.segs = 16; g.b
 check('an angler takes a bait within its reach and leaves the fish alone', s.seen.includes('windup') && s.seen.includes('lunge') && s.seen.includes('recover') && s.fed === 1 && s.lost === 3, JSON.stringify(s));
 
 // 8d. shells: they lie about each band, ride on a segment, change what the fish can do, and go with a bitten or shed tail
-s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.idle(0.4); const f = g.field.items, it = f[0];
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(21); T.idle(0.4); const f = g.field.items.filter((x) => !x.kelp), it = f[0]; // (the kelp forest's own shell is not one of the band's three)
   const lay = { n: f.length, kinds: new Set(f.map((x) => x.type)).size, firstNear: +Math.hypot(it.x - g.world.spawn.x, it.z - g.world.spawn.z).toFixed(1) };
   T.put(it.x, it.y + 0.4, it.z, 0); T.idle(0.2);
   const took = { worn: g.run.shells.map((x) => `${x.type}@${x.seg}`), taken: it.taken, dots: document.querySelectorAll('#scale-shells i').length, onBone: g.rig.spine[8].children.some((c) => c.isMesh), hint: document.getElementById('hint').textContent.slice(0, 40), list: document.getElementById('shell-list').textContent.length };
@@ -614,7 +614,7 @@ check('body puzzles: a capstan turned by coiling round it, four windows threaded
   && !s.vent.quick && s.vent.press > 0.1 && s.vent.press < 0.9 && s.vent.done && s.vent.t < 3 && s.vent.fed === 12 && s.vent.open === 1 && s.vent.shells === 1 && s.caches === '3', JSON.stringify(s));
 // ---- hauling: a fragment of the ruins, wrapped, carried with the body tied up, and given to the rift
 s = await ev(() => { const g = window.__game, T = window.T, out = { bands: [] };
-  for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const F = g.world.react.fragments, G = g.world.goal; out.bands.push(F.length + (F.every((x) => Math.hypot(x.x - G.x, x.z - G.z) >= 24) ? '' : '!')); }
+  for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const F = g.world.react.fragments.filter((x) => !x.kelp), G = g.world.goal; out.bands.push(F.length + (F.every((x) => Math.hypot(x.x - G.x, x.z - G.z) >= 24) ? '' : '!')); }
   try { localStorage.removeItem('oarfish.nest'); } catch {} g.nest.fragments = 0;
   g.startRun(4242); g.run.safe = 1e9; const F = g.world.react.fragments, f = F[0], r = g.world.rift, bed = (x, z) => g.world.height(x, z), lay = { x: f.x, z: f.z };
   const take = () => { T.put(f.x + 2.6, bed(f.x, f.z) + 1.6, f.z + 0.9, 1.1); T.idle(0.3); let t = 0; while (!g.run.haul && t < 14) { T.coil(0.1); t += 0.1; } return +t.toFixed(1); };
@@ -699,7 +699,7 @@ check('every rift has a mural with three carvings, dark at first: the band\u2019
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 
 // ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom).length; // (the squid's stones, bloom.js, are checked with the bloom)
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom && !c.userData.kelp).length; // (the squid's stones, bloom.js, are checked with the bloom; the box jelly's glass, kelpwood.js, with the kelp forest)
   Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
   out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
   Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());
@@ -882,12 +882,12 @@ check('bands 2 to 5 are 144 m across and the first band 204, each world saying s
 s = await ev(() => { const g = window.__game, out = [], NATURAL = /^(rock|kelp|table|tuft|pebble|star|urchin|clam|brain|seaFan|sponge|anemone)$/;
   for (const seed of [4242, 3, 11]) { g.startRun(seed); g.sim(0.1); const w = g.world, c = w.spawn, r = w.rift, L = w.size, P = w.pieces(), wild = P.filter((p) => NATURAL.test(p.name));
     const past = (x, z) => Math.max(-x, x - L, -z, z - L, 0), aside = (o) => Math.max(Math.abs(o.x - c.x), Math.abs(o.z - c.z));
-    const set = [...w.schools.map((sc) => ({ x: sc.hx, z: sc.hz })), ...w.react.puzzles, ...w.react.puzzles.map((p) => p.cache), ...w.react.fragments, w.react.mural, ...w.urns, ...g.field.items, ...g.foes.hooks].filter(Boolean); // what is set down one at a time
+    const set = [...w.schools.map((sc) => ({ x: sc.hx, z: sc.hz })), ...w.react.puzzles, ...w.react.puzzles.map((p) => p.cache), ...w.react.fragments.filter((x) => !x.kelp), w.react.mural, ...w.urns, ...g.field.items.filter((x) => !x.kelp), ...g.foes.hooks].filter(Boolean); // what is set down one at a time
     const q4 = [0, 0, 0, 0]; for (const p of wild) q4[(w.wrap(p.x - c.x) < 0 ? 0 : 1) + (w.wrap(p.z - c.z) < 0 ? 0 : 2)]++;
     out.push({ seed, size: L, pieces: P.length, outside: [...P, ...w.solids, ...set].filter((o) => past(o.x, o.z) > 10).length, worst: +Math.max(...[...P, ...w.solids, ...set].map((o) => past(o.x, o.z))).toFixed(1), // a clump may lie across the seam, no further than a reef reaches
       inRift: wild.filter((p) => r.in(p.x, p.z) > 1).length + set.filter((o) => r.in(o.x, o.z) > 0).length, // (pebbles may lie on the flat lip, which begins a metre inside the rift's line)
       perKm2: Math.round(wild.length / (L * L / 1000)), least: +(Math.min(...q4) / wild.length).toFixed(2), swarms: w.schools.filter((sc) => !sc.bloom).length, fish: w.schools.filter((sc) => !sc.bloom).reduce((a, sc) => a + sc.n, 0), // (the fry under the bells are the bloom water's, below)
-      foodOut: +Math.max(...w.schools.filter((sc) => !sc.bloom).map((sc) => aside({ x: sc.hx, z: sc.hz }))).toFixed(1), hooksOut: +Math.max(...g.foes.hooks.map(aside)).toFixed(1), mural: !!w.react.mural, puzzles: w.react.puzzles.length, fragments: w.react.fragments.length, shells: g.field.items.length }); }
+      foodOut: +Math.max(...w.schools.filter((sc) => !sc.bloom).map((sc) => aside({ x: sc.hx, z: sc.hz }))).toFixed(1), hooksOut: +Math.max(...g.foes.hooks.map(aside)).toFixed(1), mural: !!w.react.mural, puzzles: w.react.puzzles.length, fragments: w.react.fragments.filter((x) => !x.kelp).length, shells: g.field.items.filter((x) => !x.kelp).length }); } // (the kelp forest's own shell and fragment are not the band's count)
   return out; });
 check('in the first band nothing stands outside the square or in the rift; it is as thickly grown as it was at 144 m (about 150 pieces of natural dressing to a thousand square metres, in every quarter); and its nine swarms and its hooks live no further from the start than they did',
   s.every((o) => o.size === 204 && o.outside === 0 && o.inRift === 0 && o.perKm2 > 135 && o.perKm2 < 165 && o.least > 0.1 && o.swarms === 9 && o.fish === 182 && o.foodOut <= 72 && o.hooksOut <= 72 && o.mural && o.puzzles === 3 && o.fragments === 2 && o.shells === 3), JSON.stringify(s));
@@ -1068,6 +1068,61 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
   const bad = Object.entries(fail).filter(([, v]) => v.length);
   check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
     !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
+
+// ---- the kelp forest's life (kelpwood.js): one box jelly in the clearing that sees the body, a shell under its patrol, and a fragment in the nook
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; T.idle(0.2); const k = g.kelp, C = k.plan.clearing, N = k.plan.nook, o = k.debug.off, it = k.shell, f = k.find;
+  const have = new Set(g.field.items.filter((x) => x !== it).map((x) => x.type)); let near = 99, far = 0; for (let t = 0; t < 40; t += 0.5) { T.idle(0.5); const d = Math.hypot(k.box.pos.x - C.x, k.box.pos.z - C.z); near = Math.min(near, d); far = Math.max(far, d); }
+  return { kelp: !!k, at: +Math.hypot(it.x - C.x, it.z - C.z).toFixed(2), type: it.type, pool: g.run.pool.includes(it.type), twice: have.has(it.type), inField: g.field.items.includes(it), own: g.field.items.filter((x) => !x.kelp).length,
+    find: g.world.react.fragments.includes(f) && f.kelp && Math.hypot(f.x - N.x, f.z - N.z) < 0.01, frags: g.world.react.fragments.filter((x) => !x.kelp).length, near: +near.toFixed(2), far: +far.toFixed(2), roam: g.KELPWOOD.jelly.roam }; });
+check('the kelp forest has its life: a shell in the middle of the clearing, a kind from this dive\'s pool and not one already lying about; a fragment of the ruins in the nook, among the band\'s fragments to be hauled; the band\'s own three shells and two fragments as before; the box jelly patrols across the middle of the clearing and keeps to it',
+  s.kelp && s.at < 0.01 && s.pool && !s.twice && s.inField && s.own === 3 && s.find && s.frags === 2 && s.near < 1 && s.far < s.roam, JSON.stringify(s));
+// it sees: a body that comes up on one side of it turns it away, and held at a few metres it is herded out of the middle, never touched
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.segs = 12; g.buildFish(12); g.run.safe = 1e9; T.idle(0.2); const k = g.kelp, C = k.plan.clearing, o = k.debug.off, a = k.plan.axis;
+  k.debug.put(C.x, C.z, Math.atan2(a.uz, -a.ux)); T.idle(0.3); const yaw0 = k.box.yaw;
+  T.put(C.x - a.ux * 7 + o.x, k.box.pos.y, C.z - a.uz * 7 + o.z, Math.atan2(a.ux, a.uz)); g.run.safe = 0; g.run.hush = 0; const segs = g.run.segs, modes = new Set(); let away = 0;
+  for (let t = 0; t < 14; t += 0.5) { const dx = k.box.pos.x + o.x - g.rig.snout.x, dz = k.box.pos.z + o.z - g.rig.snout.z, d = Math.hypot(dx, dz);
+    g.sim(0.5, d < 3.4 ? T.none() : { ...T.none(), dir: { x: dx / d, y: 0, z: dz / d }, gentle: true, vertical: Math.max(-1, Math.min(1, (k.box.pos.y - g.rig.pos.y) * 1.5)) }); modes.add(k.box.mode);
+    if (k.box.mode === 'shy') away = Math.max(away, Math.cos(k.box.yaw - Math.atan2(a.ux, a.uz))); }
+  g.run.safe = 1e9; return { out: +Math.hypot(k.box.pos.x - C.x, k.box.pos.z - C.z).toFixed(1), shy: modes.has('shy'), away: +away.toFixed(2), stings: k.state.stings, lost: segs - g.run.segs, turned: +Math.abs(Math.atan2(Math.sin(k.box.yaw - yaw0), Math.cos(k.box.yaw - yaw0))).toFixed(2) }; });
+check('the box jelly sees: a body coming up on one side of it turns it away from the body (it heads the way the body pushes), and a fish that keeps a few metres off herds it out of the middle of the clearing without once being stung',
+  s.shy && s.away > 0.7 && s.out > 3.5 && s.stings === 0 && s.lost === 0, JSON.stringify(s));
+// the sting: counted by how much of the body touches the tentacles as they are drawn, as the table says and no more; never below `keep`; never the end
+s = await ev(() => { const g = window.__game, T = window.T, J = g.KELPWOOD.jelly, ST = J.sting, table = (n) => (n >= ST.more[1] ? ST.cost[2] : n >= ST.more[0] ? ST.cost[1] : ST.cost[0]);
+  const pass = (how, segs = 14) => { g.startRun(4242); g.run.segs = segs; g.buildFish(segs); g.run.safe = 1e9; T.idle(0.2); const k = g.kelp, C = k.plan.clearing, o = k.debug.off, a = k.plan.axis;
+    k.debug.put(C.x, C.z, Math.atan2(a.ux, a.uz), 'patrol'); T.idle(2.5); k.box.held = { speed: J.patrol.speed, mood: 'drift', rate: J.patrol.beat }; // (held where it is going, so that the fish meets it as placed)
+    const tips = k.box.strands.map((st) => st.st.joints[st.st.joints.length - 1]), tip = tips.reduce((m, p) => ({ x: m.x + p.x / tips.length, y: m.y + p.y / tips.length, z: m.z + p.z / tips.length }), { x: 0, y: 0, z: 0 });
+    const bell = { x: k.box.pos.x + o.x, y: k.box.pos.y, z: k.box.pos.z + o.z }, mid = { x: (bell.x + tip.x) / 2, y: (bell.y + tip.y) / 2, z: (bell.z + tip.z) / 2 }, side = { x: Math.cos(k.box.yaw), z: -Math.sin(k.box.yaw) };
+    if (how === 'along') T.put(bell.x * 0.85 + tip.x * 0.15, Math.max(bell.y * 0.6 + tip.y * 0.4, g.world.height(bell.x, bell.z) + 1.5), bell.z * 0.85 + tip.z * 0.15, Math.atan2(bell.x - tip.x, bell.z - tip.z));
+    else T.put(mid.x - side.x * 5, mid.y, mid.z - side.z * 5, Math.atan2(side.x, side.z));
+    T.idle(0.02); g.run.safe = 0; g.run.hush = 0; const was = g.run.segs, st0 = k.state.stings;
+    if (how === 'along') g.sim(1.2, { ...T.none(), amount: 0 }); else g.sim(3, { ...T.none(), dir: side, amount: 1 });
+    const L = k.state.last || { count: 0 }; g.run.safe = 1e9;
+    return { how, segs, lost: was - g.run.segs, stings: k.state.stings - st0, count: L.count, table: table(L.count), state: g.run.state, rest: k.box.rest > 0, flee: k.box.mode }; };
+  return [pass('across'), pass('along'), pass('across', ST.keep), pass('along', ST.keep + 1)]; });
+{ const [x, al, xs, as] = s, ST = await ev(() => window.__game.KELPWOOD.jelly.sting);
+  check('a box jelly\'s sting is counted by how much of the body touches its tentacles as they are drawn, as the table says and no more: crossing them costs less than lying along them, the most is more than a sea nettle\'s; a body at six segments loses nothing and one at seven loses one; the dive goes on, it stings nothing more for a while, and it jets away',
+    x.stings === 1 && x.lost === x.table && al.stings === 1 && al.lost === al.table && al.lost > x.lost && Math.max(...ST.cost) > 2 && xs.stings === 1 && xs.lost === 0 && as.lost === Math.min(as.table, 1) && s.every((p) => p.state === 'play' && p.rest && p.flee === 'stung'), JSON.stringify(s)); }
+// the shell taken with the jelly herded away: a clean take, kept in the nest and shown there; Empty the nest forgets it
+s = await ev(() => { const g = window.__game, T = window.T; try { localStorage.removeItem('oarfish.nest'); } catch {} g.nest.kelp = null;
+  g.startRun(4242); g.run.safe = 1e9; T.idle(0.2); const k = g.kelp, C = k.plan.clearing, o = k.debug.off, a = k.plan.axis, it = k.shell, worn = () => g.run.shells.map((x) => x.type);
+  k.debug.put(C.x + a.uz * 6.5, C.z - a.ux * 6.5, 0); k.box.held = { speed: 0, mood: 'drift', rate: 0.6 }; T.idle(0.5);
+  T.put(C.x - a.ux * 5 + o.x, it.y + 0.3, C.z - a.uz * 5 + o.z, Math.atan2(a.ux, a.uz)); g.run.safe = 0; g.run.hush = 0; T.toward({ x: it.x + o.x, y: it.y + 0.3, z: it.z + o.z }, 6);
+  T.idle(0.3); const r = g.run.kelp, stored = JSON.parse(localStorage.getItem('oarfish.nest') || '{}').kelp, mark = k.debug.mark?.userData;
+  g.startRun(4242); T.idle(0.2); const again = g.kelp.debug.mark?.userData;
+  document.getElementById('dev-forget').click(); const forgot = { nest: g.nest.kelp, stored: JSON.parse(localStorage.getItem('oarfish.nest') || '{}').kelp ?? null };
+  g.startRun(4242); T.idle(0.2); const after = g.kelp.debug.mark?.userData; g.run.safe = 1e9;
+  return { taken: it.taken, worn: worn().length >= 0 && r && r.stings === 0, r, stored, mark, again, forgot, after }; });
+check('the shell under the box jelly\'s patrol is taken like any shell; taken with no sting it is a clean take, kept in the nest as a best and shown there (a lit glass box) in the next dive; Empty the nest forgets it',
+  s.taken && s.r && s.r.stings === 0 && s.r.best && s.stored && s.stored.stings === 0 && s.mark?.clean && s.again?.clean && s.forgot.nest === null && s.forgot.stored === null && s.after && !s.after.lit, JSON.stringify(s));
+// the nook's fragment is hauled as the band's own are
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; T.idle(0.2); const k = g.kelp, f = k.find, o = k.debug.off, bed = (x, z) => g.world.height(x, z);
+  T.put(f.x + o.x + 2.6, bed(f.x, f.z) + 1.6, f.z + o.z + 0.9, 1.1); T.idle(0.3); let t = 0; while (!g.run.haul && t < 14) { T.coil(0.1); t += 0.1; }
+  return { held: g.run.haul === f && f.held, t: +t.toFixed(1) }; });
+check('the fragment in the kelp forest\'s nook is taken up by going round it, as the band\'s own are', s.held, JSON.stringify(s));
+// the lighter forest moved nothing else: every piece of band 1 that is not giant kelp, every solid, site, swarm, jar and fragment, the quiet side's plan and the run of chance, as at 26b7785
+{ const { kelpLayout } = await import('./kelp_fn.mjs'); const r = await kelpLayout();
+  check('the kelp forest made lighter moved nothing else in the first band: in ten worlds every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
+    r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
 await page.close();
 
