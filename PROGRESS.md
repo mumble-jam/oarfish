@@ -37,5 +37,7 @@ Running notes so someone else can take over. Brief: make the Keeper's hit model 
 - [x] B6 checks in test_boss.mjs (Keeper made tall); test_game keeperKit updated.
 - [x] Notes in CLAUDE.md.
 - tools/shot_tall.mjs; old-crab picture: OARFISH_SRC=/home/claude/oarfish-keeper-a (detached keeper-shapes) node tools/shot_tall.mjs old size
-- Next: all five suites on keeper-tall, /home/claude/keeper-tall-sheet.jpg, hand-back.
+- [x] All five suites on keeper-tall (final): game, boss, teach, library, controls all passed. keeper-shapes head b1e68fa re-run: game and boss passed (teach, library, controls passed one commit earlier; the last commit only added notes, a tool and a debug helper).
+- [x] /home/claude/keeper-tall-sheet.jpg
+- Done; handed back. Not played by a person.
 - Traps met: a comment pasted into the middle of a line swallows the code after it (happened three times: crab.js numb pose, guards.js ring, test helpers). Lost legs are bait now: a check that tears legs and then wants the crab idle must clear them (`b.bait.life = 0`). Each B check starts its own dive (startRun) because torn legs persist.
