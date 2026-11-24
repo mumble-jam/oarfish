@@ -36,7 +36,8 @@ import { rng, clamp, lerp, damp, glowTexture } from './geo.js';
 
 // ---------------------------------------------------------------- every number, in one place
 export const SANDFLAT = {
-  wake: 46, // how near (m, to the place's middle) the fish has to be for anything here to be worked out; past it, all is still
+  wake: 46,
+  pale: [1.11, 1.09, 1.13], // the creatures' own patches of sand are the bed's sand; the flat's is paler (world.js, paleA and paleB): this much paler // how near (m, to the place's middle) the fish has to be for anything here to be worked out; past it, all is still
   // THE EELS. ring: patches of twenty in hex rings `apart` metres apart, kept `keep` inside the rim. The fright: an eel goes all the way down when any
   // part of the body is nearer than `near` metres (3D, from a point `lift` over its hole), and `near` is `calm` m + `per` m for every m/s the body's
   // "noise" is over `quiet` m/s. Noise: the body's speed, plus `jerk` times how hard it speeds up or slows down, and `dash` while it dashes. Between
@@ -97,6 +98,7 @@ export function createSandflat(scene, world, hooks) {
   const root = new THREE.Group(); root.name = 'sandflat'; scene.add(root); // everything here, in the band's first copy; moved to the copy the fish is in
   const owned = [], made = [], own = (o) => { owned.push(o); return o; };
   const mk = (id) => { const a = make(id); made.push(a); root.add(a.object); return a; };
+  const pale = (a) => a.body.material.color.setRGB(...SANDFLAT.pale); // a patch of sand brought to the flat's paler sand, so it does not show as a disc
   const glow = own(glowTexture());
   const off = { x: 0, z: 0 }, J = [], head = new THREE.Vector3();
   const r = rng((hooks.seed | 0) * 977 + 71503); // the crabs' shells, and nothing else
@@ -111,7 +113,7 @@ export function createSandflat(scene, world, hooks) {
   const patches = [];
   { const spots = [[0, 0]]; for (let ring = 1; ring < 4; ring++) for (let k = 0; k < 6; k++) for (let s = 0; s < ring; s++) { const a = (k / 6) * TAU, b = ((k + 1) / 6) * TAU, u = s / ring;
       const x = ring * E.apart * lerp(Math.sin(a), Math.sin(b), u), z = ring * E.apart * lerp(Math.cos(a), Math.cos(b), u); if (Math.hypot(x, z) <= M.r - E.keep) spots.push([x, z]); }
-    spots.forEach(([dx, dz], i) => { const a = mk('gardeneel'), turn = i * 2.39996, x = M.x + dx, z = M.z + dz; a.object.position.set(x, world.drawn(x, z) + 0.008, z); a.object.rotation.y = turn; a.object.updateMatrix();
+    spots.forEach(([dx, dz], i) => { const a = mk('gardeneel'); pale(a); const turn = i * 2.39996, x = M.x + dx, z = M.z + dz; a.object.position.set(x, world.drawn(x, z) + 0.008, z); a.object.rotation.y = turn; a.object.updateMatrix();
       const k = a.object.scale.x, c = Math.cos(turn), s = Math.sin(turn);
       const eels = a.rig.eels.map((e) => ({ x: x + (e.x * c + e.z * s) * k, z: z + (-e.x * s + e.z * c) * k, down: false, passed: false }));
       patches.push({ a, x, z, turn, eels, want: (j) => eels[j].want ?? 1 }); }); }
@@ -203,7 +205,7 @@ export function createSandflat(scene, world, hooks) {
       if (c.old && c.old.mode === 'lying' && !c.handed) { c.handed = true; const at = shellAt(c.old), kind = c.old.kind; c.old.mode = 'off'; c.old.mesh.visible = false; c.old = null;
         const next = crabs[i + 1];
         if (next) { next.a.rig.lay(spareOf(next), kind, at.x, at.z, lineYaw + Math.PI, ground, c.k / next.k); next.phase = 'probe'; next.t = 0; }
-        else { hooks.drop(at.x, at.z, kind); m.trades++; m.last = { given: busy?.given, got: kind, time: +(t - (busy?.at ?? t)).toFixed(1) }; m.busy = null; hooks.moment('cache'); note('trade', m.last); } }
+        else { hooks.drop(at.x, at.z, kind); m.trades++; m.last = { given: busy?.given, got: kind, time: +(t - (busy?.at ?? t)).toFixed(1), x: at.x, z: at.z }; m.busy = null; hooks.moment('cache'); note('trade', m.last); } }
       c.yaw = turnTo(c.yaw, c.want, (c.phase === 'turn' || c.phase === 'back' ? Math.PI / K.turn : 2) * dt);
       R.update(dt, { x: c.pos.x, z: c.pos.z, yaw: c.yaw, vx: 0, vz: 0, ground, time: t + i * 1.7, in: inn, peer, act, look, at: aim });
     });
@@ -220,7 +222,7 @@ export function createSandflat(scene, world, hooks) {
   const heapGeo = own(new THREE.ConeGeometry(1, 1, 9, 1)), heapMat = own(new THREE.MeshLambertMaterial({ color: sandCol, flatShading: true, emissive: '#fff6dc', emissiveIntensity: 0.12 }));
   const puffGeo = own(new THREE.IcosahedronGeometry(B.puff, 0)), puffMat = own(new THREE.MeshLambertMaterial({ color: '#f7f2dc', flatShading: true, transparent: true, opacity: 0.9, depthWrite: false, emissive: '#fffbe8', emissiveIntensity: 0.25 }));
   state.burrows = S.burrows.map((spot, i) => {
-    const a = mk('burrow'); a.object.scale.multiplyScalar(B.scale); const face = yawTo(S.x - spot.x, S.z - spot.z) + 0.6;
+    const a = mk('burrow'); pale(a); a.object.scale.multiplyScalar(B.scale); const face = yawTo(S.x - spot.x, S.z - spot.z) + 0.6;
     a.object.position.set(spot.x, world.drawn(spot.x, spot.z) + 0.008, spot.z); a.object.rotation.y = face; a.object.updateMatrix();
     const inv = new THREE.Matrix4().copy(a.object.matrix).invert();
     const heapAt = new THREE.Vector3(Math.cos(-0.5), 0, Math.sin(-0.5)).multiplyScalar(0.18).applyMatrix4(a.object.matrix); // beside the hole, on the heap's side (BURROW.heap is near this)
@@ -271,6 +273,7 @@ export function createSandflat(scene, world, hooks) {
   save();
   const stageOf = (p) => { const st = CI.stages, i = Math.min(st.length - 2, Math.floor(p)), u = clamp(p - i, 0, 1); return lerp(st[i], st[i + 1], u); };
   const circ = mk('sandcircle'), site = sites[C0.site]; circ.object.scale.multiplyScalar(CI.scale); circ.object.position.set(site.x, world.drawn(site.x, site.z) + 0.01, site.z); circ.object.rotation.y = C0.site * 0.7; circ.object.updateMatrix();
+  circ.rig.update(0, { stage: stageOf(C0.p) }); // (drawn at its stage from the first, even from far off)
   const RC = (CIRCLE.R + 0.1) * circ.object.scale.x; // the circle's radius in the world
   let old = null; if (C0.left >= 0 && C0.left !== C0.site) { old = mk('sandcircle'); const o = sites[C0.left]; old.object.scale.multiplyScalar(CI.scale); old.object.position.set(o.x, world.drawn(o.x, o.z) + 0.005, o.z); old.object.rotation.y = C0.left * 0.7; old.rig.update(0, { stage: 1.3 }); }
   const fish = mk('puffer'); fish.object.scale.multiplyScalar(CI.fish);

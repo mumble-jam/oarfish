@@ -293,3 +293,11 @@ for (const spec of [
     build: (pal) => model.sandCircle(pal), assemble(a, pal) { circleRig(a, pal); },
     states: [{ id: 'build', name: 'Being built, from nothing', speed: 0 }, { id: 'ring', name: 'The first ring', speed: 0 }, { id: 'valleys', name: 'Valleys ploughed', speed: 0 }, { id: 'ridges', name: 'Ridges sharpened', speed: 0 }, { id: 'done', name: 'Finished, shells on the peaks', speed: 0 }, { id: 'left', name: 'Left, flattening', speed: 0 }] },
 ]) { NPCS.push(spec); NPC[spec.id] = spec; }
+// Four of them now live at the sand flat in the first band (sandflat.js): company, each with a rule of its own and paying in something other than fish
+for (const [id, role] of Object.entries({
+  gardeneel: 'Not food, and no danger. A colony fills the old cistern rim on the sand flat; each eel sinks into its hole when something comes near fast, and rises again when it is quiet. Cross the meadow slowly and smoothly enough that none goes all the way down: the best crossing is kept in the nest.',
+  hermit: 'Not food, and no danger. A line of four waits at a market table on the sand flat, each in one of your kinds of shell. Lie across the table, still, and the shell on that part of you slides off to them; the line moves up one house each, and the smallest crab’s old shell is yours. Twice a dive.',
+  burrow: 'Not food, and no danger. Two pairs keep burrows on the sand flat. Come in fast and both vanish for a while; hold still near by and the shrimp goes on digging, and after a while pushes up a shell fragment for you to carry.',
+  puffer: 'Not food, and no danger. It ploughs a circle on the sand flat, a stage further each dive. Shell fragments carried over it are set on its ridges and hurry it on; a careless body flattens it. Finished, its middle is calm: rest there and your breath comes back, and the nest remembers it.',
+  sandcircle: 'The puffer’s work on the sand flat, a stage further each dive, kept in the nest between dives. A new one is begun beside the last when it is done.',
+})) Object.assign(NPC[id], { group: 'Company', bands: [0], role });
