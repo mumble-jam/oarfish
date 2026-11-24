@@ -26,8 +26,23 @@ await page.addInitScript(() => { window.__noNursery = true;
   // a stand-in for the browser's device access: one DualSense on a cable, on current firmware, that the player may pick
   window.hidSent = []; window.hidPick = true;
   const fw = new DataView(new ArrayBuffer(64)); fw.setUint8(0, 0x20); fw.setUint16(44, 0x0224, true);
-  const sense = { vendorId: 0x054c, productId: 0x0ce6, opened: false, collections: [{ outputReports: [{ reportId: 2 }] }], async open() { sense.opened = true; }, async sendReport(id, data) { window.hidSent.push([id, Array.from(data)]); }, async receiveFeatureReport() { return fw; } };
-  Object.defineProperty(Navigator.prototype, 'hid', { configurable: true, get: () => ({ getDevices: async () => [], requestDevice: async () => (window.hidPick ? [sense] : []), addEventListener() {} }) });
+  const sense = { vendorId: 0x054c, productId: 0x0ce6, productName: 'DualSense Wireless Controller', opened: false, collections: [{ outputReports: [{ reportId: 2 }] }], async open() { sense.opened = true; }, async sendReport(id, data) { window.hidSent.push([id, Array.from(data)]); }, async receiveFeatureReport() { return fw; },
+    heard: new Set(), addEventListener(type, f) { if (type === 'inputreport') sense.heard.add(f); }, removeEventListener(type, f) { if (type === 'inputreport') sense.heard.delete(f); } };
+  // it also sends what its buttons and sticks are doing, in any of its three layouts: over a cable (report 1, 63 bytes), over Bluetooth
+  // in full mode (report 0x31, a tag byte and then the same block) and over Bluetooth in simple mode (report 1, 9 bytes, shorter layout)
+  window.hidInput = (layout, st = {}) => {
+    const on = new Set(st.btn || []), bit = (name, m) => (on.has(name) ? m : 0);
+    const b0 = (st.hat ?? 8) | bit('square', 0x10) | bit('cross', 0x20) | bit('circle', 0x40) | bit('triangle', 0x80);
+    const b1 = bit('l1', 1) | bit('r1', 2) | bit('l2', 4) | bit('r2', 8) | bit('create', 0x10) | bit('options', 0x20) | bit('l3', 0x40) | bit('r3', 0x80), b2 = bit('ps', 1) | bit('touchpad', 2);
+    const sticks = [st.lx ?? 128, st.ly ?? 128, st.rx ?? 128, st.ry ?? 128], lt = st.l2 ?? 0, rt = st.r2 ?? 0;
+    let id, d;
+    if (layout === 'simple') { id = 1; d = new Uint8Array(9); d.set(sticks, 0); d.set([b0, b1, b2, lt, rt], 4); }
+    else { const at = layout === 'bluetooth' ? 1 : 0; id = at ? 0x31 : 1; d = new Uint8Array(at ? 77 : 63); if (at) d[0] = 0x10; d.set([...sticks, lt, rt, 7, b0, b1, b2], at); }
+    for (const f of [...sense.heard]) f({ device: sense, reportId: id, data: new DataView(d.buffer) });
+  };
+  window.hidRemembered = false; window.hidHeard = [];
+  Object.defineProperty(Navigator.prototype, 'hid', { configurable: true, get: () => ({ getDevices: async () => (window.hidRemembered ? [sense] : []), requestDevice: async () => (window.hidPick ? [sense] : []), addEventListener(type, f) { window.hidHeard.push([type, f]); } }) });
+  window.hidUnplug = () => { for (const [type, f] of window.hidHeard) if (type === 'disconnect') f({ device: sense }); };
 });
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
@@ -267,6 +282,45 @@ check('“Connect DualSense motors” asks the browser for the controller, buzze
   s.shown && /No controller was picked/.test(s.none) && /Connected \(cable, current firmware\)/.test(s.msg) && /connected/.test(s.label) && s.n >= 2 && s.first[0] === 2 && s.first[1][0] === 2 && s.first[1][38] === 4 && s.first[1][2] > 100 && s.first[1][3] > 100 && s.last[1][2] === 0 && s.last[1][3] === 0 && s.motors && /spoken to directly/.test(s.report), JSON.stringify({ ...s, first: s.first && s.first[1].slice(0, 5), last: s.last && s.last[1].slice(0, 5) }));
 s = await ev(async () => { const g = window.__game; window.hidSent.length = 0; g.pad.rumble(0.5, 0.25, 60); g.pad.rumble(0.9, 0.1, 60); await new Promise((r) => setTimeout(r, 400)); return window.hidSent.map((r) => [r[1][3], r[1][2]]); });
 check('once connected, every vibration the game plays goes down the direct line too, and each one ends', s.length >= 2 && s.some((r) => r[0] === 230 && r[1] === 26) && s[s.length - 1].join() === '0,0', JSON.stringify(s));
+// ...and from then on its buttons and sticks are read from the controller itself, since the browser's own entry for it freezes
+s = await ev(async () => { const g = window.__game, pad = g.pad, wait = (ms) => new Promise((r) => setTimeout(r, ms)), fake = window.fakePad;
+  const home = g.rig.pos.clone(), heading = g.rig.yaw; // the presses below run the dive for a moment: the fish is put back after
+  let n = 0; const p0 = pad.poll; pad.poll = () => { const st = p0(); if (pad.pressed(9)) n++; return st; }; // every time Options goes down, as the game sees it
+  const press = (L) => { const before = g.paused; n = 0; window.hidInput(L, {}); g.sim(0.05); window.hidInput(L, { btn: ['options'] }); g.sim(0.05); g.sim(0.05); window.hidInput(L, {}); g.sim(0.05); return { n, flipped: g.paused !== before }; };
+  const out = { layouts: {} };
+  for (const L of ['cable', 'bluetooth', 'simple']) {
+    const once = press(L);
+    window.hidInput(L, { lx: 255, ly: 0, r2: 204, hat: 2, btn: ['cross', 'ps', 'touchpad'] }); g.sim(0.05);
+    const st = pad.state, felt = { lx: +st.lx.toFixed(2), ly: +st.ly.toFixed(2), r2: +pad.value(7).toFixed(2), right: pad.held(15), up: pad.held(12), cross: pad.held(0), circle: pad.held(1), ps: pad.held(16), pad: pad.held(17) };
+    window.hidInput(L, {}); g.sim(0.05);
+    out.layouts[L] = { ...once, felt, reading: pad.direct.reading, layout: pad.direct.layout, connected: st.connected };
+  }
+  // the browser's frozen entry for the same controller, stuck on a button and a stick, is passed over while the controller speaks
+  fake.buttons[2] = { pressed: true, value: 1 }; fake.axes[0] = -1; window.hidInput('cable', {}); g.sim(0.05);
+  out.frozen = { square: pad.held(2), lx: pad.state.lx, name: pad.state.name };
+  fake.buttons[2] = { pressed: false, value: 0 }; fake.axes[0] = 0;
+  // a second controller held at the same time still counts, and a press on it counts once
+  const xbox = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', index: 1, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
+  Object.defineProperty(navigator, 'getGamepads', { value: () => [fake, xbox, null, null], configurable: true });
+  window.hidInput('cable', {}); g.sim(0.05); n = 0; const before = g.paused; xbox.buttons[9] = { pressed: true, value: 1 }; window.hidInput('cable', {}); g.sim(0.1); xbox.buttons[9] = { pressed: false, value: 0 }; window.hidInput('cable', {}); g.sim(0.05);
+  xbox.axes[2] = 1; window.hidInput('cable', { btn: ['triangle'] }); g.sim(0.05);
+  out.second = { n, flipped: g.paused !== before, rx: +pad.state.rx.toFixed(2), triangle: pad.held(3) }; xbox.axes[2] = 0; window.hidInput('cable', {}); g.sim(0.05);
+  Object.defineProperty(navigator, 'getGamepads', { value: () => [fake, null, null, null], configurable: true });
+  // vibration still goes down the line while it is being read
+  window.hidSent.length = 0; pad.rumble(0.5, 0.25, 60); await wait(250); out.rumble = window.hidSent.map((r) => [r[0], r[1][3], r[1][2]]);
+  // no reports for a while: the browser's entry is read again, and the menu says so
+  await wait(350); g.sim(0.05); fake.buttons[2] = { pressed: true, value: 1 }; g.sim(0.05);
+  out.quiet = { reading: pad.direct.reading, status: pad.direct.status, square: pad.held(2), msg: document.getElementById('rumble-msg').textContent }; fake.buttons[2] = { pressed: false, value: 0 }; g.sim(0.05);
+  // unplugged: the line closes, a stray report changes nothing; a later visit takes the remembered controller up again and reads it
+  window.hidUnplug(); g.sim(0.05); window.hidInput('cable', { btn: ['circle'] }); g.sim(0.05);
+  out.unplugged = { connected: pad.direct.connected, reading: pad.direct.reading, circle: pad.held(1), msg: document.getElementById('rumble-msg').textContent };
+  window.hidRemembered = true; const back = await pad.direct.resume(); out.resumed = { back, ...press('simple'), reading: pad.direct.reading };
+  window.hidRemembered = false; pad.poll = p0; if (!g.paused) g.setPaused(true); window.T.put(home.x, home.y, home.z, heading);
+  await wait(350); g.sim(0.05); return out; });
+{ const L = s.layouts, ok = (r) => r.n === 1 && r.flipped && r.reading && r.connected && r.felt.lx === 0.71 && r.felt.ly === -0.71 && Math.abs(r.felt.r2 - 0.8) < 0.01 && r.felt.right && !r.felt.up && r.felt.cross && !r.felt.circle && r.felt.ps && r.felt.pad;
+  check('once connected, the DualSense is read from itself over a cable, over Bluetooth and in Bluetooth’s simple mode: each press reaches the game once, the sticks, triggers and D-pad as before', ok(L.cable) && ok(L.bluetooth) && ok(L.simple) && L.cable.layout === 'cable' && L.bluetooth.layout === 'bluetooth' && L.simple.layout === 'simple', JSON.stringify(L));
+  check('...its frozen entry in the browser is passed over, a second controller still counts (once), and vibration still goes out', !s.frozen.square && s.frozen.lx === 0 && /DualSense/.test(s.frozen.name) && s.second.n === 1 && s.second.flipped && s.second.rx === 1 && s.second.triangle && s.rumble.some((r) => r[0] === 2 && r[1] === 128 && r[2] === 64) && s.rumble[s.rumble.length - 1].slice(1).join() === '0,0', JSON.stringify({ frozen: s.frozen, second: s.second, rumble: s.rumble }));
+  check('...when it goes quiet the browser is read again and the menu says so; unplugged it is let go; remembered on a later visit it is read again', !s.quiet.reading && s.quiet.status === 'stopped' && s.quiet.square && /stopped sending/.test(s.quiet.msg) && !s.unplugged.connected && !s.unplugged.reading && !s.unplugged.circle && /unplugged/.test(s.unplugged.msg) && s.resumed.back && s.resumed.n === 1 && s.resumed.flipped && s.resumed.reading, JSON.stringify({ quiet: s.quiet, unplugged: s.unplugged, resumed: s.resumed })); }
 await page.waitForTimeout(350); await page.keyboard.press('KeyP');
 s = await ev(() => { const g = window.__game; window.tap(9); const p1 = g.paused; const f0 = document.activeElement?.id; window.tap(13); const f1 = document.activeElement?.id; window.tap(12); const f2 = document.activeElement?.id; window.tap(0); const p2 = g.paused;
   window.tap(8); const full1 = g.ui.full; window.tap(8); return { p1, f0, f1, f2, p2, full1, full2: g.ui.full }; });

@@ -1400,9 +1400,15 @@ export async function start(saved = {}) {
       const say = (t) => { $('rumble-msg').textContent = t; };
       const got = pad.direct.connected ? 'connected' : await pad.direct.connect();
       directName();
-      if (got === 'connected') { pad.rumble(0.7, 0.7, 220); return say(`Connected (${pad.direct.how}): you should have felt one short buzz. The game drives the motors itself from now on, and the browser will remember the controller. If you felt nothing, close Steam or anything else that manages the controller and press this again.`); }
+      if (got === 'connected') { pad.rumble(0.7, 0.7, 220); return say(`Connected (${pad.direct.how}): you should have felt one short buzz. The game drives the motors itself from now on, and reads the buttons and sticks straight from the controller too; the browser will remember it. If you felt nothing, close Steam or anything else that manages the controller and press this again.`); }
       say({ none: 'No controller was picked. In the browser’s list choose the one called DualSense or Wireless Controller, then press Connect.', blocked: 'This is a preview inside another page, and the browser does not let those reach devices. It works on the game’s own page.', unsupported: 'This browser cannot do this. Chrome and Edge can.', failed: `The controller would not open: ${pad.direct.trouble || 'no reason given'}. Close Steam, DS4Windows or anything else that manages the controller, and try again.` }[got] || `The browser answered: ${got}.`);
     });
+    // once the page holds the controller it reads the buttons from it (pad.js): say so when that changes, so the lines above stay true
+    pad.direct.onstatus = (now, was) => { const say = (t) => { $('rumble-msg').textContent = t; stir(); }; directName();
+      if (now === 'reading' && was !== 'waiting') say(`Connected (${pad.direct.how}): the game ${was === 'stopped' ? 'reads the buttons and sticks straight from the controller again' : 'now reads the buttons and sticks straight from the controller'}.`);
+      else if (now === 'stopped') say(`Connected (${pad.direct.how}), but the controller has stopped sending its buttons to the page, so the game reads it through the browser again. If the buttons do nothing, unplug it, plug it back in and press this button.`);
+      else if (now === 'silent') say(`Connected (${pad.direct.how}) for the motors, but the controller has not sent its buttons to the page, so the game reads them through the browser as before.`);
+      else if (now === 'off' && was !== 'waiting') say('The controller was unplugged or let go: the game reads controllers through the browser again. Press this button to connect the motors again.'); };
     pad.direct.resume().then(directName);
   }
   const toggle = (id, key, apply) => {
