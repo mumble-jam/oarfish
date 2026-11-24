@@ -660,9 +660,9 @@ check('swarms have tempers, the same in every dive: one bolts straight up when c
 s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
   out.bands = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const S = g.world.react.stations; out.bands.push(S.length + (S.every((x) => g.foes.biters.filter((b) => Math.hypot(b.pos.x - x.x, b.pos.z - x.z) < C.call).length >= 2) ? '' : '!')); }
   g.startRun(4242); g.enterFloor(1, false); g.run.safe = 0; g.sim(0.1, T.none());
-  const st = g.world.react.stations[0], segs = g.run.segs, over = () => { T.put(st.x, st.top + 1.2, st.z - 1.0, 0); }, round = () => g.foes.biters.filter((b) => b.state === 'circle'), far = () => round().map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz));
+  const st = g.world.react.stations[0], segs = g.run.segs, over = () => { const was = g.run.safe; g.run.safe = 1e9; T.aroundPoint(st.x, st.top + 1.2, st.z, 0); T.coil((g.rig.length + 0.8) / 1.6); g.run.safe = was; for (const b of g.foes.biters) { b.pos.copy(b.home); b.vel.set(0, 0, 0); b.state = 'roam'; } }, /* the whole body curled inside the ring: a coil round its middle */ round = () => g.foes.biters.filter((b) => b.state === 'circle'), far = () => round().map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz));
   // broken off: a start, the hunters come, then the head leaves and nothing is given
-  over(); g.sim(2.5, still); const k1 = +st.k.toFixed(2), came = round().length; T.put(st.x + 30, st.top + 1.2, st.z, 0); g.sim(2, still); out.broke = { k1, came, k: st.k, segs: g.run.segs - segs, uses: st.uses, truce: round().length };
+  over(); g.sim(3, still); const k1 = +st.k.toFixed(2), came = round().length; T.put(st.x + 30, st.top + 1.2, st.z, 0); g.sim(2, still); out.broke = { k1, came, k: st.k, segs: g.run.segs - segs, uses: st.uses, truce: round().length };
   // held to the end
   over(); g.foes.biters.forEach((b) => { b.cool = 0; }); let t = 0, most = 0, ring0 = 0; const news = [];
   while (st.uses === C.uses && t < 12) { g.sim(0.1, still); t += 0.1; most = Math.max(most, round().length); if (Math.abs(t - 1.5) < 0.05) ring0 = Math.min(...far()); }
@@ -1072,7 +1072,7 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
 // ---- the reef head's life (reef.js): its station mends and does not feed, its trumpetfish ride and take, its coral is a record of mural goals
 s = await ev(() => { const g = window.__game, T = window.T, R = g.REEF, out = {}, still = { ...T.none(), amount: 0 };
   const fresh = () => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.2, T.none()); return g.reef; };
-  const over = (r) => { const o = r.debug.off, st = r.debug.st; T.put(st.x + o.x, st.top + 1.2, st.z + o.z - 0.9, 0); };
+  const over = (r) => { const o = r.debug.off, st = r.debug.st, L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); T.aroundPoint(st.x + o.x, st.top + 1.2, st.z + o.z, 0); T.coil((L + 0.8) / v); }; // the whole body curled inside the ring
   const hold = (r, secs) => { for (let t = 0; t < secs; t += 0.1) g.sim(0.1, still); };
   // whole: nothing to mend, no ring, nothing given
   let r = fresh(); over(r); hold(r, 9); out.whole = { segs: g.run.segs, ring: r.debug.ring.visible, k: r.debug.st.k, uses: r.debug.st.uses };
@@ -1090,6 +1090,30 @@ s = await ev(() => { const g = window.__game, T = window.T, R = g.REEF, out = {}
 check('the reef head has a cleaning station that mends and does not feed: a whole fish held still over it is given nothing and sees no ring; a fish two short of its longest is mended one segment in the station’s time, the ring filling, then it rests, then mends the second, and then it is spent; left half done it gives nothing; no deeper band has it',
   s.whole.segs === 10 && !s.whole.ring && s.whole.k === 0 && s.whole.uses === 2 && s.first.segs === 11 && s.first.ring && s.first.half > 0.3 && s.first.half < 0.7 && s.first.t > 6 && s.first.t < 8 && s.first.uses === 1
   && s.resting.segs === 11 && s.resting.k === 0 && s.second.segs === 12 && s.second.uses === 0 && s.spent.segs === 9 && !s.spent.ring && s.spent.cleaned === 2 && s.left.k1 > 0.2 && s.left.k === 0 && s.left.segs === 10 && s.deep.every((x) => !x), JSON.stringify(s));
+
+// every station, the reef's and the deeper bands': the whole body has to be inside the ring. The head alone does nothing; half in does nothing, and the ring is drawn
+// only as far round as the share of the body in it, with the parts outside marked; curled up inside, a starting body is mended, and so is the longest body there can be
+s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
+  const at = (band) => { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false; g.sim(0.2, T.none());
+    if (band) { const st = g.world.react.stations[0]; return { st, x: st.x, z: st.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => st.ring, marks: () => st.marks.points, uses: () => st.uses }; }
+    const r = g.reef, st = r.debug.st, o = r.debug.off; return { st, x: st.x + o.x, z: st.z + o.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => r.debug.ring, marks: () => r.debug.marks.points, uses: () => st.uses }; };
+  const size = (segs) => { g.run.longest = Math.max(segs + 2, g.run.longest); g.run.segs = segs; g.buildFish(segs); g.sim(0.1, T.none()); };
+  const curl = (S) => { const L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); T.aroundPoint(S.x, S.top + 1.2, S.z, 0); T.coil((L + 0.8) / v); };
+  for (const [name, band] of [['reef', 0], ['deep', 2]]) { const o = out[name] = {};
+    // the head alone in the middle, the body trailing out
+    let S = at(band); size(10); T.put(S.x, S.top + 1.2, S.z - S.R() + 0.4, 0); g.sim(0.3, still); const share0 = +S.share().toFixed(2); g.sim(4, still); o.head = { k: S.k(), share: share0, uses: S.uses() };
+    // half in: drawn half round, the rest marked
+    S = at(band); size(10); T.put(S.x, S.top + 1.2, S.z - S.R() + 0.5 * g.rig.length + 0.2, 0); g.sim(0.3, still);
+    const ring = S.ring(), drawn = ring.geometry.drawRange.count; o.half = { share: +S.share().toFixed(2), drawn, visible: ring.visible }; g.sim(3, still); o.half.k = S.k();
+    const mk = S.marks(); o.half.marks = mk.visible ? mk.geometry.drawRange.count : 0;
+    // curled up inside, at the starting length and the longest: mended, within the station's time and a little more
+    for (const segs of [10, 26]) { S = at(band); size(segs); const before = g.run.segs, L = +g.rig.length.toFixed(1); curl(S); let t = 0, all = 1;
+      while (S.uses() === C.uses && t < 12) { g.sim(0.1, still); t += 0.1; all = Math.min(all, S.k() > 0.05 ? S.share() : 1); }
+      o['curl' + segs] = { L, R: +S.R().toFixed(2), t: +t.toFixed(1), done: S.uses() < C.uses, gained: g.run.segs - before, kept: all }; } } // (the longest is full grown: its mending goes to the crest, or nowhere at the reef)
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('at every cleaning station, the reef head’s and the deeper bands’, the whole body has to be inside the ring: the head alone does nothing; half in does nothing, the ring drawn only about half round and the parts outside marked; curled up inside and resting, a starting body is mended in the station’s time, and the longest body there can be has the work done too (its ring a little wider, far less than the body is longer)',
+  ['reef', 'deep'].every((n) => { const o = s[n]; return o.head.k === 0 && o.head.share < 0.5 && o.head.uses === 2 && o.half.visible && o.half.share > 0.3 && o.half.share < 0.8 && o.half.drawn > 12 && o.half.drawn < 42 && o.half.k === 0
+    && o.half.marks >= 3 && o.curl10.gained === 1 && o.curl10.done && o.curl10.t < 9 && o.curl26.done && o.curl26.t < 9.5 && o.curl26.R - o.curl10.R < (o.curl26.L - o.curl10.L) * 0.4; }), JSON.stringify(s));
 
 s = await ev(() => { const g = window.__game, T = window.T, R = g.REEF.trumpet, out = {};
   const fresh = () => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.2, T.none()); return g.reef; };

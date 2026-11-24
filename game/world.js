@@ -40,11 +40,28 @@ export const NEST = { yaw: 2.5, line: -1.25, step: 0.42, rows: [2.3, 3.45], gap:
 // the search goes wider (`wide`), and at the last it stands on the first of that wider ground that is clear of the rift and of anything solid, whoever has claimed it.
 export const MURAL = { near: 13, each: 0.55, back: [19.5, 22, 25, 28, 32], side: [7.5, 9.5, 12, 15, 18], wide: { back: [19.5, 22, 25, 28, 32, 36, 40, 45], side: [7.5, 9.5, 12, 15, 18, 21, 24, 27, 30, 34] }, signs: ['swarm', 'cache', 'guard'], keeper: ['claw', 'saw', 'lamp', 'jaw'] };
 const TIERS = 'smlh';
-// A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. A head held still over it (within `reach`, slower
-// than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
+// A cleaning station: a coral head kept by cleaner wrasse, one to a band where there are tail-biters. The whole body held still inside its ring (every
+// joint from the snout to the tail within the ring's radius, the head slower than `still`) for `time` seconds has a segment grown back; a station does this `uses` times in a dive, with `rest` seconds between. While the cleaners
 // work nothing bites, but up to `most` of the tail-biters within `call` metres come and go round, closing from the first of `ring` to the second; when
 // the work is done they start back from the body for `start` seconds; done or broken off, it is `grace` seconds before any of them hunts again.
-export const CLEAN = { reach: 3.2, still: 0.9, time: 7, uses: 2, rest: 25, call: 32, ring: [7.5, 3.4], most: 3, grace: 1.6, start: 0.9, fish: 6 };
+export const CLEAN = { reach: 3.5, grow: 0.3, from: 3.55, still: 0.9, time: 7, uses: 2, rest: 25, call: 32, ring: [7.5, 3.4], most: 3, grace: 1.6, start: 0.9, fish: 6 };
+// The whole body, not the head alone (George: 'the longer the oarfish is, the harder it is to accomplish the task'). The ring is `reach` across for the starting
+// body (`from` metres) and `grow` metres wider for every metre of body past that, a third of what the body grows, so a long body has to curl up tight to fit; it
+// has to hold the curl and the creep too, since a resting fish never quite stops (rig.js idles at 0.22 m/s). Measured with a scripted fish that coils once round
+// the middle and lets go: the farthest any part of it got from the middle in the 7.5 s after it was still was 3.3 m at the starting length, 4.6 m at the longest.
+export const cleanReach = (len) => CLEAN.reach + CLEAN.grow * Math.max(0, (len || 0) - CLEAN.from);
+// How much of a body is inside a ring of radius r round (cx, cz): the share of its points (the snout and every joint) inside, and the points outside, into `out`.
+export function bodyIn(snout, joints, cx, cz, r, out) { let n = 0, inn = 0; if (out) out.length = 0;
+  for (let i = -1; i < joints.length; i++) { const p = i < 0 ? snout : joints[i]; n++; if (Math.hypot(p.x - cx, p.z - cz) <= r) inn++; else if (out) out.push(p); }
+  return n ? inn / n : 0; }
+// Warm points on the parts of a body that are still outside a station's ring, so that a fish that has parked only its head sees what is left out. One draw call.
+export function bodyMarks() {
+  const most = 48, pos = new Float32Array(most * 3), geo = new THREE.BufferGeometry(), map = glowTexture();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setDrawRange(0, 0);
+  const mat = new THREE.PointsMaterial({ color: '#ffae5c', size: 0.7, map, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: true });
+  const points = new THREE.Points(geo, mat); points.frustumCulled = false; points.visible = false; points.renderOrder = 3;
+  return { points, set(list) { const n = Math.min(most, list.length); for (let i = 0; i < n; i++) { pos[i * 3] = list[i].x; pos[i * 3 + 1] = list[i].y + 0.25; pos[i * 3 + 2] = list[i].z; }
+    geo.attributes.position.needsUpdate = true; geo.setDrawRange(0, n); points.visible = n > 0; }, dispose() { geo.dispose(); mat.dispose(); map.dispose(); } }; }
 // What counts as ringing something. `assist` (0..1) is the one feel setting: with more of it the body
 // need not go quite all the way round, and the ball packs a little tighter to fit inside.
 export const wrapRule = (assist) => ({ sweep: Math.PI * 2 * lerp(0.93, 0.8, assist), squeeze: lerp(0.96, 0.84, assist) });
@@ -1412,7 +1429,8 @@ float seaLight(vec2 p, float t) {
     part(G.rock, stoneTones[0], 0, 0.1, 0, 1.55, 0.8, 1.45); part(G.brain, coral[floor % coral.length], 0.1, 0.62, -0.05, 0.78); part(G.brain, coral[(floor + 3) % coral.length], -0.95, 0.3, 0.6, 0.42);
     part(G.sponge, tube[floor % tube.length], 1.05, 0.2, 0.55, 0.8); part(G.sponge, tube[(floor + 1) % tube.length], 0.75, 0.15, -1.0, 0.6);
     g.rotation.y = st.yaw; st.mesh = g; single.push(st);
-    st.ring = add(new THREE.Line(ringGeo, ringYes)); st.arc = add(new THREE.Line(ringGeo.clone(), arcYes)); owned.push({ dispose: () => st.arc.geometry.dispose() });
+    st.ring = add(new THREE.Line(ringGeo.clone(), ringYes)); st.arc = add(new THREE.Line(ringGeo.clone(), arcYes)); owned.push({ dispose: () => { st.arc.geometry.dispose(); st.ring.geometry.dispose(); } });
+    st.marks = bodyMarks(); add(st.marks.points); owned.push(st.marks); st.share = 0; st.reach = CLEAN.reach;
     for (const o of [st.ring, st.arc]) { o.frustumCulled = false; o.visible = false; } }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
   const breakUrn = (u) => { if (u.broken) return false; u.broken = true; u.col.off = true; u.mesh.geometry = G.jarBroken; return true; };
@@ -1597,14 +1615,15 @@ float seaLight(vec2 p, float t) {
     if (muralNews.length > 8) muralNews.shift();
   }
   // ---- the cleaning stations (CLEAN). What happens at one is told through `cleanNews`: { what: 'near' | 'start' | 'tick' | 'done' | 'broke', i, x, y, z, left }.
-  const cleanNews = [], tq = new THREE.Quaternion(), te = new THREE.Euler(0, 0, 0, 'YXZ'), tm = new THREE.Matrix4(), tv = new THREE.Vector3(), tw = new THREE.Vector3();
+  const cleanNews = [], outside = [], tq = new THREE.Quaternion(), te = new THREE.Euler(0, 0, 0, 'YXZ'), tm = new THREE.Matrix4(), tv = new THREE.Vector3(), tw = new THREE.Vector3();
   function tend(dt, focus, body) {
     const J = body ? body.joints : null, N = J ? J.length - 1 : 0, head = body ? body.snout : null, t = time.value; let swum = 0;
     stations.forEach((st, si) => {
       const cx = st.x + T * Math.round((focus.x - st.x) / T), cz = st.z + T * Math.round((focus.z - st.z) / T); st.cx = cx; st.cz = cz;
       st.rest = Math.max(0, st.rest - dt);
-      const open = st.uses > 0 && st.rest <= 0, d = head ? Math.hypot(head.x - cx, head.z - cz) : 99;
-      const over = open && d < CLEAN.reach && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && stirred.speed < CLEAN.still, was = st.k;
+      const open = st.uses > 0 && st.rest <= 0, d = head ? Math.hypot(head.x - cx, head.z - cz) : 99, R = st.reach = cleanReach(body ? body.total : 0);
+      st.share = J ? bodyIn(head, J, cx, cz, R, outside) : 0; // the whole body has to be in the ring, not the head alone
+      const over = open && st.share >= 1 && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && stirred.speed < CLEAN.still, was = st.k;
       if (open && d < 9 && !st.near) cleanNews.push({ what: 'near', x: cx, y: st.top, z: cz });
       st.near = open && d < 12; st.on = still;
       if (still) { st.k = Math.min(1, st.k + dt / CLEAN.time); if (!st.live && st.k > 0.1) { st.live = true; cleanNews.push({ what: 'start', x: cx, y: st.top, z: cz }); } }
@@ -1612,9 +1631,11 @@ float seaLight(vec2 p, float t) {
       const step = (k) => Math.floor(k * 6); if (still && step(st.k) > step(was) && st.k < 1) cleanNews.push({ what: 'tick', i: step(st.k), x: cx, y: st.top, z: cz });
       if (st.k >= 1) { st.k = 0; st.live = false; st.on = false; st.uses--; st.rest = CLEAN.rest; cleanNews.push({ what: 'done', x: cx, y: st.top, z: cz, left: st.uses }); }
       if (cleanNews.length > 16) cleanNews.shift();
-      // the ring over it: there while the station has something to give and the fish is about, filling as the work goes
-      const show = st.near; st.ring.visible = show; st.arc.visible = show && st.k > 0.01;
-      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(CLEAN.reach); st.arc.position.set(cx, st.top + 0.51, cz); st.arc.scale.setScalar(CLEAN.reach); st.arc.geometry.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
+      // the ring over it: there while the station has something to give and the fish is about. It is drawn as far round as the share of the body inside
+      // it (whole when all of it is), the parts still outside are marked warm, and the bright arc inside it fills as the work goes
+      const show = st.near; st.ring.visible = show; st.arc.visible = show && st.k > 0.01; st.marks.set(show && st.share > 0 && st.share < 1 ? outside : []);
+      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(R); st.ring.geometry.setDrawRange(0, Math.max(2, Math.round(Math.max(0.04, st.share) * 48) + 1));
+        st.arc.position.set(cx, st.top + 0.51, cz); st.arc.scale.setScalar(R * 0.9); st.arc.geometry.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
       // its cleaners: turning over the coral head; along the body while they work; gone into the coral while the station rests or is spent
       st.away += ((open ? 0 : 1) - st.away) * (1 - Math.exp(-2.5 * dt));
       st.fish.forEach((f, i) => {

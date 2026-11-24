@@ -7,7 +7,7 @@
 //   THE CLEANING STATION, at the clear middle. It works as the stations of the deeper bands do (world.js, CLEAN): a head held still over it,
 //     slower than `still`, for `time` seconds, has one segment grown back; `uses` times a dive, `rest` seconds between. Down there its price is the
 //     tail-biters, which gather round while it works and are close when it is done. This band has none, so it has a rule of its own: it MENDS, IT
-//     DOES NOT FEED. It gives back only what this dive has lost (the body shorter than the longest it has been this dive), and a whole fish gets
+//     DOES NOT FEED. As at every station, the whole body has to be curled up inside the ring, not the head alone. It gives back only what this dive has lost (the body shorter than the longest it has been this dive), and a whole fish gets
 //     nothing: its ring does not show and its cleaners keep to the coral. Full grown, nothing goes to the crest either. So a fish cannot come here
 //     to grow, only to undo damage, twice a dive.
 //   THE TRUMPETFISH, Aulostomus maculatus (the model and its sources are trumpet.js's). The one true trait made its rule: it hides along a big
@@ -27,12 +27,13 @@
 import * as THREE from 'three';
 import { make, geometry, tonesOf, swarmKit } from './npc.js';
 import { growing } from './kit.js';
-import { CLEAN } from './world.js';
+import { CLEAN, cleanReach, bodyIn, bodyMarks } from './world.js';
 import { clamp, lerp, damp, glowTexture } from './geo.js';
 
 // ---------------------------------------------------------------- every number, in one place
 export const REEF = {
-  // the station. reach, still, time, uses, rest and fish are the deeper bands' own (CLEAN in world.js), so that a station is a station; see: how near the
+  // the station. reach (and how it widens for a longer body: cleanReach), still, time, uses, rest and fish are the deeper bands' own (CLEAN in world.js),
+  // so that a station is a station, and as there the whole body has to be inside the ring; see: how near the
   // head comes before its ring shows (and the one line is said); mound: the scale of the brain coral it is; lit: how much it glows
   station: { reach: CLEAN.reach, still: CLEAN.still, time: CLEAN.time, uses: CLEAN.uses, rest: CLEAN.rest, fish: CLEAN.fish, see: 12, mound: 0.85, lit: 0.12 },
   // the trumpetfish. n: how many hang (one to a rod, at most this many); high: how far over the bed their middles hang; scale: of the model (which is
@@ -81,7 +82,7 @@ export function createReef(scene, world, hooks) {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), w3 = new THREE.Vector3();
 
   // ---- the station: a brain coral in the clear middle with two sponges at its foot, six cleaners over it, a ring that fills as they work
-  const st = { x: C.x, z: C.z, y: world.drawn(C.x, C.z), k: 0, uses: S.uses, rest: 0, live: false, near: false, open: false, away: 1, told: false };
+  const st = { x: C.x, z: C.z, y: world.drawn(C.x, C.z), k: 0, share: 0, reach: S.reach, uses: S.uses, rest: 0, live: false, near: false, open: false, away: 1, told: false };
   st.top = st.y + 1.1 * S.mound;
   { const g = add(new THREE.Group()), coral = tonesOf('braincoral'), tube = tonesOf('sponge');
     const part = (id, color, x, y, z, s) => { const m = new THREE.Mesh(geometry(id), new THREE.MeshLambertMaterial({ color, vertexColors: true, emissive: color, emissiveIntensity: S.lit })); owned.push(m.material); m.position.set(x, y, z); m.scale.setScalar(s); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
@@ -90,7 +91,7 @@ export function createReef(scene, world, hooks) {
     g.position.set(C.x, st.y, C.z); g.rotation.y = plan.facing; st.mesh = g; }
   const ringGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 49 }, (_, i) => new THREE.Vector3(Math.sin((i / 48) * TAU), 0, Math.cos((i / 48) * TAU)))), arcGeo = ringGeo.clone(); owned.push(ringGeo, arcGeo);
   const ringMat = new THREE.LineBasicMaterial({ color: '#dffcff', transparent: true, opacity: 0.45, depthWrite: false }), arcMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, depthWrite: false }); owned.push(ringMat, arcMat);
-  const ring = add(new THREE.Line(ringGeo, ringMat)), arc = add(new THREE.Line(arcGeo, arcMat)); ring.visible = arc.visible = false; ring.frustumCulled = arc.frustumCulled = false;
+  const ring = add(new THREE.Line(ringGeo, ringMat)), arc = add(new THREE.Line(arcGeo, arcMat)), marks = bodyMarks(), outside = []; add(marks.points); owned.push(marks); ring.visible = arc.visible = false; ring.frustumCulled = arc.frustumCulled = false;
   const cleanKit = swarmKit('cleaner', { glow: 0.2 }), cleanMat = cleanKit.material; owned.push({ dispose: () => cleanKit.dispose() });
   const cleaners = add(new THREE.InstancedMesh(cleanKit.geometry, cleanMat, S.fish)); cleaners.frustumCulled = false; cleaners.castShadow = true;
   const cfish = Array.from({ length: S.fish }, (_, i) => ({ p: new THREE.Vector3(C.x, st.top + 0.5, C.z), v: new THREE.Vector3(), ph: i * 1.9, slot: 0.08 + 0.84 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, yaw: i, pitch: 0 }));
@@ -99,15 +100,17 @@ export function createReef(scene, world, hooks) {
     const cx = st.x + off.x, cz = st.z + off.z, short = hooks.lost(), playing = hooks.playing();
     st.rest = Math.max(0, st.rest - dt);
     st.open = st.uses > 0 && st.rest <= 0 && short > 0 && playing; // something to mend, and the cleaners free to mend it
-    const d = Math.hypot(head.x - cx, head.z - cz), over = st.open && d < S.reach && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && rig.speed < S.still, was = st.k;
+    const d = Math.hypot(head.x - cx, head.z - cz), R = st.reach = cleanReach(rig.length + 0.45); st.share = bodyIn(head, J, cx, cz, R, outside); // the whole body, as at every station
+    const over = st.open && st.share >= 1 && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && (world.react?.speed ?? rig.speed) < S.still, was = st.k;
     st.near = st.open && d < S.see;
-    if (st.near && !st.told) { st.told = true; hooks.say('reefclean', 'Hold still over the cleaners. They mend what you have lost.'); }
+    if (st.near && !st.told) { st.told = true; hooks.say('reefclean', 'Curl your whole body inside the ring and hold still. The cleaners mend what you have lost.'); }
     if (still) { st.k = Math.min(1, st.k + dt / S.time); if (!st.live && st.k > 0.1) { st.live = true; hooks.moment('loop'); } }
     else { st.k = Math.max(0, st.k - dt / (over ? 3.5 : 1.2)); if (st.live && st.k <= 0) { st.live = false; hooks.moment('flit'); } } // a head that stirs loses ground slowly; one that leaves, fast
     const step = (k) => Math.floor(k * 6); if (still && step(st.k) > step(was) && st.k < 1) hooks.gulp(step(st.k), 7, 0.6);
     if (st.k >= 1) { st.k = 0; st.live = false; st.uses--; st.rest = S.rest; state.mended++; hooks.mend(); }
-    ring.visible = st.near; arc.visible = st.near && st.k > 0.01;
-    if (st.near) { ring.position.set(cx, st.top + 0.5, cz); ring.scale.setScalar(S.reach); arc.position.set(cx, st.top + 0.51, cz); arc.scale.setScalar(S.reach); arcGeo.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
+    ring.visible = st.near; arc.visible = st.near && st.k > 0.01; marks.set(st.near && st.share > 0 && st.share < 1 ? outside : []); // as far round as the body is in; what is out marked warm
+    if (st.near) { ring.position.set(cx, st.top + 0.5, cz); ring.scale.setScalar(R); ringGeo.setDrawRange(0, Math.max(2, Math.round(Math.max(0.04, st.share) * 48) + 1));
+      arc.position.set(cx, st.top + 0.51, cz); arc.scale.setScalar(R * 0.9); arcGeo.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
     st.mesh.position.set(cx, st.y, cz);
     // the cleaners: turning over the coral; along the body while they work; down in the coral while the station rests or is spent
     st.away = damp(st.away, st.uses > 0 && st.rest <= 0 ? 0 : 1, 2.5, dt); let swum = 0;
@@ -219,6 +222,6 @@ export function createReef(scene, world, hooks) {
     corals(head, t);
   }
   // for the checks and the pictures
-  const debug = { st, ring, arc, cleaners, meshes, pieces, grow, flash, off, grownBy: (p) => grownBy(p, state.t) };
+  const debug = { st, ring, arc, marks, cleaners, meshes, pieces, grow, flash, off, grownBy: (p) => grownBy(p, state.t) };
   return { update, dispose, plan, state, fish, debug, get rider() { return state.rider; } };
 }

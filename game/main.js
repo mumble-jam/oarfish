@@ -1947,7 +1947,7 @@ export async function start(saved = {}) {
     // a cleaning station (world.js, CLEAN): a note for each step of the work, and at the end of it a segment grown back
     if (world.react) for (const c of world.react.cleaned.splice(0)) {
       if (run.state !== 'play') continue;
-      if (c.what === 'near') say('clean', 'A cleaning station. Hold still over the coral head and its cleaners will grow a segment back.', 8);
+      if (c.what === 'near') say('clean', 'A cleaning station. Curl your whole body inside its ring and hold still: its cleaners grow a segment back.', 8);
       else if (c.what === 'start') { moment('loop'); say('truce', 'Nothing bites while the cleaners work. But the hunters gather, and when it is done they are close.', 8); }
       else if (c.what === 'tick') { music.gulp(c.i, 7, 0.6); buzz(0, 0.14, 45); }
       else if (c.what === 'broke') moment('flit');
