@@ -699,7 +699,7 @@ check('every rift has a mural with three carvings, dark at first: the band\u2019
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 
 // ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom).length; // (the squid's stones, bloom.js, are checked with the bloom)
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom && !c.userData.sandflat).length; // (the squid's stones, bloom.js, are checked with the bloom; the sand flat's mark with the sand flat)
   Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
   out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
   Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());

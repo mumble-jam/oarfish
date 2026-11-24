@@ -6,10 +6,11 @@ Four creatures given their lives at the sand flat, all in `game/sandflat.js` (nu
 - [x] `game/sandflat.js`: eels, market, burrows, circle, nest mark; hooked into `main.js` in one block (+ import, + one update line).
 - [x] `tools/shot_sandflat.mjs`: pictures from the dive's camera.
 
-## To do
-- [ ] npc.js / CREATURES.md: move the four into the first band.
-- [ ] Checks (scripted fish) in the game suite; library check updated.
-- [ ] Cost after; contact sheet; CLAUDE.md bullets; all five suites.
+- [x] npc.js / CREATURES.md: the four moved into the first band (Company).
+- [x] Checks (four, scripted fish) in the game suite; library and nest checks updated for the move.
+- [x] Cost before/after (logs/perf-*.txt); CLAUDE.md bullets; contact sheet from both cameras (adventure first, per George's new default).
+- [x] hermit.js bug fixed: lowest() clobbered the vector leave()/lay() used, so left or laid shells went to the wrong place.
+- First full run (r1): boss, teach, controls passed; game failed one (nest count saw the sand flat's mark), library one (button order): both fixed, rerun as r2.
 
 ## Decisions (and why)
 - Eels: how near a body may come grows with its "noise" (speed + a little for speeding up or slowing down): 0.9 m at a slow swim, about 2.1 m at a plain swim (the divers' figure), 4.3 m at a sprint, 7.7 m dashing. So a slow crossing is possible and a plain one is not.
