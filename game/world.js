@@ -1430,7 +1430,7 @@ float seaLight(vec2 p, float t) {
     part(G.sponge, tube[floor % tube.length], 1.05, 0.2, 0.55, 0.8); part(G.sponge, tube[(floor + 1) % tube.length], 0.75, 0.15, -1.0, 0.6);
     g.rotation.y = st.yaw; st.mesh = g; single.push(st);
     st.ring = add(new THREE.Line(ringGeo.clone(), ringYes)); st.arc = add(new THREE.Line(ringGeo.clone(), arcYes)); owned.push({ dispose: () => { st.arc.geometry.dispose(); st.ring.geometry.dispose(); } });
-    st.marks = bodyMarks(); add(st.marks.points); owned.push(st.marks); st.share = 0; st.reach = CLEAN.reach;
+    st.marks = bodyMarks(); add(st.marks.points); owned.push(st.marks); st.whole = { share: 0, reach: CLEAN.reach }; // (kept in an object of its own: tools/digest.mjs fingerprints a station's plain numbers, and this is state, not layout)
     st.inside = add(new THREE.Line(ringGeo.clone(), insideYes)); st.inside.frustumCulled = false; st.inside.visible = false; owned.push({ dispose: () => st.inside.geometry.dispose() });
     for (const o of [st.ring, st.arc]) { o.frustumCulled = false; o.visible = false; } }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
@@ -1622,9 +1622,9 @@ float seaLight(vec2 p, float t) {
     stations.forEach((st, si) => {
       const cx = st.x + T * Math.round((focus.x - st.x) / T), cz = st.z + T * Math.round((focus.z - st.z) / T); st.cx = cx; st.cz = cz;
       st.rest = Math.max(0, st.rest - dt);
-      const open = st.uses > 0 && st.rest <= 0, d = head ? Math.hypot(head.x - cx, head.z - cz) : 99, R = st.reach = cleanReach(body ? body.total : 0);
-      st.share = J ? bodyIn(head, J, cx, cz, R, outside) : 0; // the whole body has to be in the ring, not the head alone
-      const over = open && st.share >= 1 && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && stirred.speed < CLEAN.still, was = st.k;
+      const open = st.uses > 0 && st.rest <= 0, d = head ? Math.hypot(head.x - cx, head.z - cz) : 99, R = st.whole.reach = cleanReach(body ? body.total : 0);
+      const share = st.whole.share = J ? bodyIn(head, J, cx, cz, R, outside) : 0; // the whole body has to be in the ring, not the head alone
+      const over = open && share >= 1 && head.y > st.top - 0.3 && head.y < st.top + 4.5, still = over && stirred.speed < CLEAN.still, was = st.k;
       if (open && d < 9 && !st.near) cleanNews.push({ what: 'near', x: cx, y: st.top, z: cz });
       st.near = open && d < 12; st.on = still;
       if (still) { st.k = Math.min(1, st.k + dt / CLEAN.time); if (!st.live && st.k > 0.1) { st.live = true; cleanNews.push({ what: 'start', x: cx, y: st.top, z: cz }); } }
@@ -1634,8 +1634,8 @@ float seaLight(vec2 p, float t) {
       if (cleanNews.length > 16) cleanNews.shift();
       // the ring over it: there while the station has something to give and the fish is about. It is drawn as far round as the share of the body inside
       // it (a bright arc over the faint whole ring; all round when all of it is), the parts still outside are marked warm, and the white arc just inside it fills as the work goes
-      const show = st.near; st.ring.visible = show; st.inside.visible = show && st.share > 0; st.arc.visible = show && st.k > 0.01; st.marks.set(show && st.share > 0 && st.share < 1 ? outside : []);
-      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(R); st.inside.position.set(cx, st.top + 0.505, cz); st.inside.scale.setScalar(R); st.inside.geometry.setDrawRange(0, Math.max(2, Math.round(st.share * 48) + 1));
+      const show = st.near; st.ring.visible = show; st.inside.visible = show && share > 0; st.arc.visible = show && st.k > 0.01; st.marks.set(show && share > 0 && share < 1 ? outside : []);
+      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(R); st.inside.position.set(cx, st.top + 0.505, cz); st.inside.scale.setScalar(R); st.inside.geometry.setDrawRange(0, Math.max(2, Math.round(share * 48) + 1));
         st.arc.position.set(cx, st.top + 0.51, cz); st.arc.scale.setScalar(R * 0.9); st.arc.geometry.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
       // its cleaners: turning over the coral head; along the body while they work; gone into the coral while the station rests or is spent
       st.away += ((open ? 0 : 1) - st.away) * (1 - Math.exp(-2.5 * dt));
