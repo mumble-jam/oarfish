@@ -33,7 +33,8 @@ const snap = async (n, d = 8, h = 2.5, a = 0.8, up = 0.6) => { await page.evalua
   await frame(); await page.screenshot({ path: out(n) }); };
 const hold = (until) => page.evaluate(([until, none]) => { const g = window.__game, st = g.world.react.stations[0]; let t = 0; while (st.k < until && st.uses === g.CLEAN.uses && t < 12) { g.sim(0.1, none); t += 0.1; } }, [until, none]);
 await page.evaluate((none) => { const g = window.__game, st = g.world.react.stations[0]; g.rig.reset(g.rig.pos.clone().set(st.x + 10.5, st.top + 1.5, st.z + 3), -1.57); g.sim(1.5, none); }, none); await snap(0, 7, 2.2);   // as it waits
-await page.evaluate((none) => { const g = window.__game, st = g.world.react.stations[0]; g.rig.reset(g.rig.pos.clone().set(st.x, st.top + 1.2, st.z - 1), 0); g.sim(0.2, none); }, none);
+await page.evaluate((none) => { const g = window.__game, st = g.world.react.stations[0]; // the whole body has to be inside the ring (every station, reef.js's rule): parked so that a coil to the left is centred on the station, and curled once round
+  const L = g.rig.length, r = (L + 0.8) / (Math.PI * 2), v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); g.rig.reset(g.rig.pos.clone().set(st.x - r, st.top + 1.2, st.z), 0); g.snap(); g.sim((L + 0.8) / v, { ...none, coil: 1 }); g.sim(0.2, none); }, none);
 await hold(0.45); await snap(1, 9, 3.2, 2.4, 0.9);          // at work
 await hold(0.92); await snap(2, 16, 13, 0.8, 0);            // from above, near the end: the ring of hunters closed up
 await browser.close(); server.close();

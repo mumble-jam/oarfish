@@ -64,7 +64,7 @@ export const NPCS = [
     palette: { back: '#274a7a', flank: '#a9cbe6', bar: '#1f3050', belly: '#f2f8fc', fin: '#35598a', tip: '#ffffff' },
     build: (pal) => model.pilot(pal), swim: { amp: 0.022, waves: 2.4, nose: 0.2, length: 0.5 }, beat: [5, 2.4],
     states: [{ id: 'wait', name: 'Waiting', speed: 0.7 }, { id: 'ride', name: 'Riding the wake', speed: 3.3 }] },
-  { id: 'cleaner', group: 'Company', name: 'Cleaner wrasse', bands: [1, 2, 3, 4], length: 0.24, role: 'Not food, and no danger. Half a dozen keep each cleaning station, a coral head with a pale ring over it. Hold still over one and they go along the body; when they are done a segment has grown back. Nothing bites at a station while they work, but the hunters gather round to wait.',
+  { id: 'cleaner', group: 'Company', name: 'Cleaner wrasse', bands: [1, 2, 3, 4], length: 0.24, role: 'Not food, and no danger. Half a dozen keep each cleaning station, a coral head with a pale ring over it. Curl your whole body inside the ring and hold still, and they go along it; when they are done a segment has grown back. Nothing bites at a station while they work, but the hunters gather round to wait.',
     about: 'A finger long, pale blue going to yellow at the head, with one black stripe from the eye to the tail that widens as it goes, as the real ones have. The pale back is lit a little, so in the dark a station is a small knot of lights over a coral head.',
     palette: { front: '#ffe27a', rear: '#bfe6ff', stripe: '#1b1b2a', belly: '#f6fbff', fin: '#8fc4ee', tip: '#ffffff' },
     build: (pal) => model.cleaner(pal), swim: { amp: 0.014, waves: 2.6, nose: 0.2, length: 0.24 }, beat: [8, 3],
