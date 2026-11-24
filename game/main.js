@@ -1,6 +1,7 @@
 // The run: scene setup, input, camera, the rules of the dive, and the HUD.
 
 import * as THREE from 'three';
+import { aim as aimSight, SEE, SIGHT } from './sight.js'; // (review polish)
 import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
@@ -634,11 +635,11 @@ export async function start(saved = {}) {
       else if (kind === 'laststand') music.flourish(guard?.kind, 'solo');
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
       else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
-      else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7);
+      else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7, 'teach', { while: lasts((S) => S.leg.includes(1)) });
       else if (kind === 'crack') { moment('ram'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.25); }
-      else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6); }
-      else if (kind === 'stomp') { cam.shake = Math.max(cam.shake, 0.45); moment('burst'); say('keeper-stomp', 'Its spike is stuck in the bed. Ram that leg.', 6); }
-      else if (kind === 'held') say('keeper-held', 'You have its leg. Swim away and drag it out from under it.', 6);
+      else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6, 'teach', { while: lasts((S) => S.stun > 0 || S.open) }); }
+      else if (kind === 'stomp') { cam.shake = Math.max(cam.shake, 0.45); moment('burst'); say('keeper-stomp', 'Its spike is stuck in the bed. Ram that leg.', 6, 'teach', { while: lasts((S) => S.stomp && S.stomp.stuck > 0) }); }
+      else if (kind === 'held') say('keeper-held', 'You have its leg. Swim away and drag it out from under it.', 6, 'teach', { while: lasts((S) => S.held) });
       else if (kind === 'topple') { cam.shake = Math.max(cam.shake, 0.7); moment('kill'); }
       else if (kind === 'shed') { moment('burst'); say('keeper-shed', 'It let the leg go. The leg is food.', 6); }
       else if (kind === 'ate') { pulse('grow'); }
@@ -758,7 +759,11 @@ export async function start(saved = {}) {
   const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll', 'crest', 'oars']); // what the nursery teaches itself, and what can wait until it is over
   const tut = { on: false, step: 0, stall: 0, told: false, was: 0, prize: null };
   // a line of text is the last resort: once ever, never while the nursery is teaching the same thing by other means
-  function say(id, text, hold = 7, kind = 'teach') { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); hintQueue.push({ text, hold, kind }); }
+  // (review polish) o.while: a line about a passing moment is shown only while it lasts, taken down when it ends, and if it ended before its turn came
+  // it is not counted as said; o.first: a line about a place, shown as soon as the place is met and not behind whatever is waiting
+  function say(id, text, hold = 7, kind = 'teach', o = {}) { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); const m = { text, hold, kind, id, while: o.while }; if (o.first) { hintQueue.unshift(m); if (showing && showing.while) hintT = 0; } else hintQueue.push(m); }
+  const unsay = (id) => { said.delete(id); if (teach.learned[`say:${id}`]) { delete teach.learned[`say:${id}`]; saveTeach(); } }; // (review polish)
+  const lasts = (test) => () => { try { return !!guard && !guard.done && !!test(guard.state); } catch { return false; } }; // (review polish) a moment of the keeper's fight
   function setTeach(on, quiet) {
     if (on && !teach.on) { teach.done = false; teach.learned = {}; } // asked for again: from the beginning
     teach.on = on; saveTeach();
@@ -871,9 +876,17 @@ export async function start(saved = {}) {
     $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, energy ${Math.round(d.energy * 100)}%, intensity ${Math.round(d.intensity * 100)}%.${d.sitting.length ? ` Sitting in: ${d.sitting.join(', ')}.` : ''}` : 'Press any key or click to start the sound.';
     $('energy-live').style.width = `${Math.round(music.energy * 100)}%`;
   }
+  let titleAside = false; // (review polish)
   function hud(dt) {
+    { // (review polish) the band's title steps aside while a keeper is being fought, so its beads (drawn over its back) never sit on the words
+      const k = guard && !guard.done && world.wrap ? Math.hypot(world.wrap(rig.pos.x - guard.pos.x), world.wrap(rig.pos.z - guard.pos.z)) : 1e9;
+      titleAside = k < (titleAside ? 30 : 26); // a little wider to come back than to go, so it does not blink at the edge
+      const el = document.querySelector('.lettering.where'); if (el && el.classList.contains('aside') !== titleAside) el.classList.toggle('aside', titleAside);
+    }
     // hints, one at a time
     hintT -= dt;
+    if (showing?.while && !showing.while()) hintT = Math.min(hintT, 0); // (review polish) its moment is over: take it down
+    while (hintT <= 0 && hintQueue[0]?.while && !hintQueue[0].while()) unsay(hintQueue.shift().id); // (review polish) its moment ended before its turn: not said
     if (hintT <= 0) {
       const next = hintQueue.shift();
       const el = $('toast');
@@ -1772,11 +1785,59 @@ export async function start(saved = {}) {
     }
     sun.position.copy(focus).add(SUN_OFFSET);
     sun.target.position.copy(focus);
-    world.dress?.(focus); // (the last hall is a world of its own kind, with no dressing) what casts is whatever stands in the sun's box where it now is: this catches a cut, which moves it all at once
+    world.dress?.(focus, dressView()); // (review polish: small things by what the camera can show, sight.js block) (the last hall is a world of its own kind, with no dressing) what casts is whatever stands in the sun's box where it now is: this catches a cut, which moves it all at once
     lamp.position.set(rig.pos.x + sy * 2.4, rig.pos.y + 3, rig.pos.z + cy * 2.4); // above and on the viewer's side, so the flank is lit
     { const c = run.charge, full = c >= 1, beat = full ? 0.5 + 0.5 * Math.sin(world.time.value * 7) : 0; // the crest: a glow over the head that grows as it fills, and beats when it is full
       crest.position.copy(rig.joints[0]).y += 0.3; crest.scale.setScalar(c > 0 ? 0.5 + 0.9 * c + 0.3 * beat : 0.01); crest.material.opacity = damp(crest.material.opacity, c > 0 ? 0.2 + 0.4 * c + 0.2 * beat : 0, 6, dt); }
+
+    seeFish(); // (review polish) the window round the fish, where the camera now is
+    ringsStep(dt); // (review polish) rings fade in
   }
+  // ---- review polish: the window round the fish (sight.js). Whatever stands between the camera and the fish is stippled away round it,
+  // and whatever is right in front of the lens; world.js hands its standing materials to it. Off in the testing tools' `devSee.window`.
+  const seeSize = new THREE.Vector2();
+  function seeFish() {
+    camera.updateMatrixWorld(); renderer.getDrawingBufferSize(seeSize);
+    aimSight(camera, rig.joints, seeSize.x, seeSize.y, devSee.window !== false);
+  }
+  // small dressing is drawn by what the camera can show (world.js, VIEW_REACH): where it is, which way it looks across the bed, how far the fog lets it see
+  const dressAt = { x: 0, z: 0, fx: 0, fz: 1, far: 60 }, dressDir = new THREE.Vector3();
+  function dressView() { camera.getWorldDirection(dressDir); const l = Math.hypot(dressDir.x, dressDir.z);
+    if (l > 0.05) { dressAt.fx = dressDir.x / l; dressAt.fz = dressDir.z / l; } dressAt.x = camera.position.x; dressAt.z = camera.position.z; dressAt.far = scene.fog ? scene.fog.far : 60; return dressAt; }
+  // Rings fade in (review polish). Every ring in the game is a one-pixel line that its owner (world.js, reef.js, foes.js, boss.js, guards.js) shows
+  // or hides at once, which popped it on at a fixed distance. Here, without touching any owner: each line's own share of light, `k`, comes up
+  // from nothing over `RINGS.fade` seconds of the dive from the moment it is shown; while it is drawn, its material is swapped for a copy with
+  // that share in it and put back straight after (so an owner never sees the copy); and two more copies of it, a pixel to the side and a pixel
+  // up, are drawn with it at `RINGS.halo` of its light, so that it reads as a line two pixels wide from either camera without being heavy.
+  // Hiding is as it was (at once): the checks read `.visible`, and it stays the owner's.
+  const RINGS = { fade: 0.6, halo: 0.55, every: 0.5 };
+  const ringState = new Map(), ringNudge = { x: { value: new THREE.Vector2() }, y: { value: new THREE.Vector2() } }, ringHalo = new THREE.Group();
+  let ringScan = 0;
+  const ringLike = (o) => o.isLine && o.material && o.material.isLineBasicMaterial && !o.material.vertexColors && o.material.depthTest !== false;
+  function ringsStep(dt) {
+    if ((ringScan -= dt || 0) <= 0 || !dt) { ringScan = RINGS.every; const seen = new Set();
+      scene.traverse((o) => { if (ringLike(o)) { seen.add(o); if (!ringState.has(o)) ringState.set(o, { k: 0, was: false, copies: new Map() }); } });
+      for (const o of ringState.keys()) if (!seen.has(o)) ringState.delete(o); }
+    for (const [o, st] of ringState) { let on = true; for (let p = o; p; p = p.parent) if (!p.visible) { on = false; break; }
+      if (on && !st.was) st.k = 0; st.was = on; st.k = on ? Math.min(1, st.k + (dt || 0) / RINGS.fade) : 0; }
+  }
+  const ringCopy = (st, base) => { let c = st.copies.get(base); if (c) return c;
+    const nudge = (m, u) => { m.onBeforeCompile = (sh) => { sh.uniforms.uNudge = u; sh.vertexShader = 'uniform vec2 uNudge;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  gl_Position.xy += uNudge * gl_Position.w;'); }; m.customProgramCacheKey = () => `ring-nudge-${u === ringNudge.x ? 'x' : 'y'}`; return m; };
+    c = { fade: base.clone(), x: nudge(base.clone(), ringNudge.x), y: nudge(base.clone(), ringNudge.y) };
+    for (const m of [c.fade, c.x, c.y]) m.transparent = true;
+    st.copies.set(base, c); return c; };
+  const ringDrawn = [];
+  function ringsBefore() { renderer.getDrawingBufferSize(seeSize); ringNudge.x.value.set(2 / seeSize.x, 0); ringNudge.y.value.set(0, 2 / seeSize.y);
+    for (const [o, st] of ringState) { if (!o.visible || !o.parent) continue; const base = o.material, c = ringCopy(st, base);
+      for (const m of [c.fade, c.x, c.y]) { m.color.copy(base.color); m.blending = base.blending; m.depthWrite = base.depthWrite; m.fog = base.fog; }
+      c.fade.opacity = base.opacity * st.k; c.x.opacity = c.y.opacity = base.opacity * st.k * RINGS.halo;
+      o.material = c.fade; ringDrawn.push([o, base]);
+      for (const m of [c.x, c.y]) { let t = st[m === c.x ? 'tx' : 'ty']; if (!t) { t = st[m === c.x ? 'tx' : 'ty'] = new THREE.Line(o.geometry, m); t.matrixAutoUpdate = false; t.frustumCulled = false; }
+        t.geometry = o.geometry; t.material = m; t.renderOrder = o.renderOrder; o.updateWorldMatrix(true, false); t.matrix.copy(o.matrixWorld); t.matrixWorld.copy(o.matrixWorld); ringHalo.add(t); } }
+    if (ringHalo.children.length) scene.add(ringHalo); }
+  function ringsAfter() { for (const [o, base] of ringDrawn) o.material = base; ringDrawn.length = 0; ringHalo.clear(); scene.remove(ringHalo); }
+  window.__sight = { SEE, SIGHT, devSee, fish: () => fish }; // for the checks and tools (tools/sight_fn.mjs)
+  // ---- end review polish
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
     renderer.setSize(w, h, false); stir(); // a canvas that changes size is wiped
@@ -1925,7 +1986,7 @@ export async function start(saved = {}) {
           else if (run.time - end.burst > 2) { end.burst = run.time; moment('burst'); } // a body too short to hold it
         }
       }
-      if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7);
+      if (guard && !guard.done && (Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20 || Math.hypot(wrapD(guard.pos.x - rig.pos.x), wrapD(guard.pos.z - rig.pos.z)) < 30)) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7, 'teach', { first: true }); // (review polish) said as its ground is first met, before it takes up
       if (overRift()) say('toll', 'A rift takes part of your tail as you go down it. The dark end of your scale is what this one will take.', 9);
       if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { // the palace gate only leads into the hall
         const owed = tollOf(run.segs);
@@ -2049,7 +2110,7 @@ export async function start(saved = {}) {
     if (lib.isOpen) { if (!window.__hold) lib.frame(dt); return renderer.render(lib.scene, lib.camera); }
     if (!window.__hold) tick(dt);
     if (still() && owed <= 0 && now > drawUntil && now - drewAt < QUIET.beat * 1000) return; // nothing has moved: what is on the screen stays there
-    owed--; drewAt = now; renderer.render(scene, camera);
+    owed--; drewAt = now; ringsBefore(); renderer.render(scene, camera); ringsAfter(); // (review polish: rings fade in and read two pixels wide)
   });
 
   // keep the dive going when the page is republished under an open viewer

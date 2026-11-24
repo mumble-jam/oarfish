@@ -159,7 +159,8 @@ export function growing({ sway = 0, glow = 0, double = true, give = 0, shy = 0 }
     if (react) { sh.uniforms.uWake = wake; sh.uniforms.uWakeBound = wake.bound || STILL.bound; sh.uniforms.uGive = { value: give }; sh.uniforms.uShy = { value: shy }; sh.uniforms.uNear = near; }
     sh.vertexShader = `uniform float uTime;\nuniform float uSway;\n${react ? 'uniform vec4 uWake[WAKE];\nuniform vec3 uWakeBound;\nuniform float uGive;\nuniform float uShy;\nuniform float uNear;\n#ifdef TUCK\nattribute vec4 tuck;\n#endif\n' : ''}` + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   #ifdef USE_INSTANCING
-    float kph = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.53;
+    float kph = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.53 + length(instanceMatrix[1].xyz) * 2.3; // (review polish) and by its own height, so neighbours of a row do not sway as one
+    float kt = uTime * (0.86 + 0.28 * fract(abs(instanceMatrix[0].x * 7.3 + instanceMatrix[2].z * 5.1))); // (review polish) each at its own tempo
     float kb = position.y * position.y * uSway;
 ${react ? `    vec3 kroot = instanceMatrix[3].xyz;
     float ktall = length(instanceMatrix[1].xyz);
@@ -188,8 +189,8 @@ ${react ? `    vec3 kroot = instanceMatrix[3].xyz;
       transformed.z += dot(instanceMatrix[2].xyz, kaway) / dot(instanceMatrix[2].xyz, instanceMatrix[2].xyz);
       transformed.y -= 0.67 * kf * kf * uGive * uGive * position.y * position.y * position.y; // leaning, not stretching
     }
-` : ''}    transformed.x += sin(uTime * 1.1 + kph + position.y * 2.4) * 0.17 * kb;
-    transformed.z += cos(uTime * 0.9 + kph * 1.7 + position.y * 2.0) * 0.13 * kb;
+` : ''}    transformed.x += sin(kt * 1.1 + kph + position.y * 2.4) * 0.17 * kb;
+    transformed.z += cos(kt * 0.9 + kph * 1.7 + position.y * 2.0) * 0.13 * kb;
   #endif`);
     sh.fragmentShader = 'uniform float uGlow;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR_ALPHA\n  totalEmissiveRadiance += vColor.rgb * (1.0 - vColor.a) * uGlow;\n#endif');
   };

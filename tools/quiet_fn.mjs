@@ -56,7 +56,7 @@ export async function quietAudit({ worlds = 120, ref = '5428c39' } = {}) {
     // what was there before stands where it stood: swarms, puzzles, fragments, the mural, jars, pilot fish, chimes, the bloom, the shells, every earlier claim
     if (was) { const v = (o) => JSON.stringify(o, (k, x) => (typeof x === 'number' ? +x.toFixed(4) : x)), a = was.build(seed, 0, { nursery }).world;
       const pick = (o) => ({ puzzles: o.react.puzzles.map((p) => [p.kind, p.x, p.z, p.cache.x, p.cache.z]), fragments: o.react.fragments.map((f) => [f.x, f.z]), mural: o.react.mural && [o.react.mural.x, o.react.mural.z], urns: o.urns.map((u) => [u.x, u.z]),
-        swarms: o.schools.map((s) => [s.hx, s.hz, s.n]), bloom: o.bloom && [o.bloom.x, o.bloom.z, o.bloom.bells.map((bb) => [bb.x, bb.z])], pilots: o.react.pilots.map((p) => [p.x, p.z]), chimes: o.react.chimes.map((c) => [c.x, c.z]),
+        swarms: o.schools.map((s) => [s.hx, s.hz, s.n]), bloom: o.bloom && [o.bloom.x, o.bloom.z, o.bloom.bells.map((bb) => [bb.x, bb.z])], pilots: o.react.pilots.map((p) => [p.x, p.z]), chimes: o.react.chimes.filter((c) => !w.keeperGround?.reach(c.x, c.z, 3)).map((c) => [c.x, c.z]), // (review polish: a lintel on the Keeper's ground is left out, and its chimes with it)
         sites: o.sites.filter((s) => s[3] !== 'quiet').map((s) => s.slice(0, 3)), shells: shellSpots(o, { seed, floor: 0, count: 3 }) });
       const A = pick(a), B = pick(w), moved = Object.keys(A).filter((k) => v(A[k]) !== v(B[k])); if (moved.length) note('stayed', tag, moved.join(', ')); a.dispose(); }
     w.dispose();
