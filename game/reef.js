@@ -18,7 +18,7 @@
 //     how a thin line reads as a rider from the high camera). It rides. When the body closes a loop on a swarm it darts out with its mouth open, a
 //     flash where it takes, and has one fish of that swarm; then it is back on the flank. A dash, or a coil round nothing, shakes it off, and it
 //     swims home to its rod, back in its own colours. One rider at a time; it leaves by itself, sated or bored. Its numbers are chosen so that
-//     going by the reef is a choice: a rider can be outswum (it is a poor swimmer and gives up after `give` seconds), shaken off for a dash or a
+//     going by the reef is a choice: a rider can be outswum (it does not try for a body sprinting past, and gives up after `give` seconds), shaken off for a dash or a
 //     second's coil, or carried, at the price of one fish a catch and two at most. The decisions are in PROGRESS.md.
 //   THE CORAL THAT GROWS. For every goal of a mural the player wins (a carving: the band's greatest swarm, a cache, a keeper; in any band, in any
 //     dive), one more coral takes on the next bare spot of world.quiet.reef.grow, and stays: the count is kept in the nest's record
@@ -37,13 +37,13 @@ export const REEF = {
   station: { reach: CLEAN.reach, still: CLEAN.still, time: CLEAN.time, uses: CLEAN.uses, rest: CLEAN.rest, fish: CLEAN.fish, see: 12, mound: 0.85, lit: 0.12 },
   // the trumpetfish. n: how many hang (one to a rod, at most this many); high: how far over the bed their middles hang; scale: of the model (which is
   // already 1.4 times the real one, trumpet.js); hang: how far head down it hangs (radians; straight down would be a dot from the camera); join: how near (metres) the nearest part of a swimming body (faster than `moving` m/s) has to pass;
-  // chase: how fast it can go to catch up, and give: how long it tries before it gives up; slot: how far back along the body it rides (of the body),
+  // fast: a body going faster than this (a sprint) it does not try for, and gives up on; chase: how fast it can go to catch up, and give: how long it tries before it gives up; slot: how far back along the body it rides (of the body),
   // side: how far off the body's line, up: how far over it; stay: seconds it rides before it leaves on its own; reach: how near a swarm has to be for
   // it to strike, and at: how far round the loop has to have gone (of a closed loop); takes: fish a strike; spare: it never takes a swarm below this many;
   // most: strikes before it is sated and goes home; coil: seconds of coiling round nothing that shake it off; again: seconds before any of them will
   // ride again after one has been shaken off or has left; home: its swimming speed back to its rod; lost: farther than this from the body on the way
   // home, and out of sight, it is simply home
-  trumpet: { n: 3, high: [1.6, 2.2], scale: 1.2, hang: 0.95, join: 3, moving: 1, chase: 5.5, give: 4, slot: 0.36, side: 0.6, up: 0.18, stay: 60, reach: 9, at: 0.5,
+  trumpet: { n: 3, high: [1.6, 2.2], scale: 1.2, hang: 0.95, join: 3, moving: 1, fast: 4.2, chase: 5.5, give: 4, slot: 0.36, side: 0.6, up: 0.18, stay: 60, reach: 9, at: 0.5,
     takes: 1, spare: 2, most: 2, coil: 1, again: 20, home: 2.2, lost: 40,
     strike: { stalk: 0.3, dart: 0.25, back: 0.45 }, flash: { size: 2.4, life: 0.55, colour: '#fff0a0' }, fling: 3.5 },
   // the coral that grows. kinds: what may grow (a component's model and tints, as the band's own corals are scattered); see: how near the fish has to
@@ -146,7 +146,7 @@ export function createReef(scene, world, hooks) {
     if (state.rider === f) state.rider = null; state.again = TR.again; f.do = how === 'shaken' ? 'flung' : 'home'; f.t = 0; f.sc = null; f.coil = 0;
     if (how === 'shaken') { state.shaken++; f.vel.copy(Nv.set(Math.cos(f.yaw), 0, -Math.sin(f.yaw))).multiplyScalar(f.side * TR.fling); f.vel.y = 0.6; hooks.moment('burst'); } }
   function trumpets(dt, J, t) {
-    const moving = rig.speed > TR.moving, loops = world.schools.some((sc) => sc.left > 0 && sc.progress > 0.05);
+    const moving = rig.speed > TR.moving && rig.speed < TR.fast, loops = world.schools.some((sc) => sc.left > 0 && sc.progress > 0.05);
     state.again = Math.max(0, state.again - dt);
     for (const f of fish) {
       f.t += dt; let mood = 'hang', yaw = f.yaw, pitch = TR.hang, roll = 0.05 * Math.sin(t * 0.4 + f.ph), curve = 0, phase = 0, rate = 4;
@@ -163,7 +163,7 @@ export function createReef(scene, world, hooks) {
         else { f.coil = rig.coiling > 0.85 && !loops ? f.coil + dt : 0; if (f.coil > TR.coil) letGo(f, 'shaken'); }
         if (f.do === 'join') { mood = 'swim'; pitch = 0; phase = 1; yaw = Math.atan2(want.x - f.pos.x, want.z - f.pos.z);
           D.subVectors(want, f.pos); const d = D.length(); if (d > 1e-4) f.pos.addScaledVector(D, Math.min(1, (TR.chase * dt) / d));
-          if (d < 0.45) { f.do = 'ride'; f.t = 0; } else if (f.t > TR.give) letGo(f, 'home'); } // outswum: a poor swimmer, it gives up
+          if (d < 0.45) { f.do = 'ride'; f.t = 0; } else if (f.t > TR.give || rig.speed > TR.fast) letGo(f, 'home'); } // outswum: a poor swimmer, it gives up
         else if (f.do === 'ride') { mood = 'shadow'; pitch = -0.05; phase = 1; yaw = sl.yaw; curve = sl.curve; roll = -0.3 * f.side; rate = 10; f.pos.lerp(want, 1 - Math.exp(-rate * dt));
           if (f.t > TR.stay) letGo(f, 'home'); // bored: it leaves on its own
           else for (const sc of world.schools) { if (sc.left <= TR.spare || !sc.can || sc.progress < TR.at || f.struck.has(sc)) continue;
