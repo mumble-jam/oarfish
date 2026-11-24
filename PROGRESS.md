@@ -7,7 +7,9 @@ Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfis
 - [x] tools/shot_reef.mjs: pictures from the dive's camera.
 
 ## To do
-- [ ] checks in test_game.mjs; all five suites; perf after; sheet; CLAUDE.md, CREATURES.md.
+- [x] checks in test_game.mjs (three); library checks updated for the moved trumpetfish; CLAUDE.md, CREATURES.md.
+- [x] perf before/after (see CLAUDE.md, *The reef's cost*); sheet /home/claude/reef-sheet.jpg.
+- [ ] final run of all five suites after the last code change (trumpetfish pieces no longer cast; empty coral meshes hidden).
 
 ## Decisions (and why)
 - Station rule without tail-biters: it mends, it does not feed. It gives back only what this dive has lost (body shorter than this dive's longest); a whole fish gets nothing (no ring, cleaners stay on the coral), and nothing goes to the crest. Uses, rest, time, reach and stillness are CLEAN's own numbers. Not solid (a low brain coral the fish hovers over), so world.js's colliders are untouched. It is reef.js's own station, not one of world.react.stations, so the deeper bands' station check and the truce code are untouched.

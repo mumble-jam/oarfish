@@ -40,10 +40,10 @@ await page.evaluate((seed) => { window.__hold = true; const g = window.__game;
 let info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), P = r.plan; g.run.longest = 12; g.run.segs = 10; g.buildFish(10);
   S.put(P.station.x, P.station.z - 1.6, 0, 1.7); g.sim(3.8, S.none); return S.info(); });
 await shot(0, 'the station at work: held still over it, the ring half full, the cleaners along the body', info);
-// 1. the trumpetfish hanging by the rods, as the reef is met: from 'Go to the reef head', outside the arch, the fish swimming slowly in
-info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), P = r.plan, G = P.gate, fx = Math.sin(G.yaw), fz = Math.cos(G.yaw);
-  S.put(G.x - fx * 9, G.z - fz * 9, G.yaw + Math.PI, 1.8); g.sim(0.6, S.none); g.cam.yaw += 1.2; g.snap(); return S.info(); });
-await shot(1, 'trumpetfish hanging head down by the sea rods on the way in, from the arch', info);
+// 1. the trumpetfish hanging by the rods: the fish still, a few metres from the nearest, which is in the middle of the picture
+info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), P = r.plan, f = r.fish[0], a = Math.atan2(f.home.x - P.x, f.home.z - P.z) + 0.6;
+  S.put(f.home.x - Math.sin(a) * 3.5, f.home.z - Math.cos(a) * 3.5, a, 1.6); g.sim(0.8, S.none); g.cam.yaw = a + Math.PI - 0.35; g.snap(); return S.info(); });
+await shot(1, 'trumpetfish hanging head down by the sea rods', info);
 // 2. one peels off as the fish swims by it; 3. riding along its flank
 info = await page.evaluate(() => { const g = window.__game, r = S.fresh(), f = r.fish[0], a = f.homeYaw;
   S.put(f.home.x - Math.sin(a) * 5 + Math.cos(a) * 1.6, f.home.z - Math.cos(a) * 5 - Math.sin(a) * 1.6, a, 0.4); let t = 0; while (!r.rider && t < 6) { S.swim(Math.sin(a), Math.cos(a), 0.1); t += 0.1; } S.swim(Math.sin(a), Math.cos(a), 0.35); g.snap(); return S.info(); });

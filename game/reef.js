@@ -130,6 +130,7 @@ export function createReef(scene, world, hooks) {
   // the rods nearest the way in from the arch to the station: they are met on arrival, so going by them close or round them wide is the player's to choose
   const G = plan.gate, gx = C.x - G.x, gz = C.z - G.z, gl = gx * gx + gz * gz || 1, wayD = (r) => { const t = clamp(((r.x - G.x) * gx + (r.z - G.z) * gz) / gl, 0, 1); return Math.hypot(r.x - G.x - gx * t, r.z - G.z - gz * t); };
   [...plan.rods].sort((a, b) => wayD(a) - wayD(b)).slice(0, TR.n).forEach((rod, i) => { const a = make('trumpet'); a.object.scale.multiplyScalar(TR.scale); scene.add(a.object);
+    a.object.traverse((o) => { if (o.isMesh && o !== a.body) o.castShadow = false; }); // only the body casts: fourteen small pieces to a fish were as many shadows to draw
     const toMid = Math.atan2(C.x - rod.x, C.z - rod.z), hx = rod.x + Math.sin(toMid) * 0.55, hz = rod.z + Math.cos(toMid) * 0.55, hy = world.drawn(hx, hz) + lerp(TR.high[0], TR.high[1], hash(rod.x, rod.z));
     fish.push({ a, i, home: new THREE.Vector3(hx, hy, hz), homeYaw: toMid + Math.PI * 0.5, pos: new THREE.Vector3(hx, hy, hz), vel: new THREE.Vector3(), yaw: toMid + Math.PI * 0.5, pitch: TR.hang, roll: 0, curve: 0, phase: 0,
       mood: 'hang', do: 'hang', t: 0, side: 1, took: 0, coil: 0, sc: null, struck: new Set(), ph: i * 2.1 }); });
@@ -205,7 +206,7 @@ export function createReef(scene, world, hooks) {
     for (const p of pieces) { const k = grownBy(p, t), s = p.s * (k <= 0 ? 0 : ease(k) * (1 + 0.12 * Math.sin(Math.PI * k)));
       p.m.setMatrixAt(p.slot, m4.compose(v3.set(p.x + off.x, p.y, p.z + off.z), q.setFromEuler(e.set(0, p.yaw, 0)), s3.setScalar(Math.max(s, 1e-4))));
       p.m.setColorAt(p.slot, tint.copy(pale).lerp(p.colour, ease(clamp(k * 1.6 - 0.4, 0, 1)))); }
-    for (const m of Object.values(meshes)) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+    for (const m of Object.values(meshes)) { m.visible = m.count > 0; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   }
 
   const head = new THREE.Vector3();
