@@ -28,6 +28,20 @@ Running notes so someone else can take over. Brief: make the Keeper's hit model 
 ## Traps
 - `tools/test_boss.mjs` was only the Sum (last band); the Keeper's checks live in `tools/test_game.mjs` (`keeperKit`).
 
+## Stage B (branch keeper-tall, on top of keeper-shapes)
+- [x] B1 tall: KEEPER.scale 1.3, ride 2.8, three-length legs (l3 spike), feet 10-11 m apart, belly ~3 m, knees 4.5-5 m; claws longer; camera stands back `view` 7 m while near (main.js cam.dist).
+- [x] B2 legs: whole/cracked/numb/off; planted armoured, lifted knocked (stumble); stomp (tell, strike, stuck foot counts double); wrap+haul (topple); self-shed; fallen legs are bait and food (game.fed); lameness (list, slow slam, no run, slow turn).
+- [x] B3 belly: linger -> heave -> drop -> grounded.
+- [x] B4 wave tempo ladder + first bluff.
+- [x] B5 legs 4, rage 2 kept; every number in KEEPER_FIGHT.
+- [x] B6 checks in test_boss.mjs (Keeper made tall); test_game keeperKit updated.
+- [x] Notes in CLAUDE.md.
+- tools/shot_tall.mjs; old-crab picture: OARFISH_SRC=/home/claude/oarfish-keeper-a (detached keeper-shapes) node tools/shot_tall.mjs old size
+- [x] All five suites on keeper-tall (final): game, boss, teach, library, controls all passed. keeper-shapes head b1e68fa re-run: game and boss passed (teach, library, controls passed one commit earlier; the last commit only added notes, a tool and a debug helper).
+- [x] /home/claude/keeper-tall-sheet.jpg
+- Done; handed back. Not played by a person.
+- Traps met: a comment pasted into the middle of a line swallows the code after it (happened three times: crab.js numb pose, guards.js ring, test helpers). Lost legs are bait now: a check that tears legs and then wants the crab idle must clear them (`b.bait.life = 0`). Each B check starts its own dive (startRun) because torn legs persist.
+
 # Sand flat batch: progress
 
 Branch `sand-flat-models`, from `squid-play`. Models only; nothing goes in the dive.

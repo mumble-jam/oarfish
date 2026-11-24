@@ -170,20 +170,28 @@ const grey = (k) => dim('#ffffff', k);
 const side4 = (fn) => [1, -1].flatMap((s) => [0, 1, 2, 3].map((i) => fn(s, i)));
 const KEEPER_DOME = [[0.12, 1.5], [0.26, 1.66], [0.62, 1.52], [0.95, 1.24], [1.22, 0.86], [1.42, 0.44]], KEEPER_N = 12, KEEPER_SQUASH = 0.92; // the dome in rings, from its lip up: height, radius
 const feeler = (side, long, root, way, n) => ({ side, long, root, way, cuts: Array.from({ length: n + 1 }, (_, i) => (long * i) / n) });
+// It stands tall (George wanted a fight 'where I have to go by his legs'): the whole animal is drawn `scale` times its modelled size, and carried high
+// on long legs, so that its belly is over where a fish swims (a fish keeps about 1.5 m off the bed: rig.js) and a fish can pass under it and between
+// its legs, which stand 11 m apart. Each leg is three lengths: the thigh up from the shell to the knee, the shin down to the ankle, and the last,
+// a spiked tip that stands straight down into the bed. Its height and its reach were built to the fish's; see KEEPER_FIGHT in guards.js for the rest.
+// The real animal's look is a spider crab's (the Japanese spider crab carries a body the size of a table on legs that span three and a half metres),
+// with the stone crab's great claw it had before.
 export const KEEPER = {
-  ride: 0.44, // how far the shell's origin is carried over the ground its feet are on
-  // front to back down each side. hip: where the leg leaves the shell; rest: where its foot stands, on the ground, as the body sees it
-  legs: side4((s, i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 1.7, l2: 2.0, // (longer than they were, 1.3 and 1.6, so that the knees stand over two metres up, where a fish swims: a leg is hit where it is drawn now, and a fish keeps 1.5 m off the bed
-    hip: [s * [1.2, 1.33, 1.29, 1.04][i], 0.3, [0.62, 0.1, -0.42, -0.94][i]], rest: [s * [2.5, 3.15, 3.1, 2.4][i], [1.8, 0.58, -0.72, -2.0][i]],
-    curl: [s * [0.75, 0.9, 0.9, 0.7][i], -0.55, [0.75, 0.2, -0.4, -0.85][i]] })), // drawn up under the belly, when it is done for
+  scale: 1.3, ride: 2.8, // ride: how far the shell's origin is carried over the ground its feet are on (in the model's own size: 3.6 m in the world)
+  walk: { stride: 1.05, lift: 1.1, swing: 0.32 }, // how a step goes (legs.js): how far a foot is left behind before it steps, how high it is lifted, how long it is in the air at most
+  // front to back down each side. hip: where the leg leaves the shell; rest: where its foot stands, on the ground, as the body sees it. l3: the spiked tip, which hangs straight down
+  legs: side4((s, i) => ({ side: s, group: (i + (s > 0 ? 0 : 1)) % 2, l1: 2.6, l2: 2.6, l3: 1.0,
+    hip: [s * [1.2, 1.33, 1.29, 1.04][i], 0.3, [0.62, 0.1, -0.42, -0.94][i]], rest: [s * [3.95, 4.3, 4.25, 3.9][i], [3.0, 1.0, -1.3, -3.1][i]],
+    curl: [s * [1.2, 1.5, 1.5, 1.1][i], -0.9, [1.4, 0.4, -0.6, -1.5][i]] })), // drawn up under the belly, when it is done for
   // Two claws, and not a pair. On its right the crusher: big, slow, and the one it strikes with. On its left the cutter: small and quick, the one it feeds with.
   // A claw is an arm from the shoulder to the elbow, then the hand, which is the forearm and the lower finger in one piece; the upper finger hinges on it.
   // l1, l2: arm and forearm; span: how far the fingers reach past the hinge; stout: how thick it all is
   claws: [
     // (Both were made bigger when the fight was made honest: the great claw had hit a disc three metres across while it was itself a hand's breadth wide.
     // It is now what it hits with, so it is drawn as great as its blow: a third longer and a third thicker. The small one reaches as far as its jab does.)
-    { side: -1, big: true, shoulder: [-1.04, 0.34, 1.0], l1: 1.35, l2: 1.2, hinge: [0, 0.2, 1.14], span: 1.25, stout: 2.0 },
-    { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 1.1, l2: 0.9, hinge: [0, 0.08, 0.86], span: 0.75, stout: 0.95 },
+    // (Longer again for the tall Keeper: its shoulders are four metres up, and both claws still have to reach the bed in front of it.)
+    { side: -1, big: true, shoulder: [-1.04, 0.34, 1.0], l1: 2.1, l2: 1.6, hinge: [0, 0.2, 1.54], span: 1.25, stout: 2.0 },
+    { side: 1, big: false, shoulder: [0.98, 0.3, 1.06], l1: 1.7, l2: 1.3, hinge: [0, 0.08, 1.26], span: 0.75, stout: 0.95 },
   ],
   eyes: [1, -1].map((side) => ({ side, socket: [side * 0.37, 0.4, 1.47] })), stalk: 0.56, // where each stalk stands in its socket, and how far up it the eye is
   jaws: [1, -1].map((side) => ({ side, hinge: [side * 0.33, 0.21, 1.645] })), // the two doors of its mouth, each hinged at its outer edge
@@ -217,16 +225,19 @@ export function keeper(pal) {
   for (const c of KEEPER.claws) m.limb([c.shoulder[0] * 0.76, c.shoulder[1], c.shoulder[2] - 0.1], c.shoulder, 0.24 * c.stout, 0.2 * c.stout, 5, deep); // the socket each claw turns in
   return m.geometry();
 }
-// The two lengths of a walking leg. The upper is the thigh, from the joint at the shell to the knee, with a crest of small spines; the lower is the three
-// short lengths a crab's leg ends in, made as one: a wrist, a shin, and after a pale joint the last, which comes to a point.
+// The three lengths of a walking leg. The upper is the thigh, from the joint at the shell to the knee, with a crest of small spines; the lower is the
+// wrist and the shin, to the ankle; the last is the spiked tip, pale-jointed at the ankle, thick, and armed with a ring of barbs before its point, which
+// is what comes down in a stomp. (Thicker than a real crab's: the tip is a weapon here, and is hit with as it is drawn.)
 export function keeperLeg(pal) {
-  const { pale, dark, deep } = pal, { l1, l2 } = KEEPER.legs[0], u = l1 / 1.3, w = l2 / 1.6; // (u, w: how much longer than they were first made; the spines and joints keep their places along them)
+  const { pale, dark, deep } = pal, { l1, l2, l3 } = KEEPER.legs[0], u = l1 / 1.3, w = l2 / 1.6; // (u, w: how much longer than they were first made; the spines and joints keep their places along them)
   const upper = mesher().limb([0, 0, -0.1], [0, 0, 0.2], 0.21, 0.2, 5, deep).limb([0, 0.01, 0.16], [0, 0.015, l1 - 0.1], 0.185, 0.15, 5, [dark, deep]).limb([0, 0.015, l1 - 0.14], [0, 0, l1], 0.165, 0.17, 5, [deep, dark]), knee = upper.last;
   upper.cap(knee, [0, 0, 1], pale, 0.16); // the knuckle of the knee
   for (const z of [0.42, 0.72, 1.0]) upper.limb([0, 0.14, z * u], [0, 0.29, z * u + 0.1], 0.05, 0.005, 3, [dark, pale]);
-  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34 * w], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3 * w], [0, 0.05, 1.0 * w], 0.14, 0.1, 5, [dark, deep])
-    .limb([0, 0.05, 0.95 * w], [0, 0.05, 1.07 * w], 0.118, 0.11, 5, pale).limb([0, 0.05, 1.04 * w], [0, 0, l2], 0.095, 0.014, 5, [dark, pale]);
-  return { upper: upper.geometry(), lower: lower.geometry() };
+  const lower = mesher().limb([0, 0, -0.05], [0, 0.02, 0.34 * w], 0.17, 0.15, 5, [deep, dark]).limb([0, 0.02, 0.3 * w], [0, 0.03, l2 - 0.08], 0.15, 0.13, 5, [dark, deep]).limb([0, 0.03, l2 - 0.12], [0, 0, l2], 0.13, 0.15, 5, [deep, dark]);
+  lower.cap(lower.last, [0, 0, 1], pale, 0.1); for (const z of [0.3, 0.55, 0.8]) lower.limb([0, 0.12, z * l2], [0, 0.24, z * l2 + 0.08], 0.04, 0.004, 3, [dark, pale]); // the ankle, and spines down the shin
+  const tip = mesher().limb([0, 0, -0.06], [0, 0, 0.14], 0.14, 0.13, 5, pale).limb([0, 0, 0.12], [0, 0, l3 * 0.62], 0.2, 0.17, 6, [dark, deep]).limb([0, 0, l3 * 0.58], [0, 0, l3], 0.17, 0.012, 6, [deep, pale]);
+  for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2; tip.limb([Math.cos(a) * 0.14, Math.sin(a) * 0.14, l3 * 0.55], [Math.cos(a) * 0.34, Math.sin(a) * 0.34, l3 * 0.66], 0.045, 0.004, 3, [dark, pale]); } // the ring of barbs
+  return { upper: upper.geometry(), lower: lower.geometry(), tip: tip.geometry() };
 }
 // The three pieces of one claw (c: its entry in KEEPER.claws). The hand's top is +y: the upper finger lifts off it that way, turning about x at the hinge, whose pin
 // shows on both sides of the hand. The crusher's fingers carry blunt knobs, big toward the hinge; the cutter's a row of fine sharp teeth. Both are tipped dark.

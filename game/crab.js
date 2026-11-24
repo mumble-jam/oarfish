@@ -34,19 +34,22 @@ import { clamp, lerp, damp } from './geo.js';
 
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]), UP = new THREE.Vector3(0, 1, 0);
 const AIMED = new Set(['slam', 'stuck', 'sweep', 'sweeping', 'jab', 'jabbed', 'feed']), WINDUP = new Set(['slam', 'sweep', 'jab']); // when its eyes are on the point it was handed, and when it is still winding up
-const SWEEP_Y = 1.35; // how high, in the body's space, the great claw goes across in a sweep: as high as a fish keeps off the bed, which is what it is swept at (it was 0.28, under any fish)
+const SWEEP_Y = 1.8; // how high over the bed the great claw goes across in a sweep: as high as a fish keeps off the bed, which is what it is swept at (it once went under any fish)
 const FEEL = { long: { stiff: [5, 1.3], drag: [1.0, 3.2], ease: 0.8 }, short: { stiff: [9, 4.5], drag: [1.0, 2.2], ease: 0.85 } };
 
 // a: the creature as npc.js makes it (a.body is the shell, in its material). Returns the rig; a.object becomes the whole animal.
 export function crabRig(a, pal) {
   const group = new THREE.Group(), mat = a.body.material; group.add(a.body);
-  const leg = keeperLeg(pal); a.owned.push(leg.upper, leg.lower);
+  const leg = keeperLeg(pal); a.owned.push(leg.upper, leg.lower, leg.tip);
   const numbMat = mat.clone(); numbMat.emissive = new THREE.Color(pal.pale || '#e9dfc0'); a.owned.push(numbMat); // a leg that has gone numb is pale, and flickers: that is the one to go for
+  const crackMat = mat.clone(); crackMat.emissive = new THREE.Color(pal.crack || '#ff4f7b'); crackMat.emissiveIntensity = 0.5; a.owned.push(crackMat); // a leg that has been cracked by a ram glows red in its seams, and stays so
+  const raiseMat = mat.clone(); raiseMat.emissive = new THREE.Color(pal.eye || '#eaff7c'); a.owned.push(raiseMat); // a leg raised to stomp flares, as its eyes do in a wind-up: the tell, from the dive's high camera
   const piece = (geo, parent = group) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
   const count = (g) => g.attributes.position.count / 3;
-  const legs = KEEPER.legs.map((l) => ({ ...l, hip: V(l.hip), curl: V(l.curl), rest: { x: l.rest[0], z: l.rest[1] }, upper: piece(leg.upper), lower: piece(leg.lower) }));
-  const walker = createWalker(group, legs, { ride: KEEPER.ride });
-  let triangles = count(a.body.geometry) + 8 * (count(leg.upper) + count(leg.lower));
+  const legs = KEEPER.legs.map((l) => ({ ...l, hip: V(l.hip), curl: V(l.curl), rest: { x: l.rest[0], z: l.rest[1] }, upper: piece(leg.upper), lower: piece(leg.lower), last: piece(leg.tip), cracked: false }));
+  group.scale.setScalar(KEEPER.scale); // it is drawn bigger than it is modelled: everything in it is in the model's own size
+  const walker = createWalker(group, legs, { ride: KEEPER.ride, ...KEEPER.walk });
+  let triangles = count(a.body.geometry) + 8 * (count(leg.upper) + count(leg.lower) + count(leg.tip));
   const claws = KEEPER.claws.map((c) => { const geo = keeperClaw(pal, c), hand = piece(geo.hand), finger = piece(geo.finger, hand); finger.position.set(...c.hinge);
     a.owned.push(geo.arm, geo.hand, geo.finger); triangles += count(geo.arm) + count(geo.hand) + count(geo.finger);
     return { ...c, shoulder: V(c.shoulder), arm: piece(geo.arm), hand, finger, wrist: new THREE.Vector3(c.side * 0.9, 0.25, 2.1), open: 0.3, elbow: new THREE.Vector3(), pole: new THREE.Vector3(c.side, 0.7, -0.3), to: new THREE.Vector3() }; });
@@ -58,7 +61,7 @@ export function crabRig(a, pal) {
   const feelers = KEEPER.feelers.map((f, i) => ({ ...f, st: bundle.strands[i], root: V(f.root), way: V(f.way).normalize(), ph: i * 2.4 }));
   const cracks = KEEPER.legs.map((l, i) => { const g = keeperCrack(pal, i), m = piece(g); m.visible = false; a.owned.push(g); return m; });
   triangles += 2 * (count(eyeGeo.stalk) + count(eyeGeo.ball)) + 2 * count(jawGeo) + strands.reduce((t, s) => t + count(s.geometry), 0); for (const s of strands) s.geometry.dispose();
-  const pose = { crouch: 0, tuck: 0, roll: 0, pitch: 0, raise: 0, limp: 0, wary: 0, rage: 0, glow: 1, lost: 0, gaze: new THREE.Vector3(0, 0.4, 5) }, at = new THREE.Vector3(), face = new THREE.Vector3();
+  const pose = { crouch: 0, tuck: 0, roll: 0, pitch: 0, raise: 0, limp: 0, wary: 0, rage: 0, glow: 1, lost: 0, list: 0, heave: 0, drop: 0, wave: 0, hz: 0.4, gaze: new THREE.Vector3(0, 0.4, 5) }, at = new THREE.Vector3(), face = new THREE.Vector3();
   const gazeTo = new THREE.Vector3(), aimer = new THREE.Object3D(), Z1 = new THREE.Vector3(), U1 = new THREE.Vector3(), P1 = new THREE.Vector3(), T1 = new THREE.Vector3(), K1 = new THREE.Vector3(), D1 = new THREE.Vector3(), DOWN = new THREE.Vector3(), QI = new THREE.Quaternion(), QX = new THREE.Quaternion(), X1 = new THREE.Vector3(1, 0, 0), M1 = new THREE.Matrix4();
   const moving = new THREE.Vector3(), water = new THREE.Vector3(), opts = { scale: 1, moving, water: null };
 
@@ -77,39 +80,43 @@ export function crabRig(a, pal) {
     pose.rage = damp(pose.rage, s.rage && !limp ? 1 : 0, 3, dt); const rage = pose.rage, calm = !act && !s.tuck && !s.stun && !limp;
     pose.tuck = damp(pose.tuck, s.tuck && !limp ? 1 : 0, 7, dt); pose.limp = damp(pose.limp, limp, 3, dt);
     pose.crouch = damp(pose.crouch, limp ? 0 : s.tuck ? 1 : s.stun ? 0.5 : id === 'charge' ? 0.3 : id === 'spent' ? 0.4 : id === 'sweep' ? 0.3 : id === 'feed' ? 0.2 : 0, 7, dt);
-    pose.raise = damp(pose.raise, limp ? 1.55 : (id === 'slam' ? 0.2 : 0.07 * pose.wary + (calm ? 0.1 * rage : 0)) - 2.7 * (s.sink || 0), limp ? 3 : s.sink ? 5 : 9, dt); // over on its back, it lies on the dome of its shell; dug in, the dome is under the sand; raging, it stands high
-    pose.pitch = damp(pose.pitch, limp ? 0.25 : id === 'slam' ? -0.27 * Math.min(1, k * 2.5) : id === 'stuck' ? 0.15 + 0.035 * Math.sin(t * 17) : id === 'spent' ? 0.07 : id === 'feed' ? 0.1 : -0.05 * pose.wary - (calm ? 0.08 * rage : 0), hard ? 26 : 8, dt); // it rears, and comes down with the claw (and, raging, stands reared back a little)
-    pose.roll = damp(pose.roll, limp ? 2.2 : id === 'sweep' ? -0.17 * Math.min(1, k * 2) : id === 'sweeping' ? 0.12 : 0, limp ? 2.6 : 9, dt); // it leans back onto the claw's side, and then through
+    pose.heave = damp(pose.heave, s.heave || 0, 6, dt); pose.drop = damp(pose.drop, s.drop || 0, s.drop ? 30 : 3, dt); pose.list = damp(pose.list, limp ? 0 : s.list || 0, 2, dt);
+    pose.raise = damp(pose.raise, limp ? 1.55 - KEEPER.ride * 0.85 : (id === 'slam' ? 0.2 : 0.07 * pose.wary + (calm ? 0.1 * rage : 0)) - (KEEPER.ride + 1.6) * (s.sink || 0) + 0.45 * pose.heave - (KEEPER.ride - 0.4) * pose.drop, limp ? 3 : s.sink ? 5 : s.drop ? 40 : 9, dt); // over on its back, it lies on the dome of its shell; dug in, the dome is under the sand; raging, it stands high; heaving itself up to drop its weight, and dropped, its belly on the bed
+    pose.pitch = damp(pose.pitch, limp ? 0.25 : id === 'slam' ? -0.12 * Math.min(1, k * 2.5) : id === 'stuck' ? 0.02 + 0.015 * Math.sin(t * 17) : id === 'spent' ? 0.07 : id === 'feed' ? 0.1 : -0.05 * pose.wary - (calm ? 0.08 * rage : 0), hard ? 26 : 8, dt); // it rears, and comes down with the claw (and, raging, stands reared back a little)
+    pose.roll = damp(pose.roll, limp ? 2.2 : (id === 'sweep' ? -0.17 * Math.min(1, k * 2) : id === 'sweeping' ? 0.12 : 0) + pose.list + 0.06 * pose.heave * Math.sin(t * 30), limp ? 2.6 : 9, dt); // it leans back onto the claw's side, and then through; it lists toward a side whose legs are gone; heaving, it shudders
     walker.update(dt, { ...s, crouch: pose.crouch, tuck: pose.tuck, limp: pose.limp > 0.97 ? 1 : pose.limp, raise: pose.raise, pitch: pose.pitch, roll: pose.roll + (s.stun && !limp ? 0.17 * Math.sin(t * 16) : 0) + (calm ? 0.03 * rage * Math.sin(t * 23) : 0) }); // (raging, it shakes)
-    numbMat.emissiveIntensity = 1.2 + 0.5 * Math.sin(t * 11);
+    numbMat.emissiveIntensity = 1.2 + 0.5 * Math.sin(t * 11); raiseMat.emissiveIntensity = 0.7 + 0.5 * Math.sin(t * 19);
     let lost = 0;
-    walker.legs.forEach((l, i) => { const m = l.lame ? numbMat : mat; if (l.upper.material !== m) l.upper.material = l.lower.material = m; cracks[i].visible = l.gone; if (l.gone) lost++;
+    walker.legs.forEach((l, i) => { const m = l.raised ? raiseMat : l.lame ? numbMat : l.cracked ? crackMat : mat; if (l.upper.material !== m) l.upper.material = l.lower.material = l.last.material = m; cracks[i].visible = l.gone; if (l.gone) lost++;
       // A numb leg does not arch as the others do: its knee lies out to one side, low (toward the tail for a leg in front, toward the head for one behind), and now and then it jerks
       if (l.lame && !l.gone && pose.limp < 0.5) { const jerk = Math.max(0, Math.sin(t * 7.3 + i * 1.9)) ** 10;
-        P1.set(l.side * 0.25, 0.22 + 1.5 * jerk, l.hip.z >= -0.2 ? -1 : 1); T1.copy(l.tip); T1.y += 0.25 * jerk;
-        twoBone(l.hip, T1, l.l1, l.l2, P1, K1); lay(l.upper, l.hip, K1, UP); lay(l.lower, K1, T1, UP); } });
+        P1.set(l.side * 0.25, 0.22 + 1.5 * jerk, l.hip.z >= -0.2 ? -1 : 1); T1.copy(l.tip); T1.y += 0.25 * jerk; walker.ankleOf(l, D1).y += 0.25 * jerk;
+        twoBone(l.hip, D1, l.l1, l.l2, P1, K1); lay(l.upper, l.hip, K1, UP); lay(l.lower, K1, D1, UP); lay(l.last, D1, T1, UP); } });
     pose.lost = lost;
     // the claws. Everything from here is in the body's own space: +z is ahead of it, +x its left
     if (s.look) face.copy(s.look).applyMatrix4(walker.inv).setY(0).normalize(); else face.set(0, 0, 1);
     if (act && act.at) at.copy(act.at).applyMatrix4(walker.inv);
-    const sway = Math.sin(t * 1.3), chew = Math.sin(t * 7), up = Math.max(pose.wary, 0.8 * rage * (calm ? 1 : 0)), clack = rage * Math.abs(Math.sin(t * 5.5)); // raging, the claws are up whether a fish is near or not, and clack
+    pose.hz = damp(pose.hz, s.wave ? s.wave.hz : 0.4, 4, dt); pose.wave += dt * 6.2832 * pose.hz; // the great claw's wave: its tempo is handed over by the fight (`s.wave`), and goes up as a rival nears (see guards.js)
+    const sway = Math.sin(t * 1.3), chew = Math.sin(t * 7), up = Math.max(pose.wary, 0.8 * rage * (calm ? 1 : 0), calm && s.wave ? s.wave.up || 0 : 0), clack = rage * Math.abs(Math.sin(t * 5.5)); // raging, the claws are up whether a fish is near or not, and clack
+    const gs = group.scale.x, above = (group.position.y - walker.body.ground) / gs, gy = 0.3 / gs - above; // gy: a hand's breadth over the ground, in the body's space (the body stands high)
     for (const c of claws) {
       const K = c.side, reach = (short) => reachFor(c, at, short, c.to); // the fingers, not the wrist, are what get there
       let open = 0.25, quick = 9, snap = 10;
       if (pose.limp > 0.5) { c.to.set(K * 0.85, 0.45, 1.35); open = 0.45; quick = 3; }
+      else if (pose.drop > 0.3) { c.to.set(K * 2.2, gy, 2.2); open = 0.6; } // dropped onto its belly, its claws flung out on the bed
       else if (s.tuck || id === 'charge') { if (c.big) c.to.set(K * 0.1, 0.18, 2.0); else c.to.set(K * 0.6, 0.1, 1.6); open = 0.03; } // the big one shut across its face like a door
-      else if (s.stun) { c.to.set(K * (c.big ? 1.7 : 1.3), -0.15 + 0.05 * Math.sin(t * 16 + K), 1.9); open = 0.6; }
+      else if (s.stun) { c.to.set(K * (c.big ? 1.7 : 1.3), Math.max(gy, -1.2) + 0.05 * Math.sin(t * 16 + K), 1.9); open = 0.6; }
       else if (id === 'slam') { if (c.big) { c.to.set(K * 1.5, 2.2 + 0.45 * k, 1.05); open = 1.05; } else { c.to.set(K * 1.5, 0.9, 1.8); open = 0.8; } quick = 12; }
-      else if (id === 'stuck') { if (c.big) { reach(0.6); open = 0.02; quick = 34; snap = 40; } else { c.to.set(K * 1.25, -0.28, 1.7); open = 0.3; } } // the small one braced on the ground, to haul with
+      else if (id === 'stuck') { if (c.big) { reach(0.6); open = 0.02; quick = 34; snap = 40; } else { c.to.set(K * 1.25, gy, 1.9); open = 0.3; } } // the small one braced on the ground, to haul with
       else if (id === 'sweep') { if (c.big) { c.to.set(K * 2.7, 0.5 + 0.5 * k, 0.25 - 0.6 * k); open = 1.0; quick = 10; } else { c.to.set(K * 0.8, 0.45, 1.6); open = 0.25; } }
-      else if (id === 'sweeping') { if (c.big) { const a2 = 2.75 * k; c.to.set(K * 2.9 * Math.cos(a2), SWEEP_Y, 2.9 * Math.sin(a2) + 0.35); open = 0.12; quick = 46; snap = 40; } else { c.to.set(K * 0.5, 0.3, 1.3); open = 0.1; } }
+      else if (id === 'sweeping') { if (c.big) { const a2 = 2.75 * k; c.to.set(K * 2.9 * Math.cos(a2), SWEEP_Y / gs - above, 2.9 * Math.sin(a2) + 0.35); open = 0.12; quick = 46; snap = 40; } else { c.to.set(K * 0.5, 0.3, 1.3); open = 0.1; } }
       else if (id === 'jab') { if (c.big) { c.to.set(K * 0.9, 0.9, 1.9); open = 0.3; } else { c.to.set(K * 1.0, 0.8, 0.95 - 0.3 * k); open = 1.0; quick = 18; } }
       else if (id === 'jabbed') { if (c.big) { c.to.set(K * 0.9, 0.9, 1.9); open = 0.3; } else { reach(0.3); open = 0.03; quick = 48; snap = 40; } } // (0.3: KEEPER_FIGHT.jab.short)
       else if (id === 'feed') { if (c.big) { c.to.set(K * 0.3, 0.2 + 0.08 * chew, 1.75); open = 0.25 + 0.2 * chew; } else { c.to.set(K * 0.3, 0.15 - 0.08 * chew, 1.6); open = 0.3 - 0.2 * chew; } }
-      else if (id === 'spent') { if (c.big) c.to.set(K * 1.9, -0.25, 1.6); else c.to.set(K * 1.2, -0.28, 1.7); open = 0.5; quick = 5; }
+      else if (id === 'spent') { if (c.big) c.to.set(K * 1.9, gy, 2.0); else c.to.set(K * 1.2, gy, 2.0); open = 0.5; quick = 5; }
       else if (c.big) { // held low across its front; the nearer a fish, the higher it goes, and open, and it waves it at the fish
-        const wave = up * Math.sin(t * 2.2);
-        c.to.set(K * (0.6 + 0.95 * up) + face.x * 0.5 * pose.wary, 0.2 + 1.25 * up + 0.3 * wave + 0.03 * sway, 2.3 - 0.35 * up + Math.max(0, face.z) * 0.2 * pose.wary);
+        const wave = up * Math.sin(pose.wave);
+        c.to.set(K * (0.6 + 0.95 * up) + face.x * 0.5 * pose.wary, 0.2 + 1.25 * up + 0.45 * wave + 0.03 * sway, 2.3 - 0.35 * up + Math.max(0, face.z) * 0.2 * pose.wary);
         open = 0.2 + 0.6 * up + 0.1 * wave - 0.55 * clack * up;
       } else { // the small one picks at the ground and carries what it finds to its mouth; with a fish near it is held up, snipping
         const pick = 0.5 - 0.5 * Math.cos(t * 2.6), w = up;
@@ -177,10 +184,10 @@ export function crabRig(a, pal) {
     const next = (t) => { if (!solid[n]) solid[n] = { t, a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), r: 0, role: 'solid', leg: -1 }; const o = solid[n++]; o.t = t; o.leg = -1; return o; };
     const sh = next('ell'); sh.c.set(...SHELL.c).applyMatrix4(M); sh.rx = SHELL.r[0] * group.scale.x; sh.ry = SHELL.r[1] * group.scale.x; sh.rz = SHELL.r[2] * group.scale.x; sh.yaw = group.rotation.y;
     walker.legs.forEach((l, i) => { if (l.gone || !l.upper.visible) return;
-      for (const [piece, len, r] of [[l.upper, l.l1, 0.19], [l.lower, l.l2 - 0.15, 0.12]]) { const o = next('cap'); o.a.copy(piece.position); o.b.copy(piece.position).add(LZ.set(0, 0, len).applyQuaternion(piece.quaternion)); o.a.applyMatrix4(M); o.b.applyMatrix4(M); o.r = r * group.scale.x; o.leg = i; } });
+      for (const [piece, len, r] of [[l.upper, l.l1, 0.21], [l.lower, l.l2, 0.16], [l.last, l.l3 * 0.85, 0.2]]) { const o = next('cap'); o.a.copy(piece.position); o.b.copy(piece.position).add(LZ.set(0, 0, len).applyQuaternion(piece.quaternion)); o.a.applyMatrix4(M); o.b.applyMatrix4(M); o.r = r * group.scale.x; o.leg = i; } });
     solid.length = n; return solid; }
   // a leg comes away: the walker goes on without it, and whoever took it has its two pieces, where they were
-  function shed(i) { const l = walker.legs[i]; l.gone = true; l.lame = false; l.upper.material = l.lower.material = mat; group.updateMatrixWorld(true); return [l.upper, l.lower]; }
+  function shed(i) { const l = walker.legs[i]; l.gone = true; l.lame = false; l.ctrl = null; l.upper.material = l.lower.material = l.last.material = mat; group.updateMatrixWorld(true); return [l.upper, l.lower, l.last]; }
   // on the stand in the library: the same animal, the ground going by under it when it walks (sideways, as crabs do)
   const stand = { time: 0, look: new THREE.Vector3(), tail: new THREE.Vector3(), act: { id: '', k: 0, at: null } };
   const LOOPS = { snap: [2.6, ['slam', 0.4], ['stuck', 0.85]], sweep: [2.4, ['sweep', 0.36], ['sweeping', 0.5], ['spent', 0.85]], jab: [1.5, ['jab', 0.3], ['jabbed', 0.5], ['spent', 0.8]], feed: [1, ['feed', 1]], charge: [1, ['charge', 1]], numb: [1, ['spent', 1]] };
@@ -190,7 +197,7 @@ export function crabRig(a, pal) {
     stand.look.set(Math.sin(stand.time * 0.5) * 4 * sc, 0, 6 * sc); stand.tail.set((id === 'jab' ? 1.6 : -0.5 + (id === 'snap' ? 1.4 * Math.sin(Math.floor(stand.time / 2.6) * 2.1) : 0)) * sc, -0.1 * sc, 2.9 * sc); // (the great claw is aimed somewhere new each time, to show the eyes going there first)
     let act = null;
     if (loop) { const beat = (stand.time % loop[0]) / loop[0]; let from = 0; for (let i = 1; i < loop.length; i++) { if (beat < loop[i][1]) { act = stand.act; act.id = loop[i][0]; act.k = (beat - from) / (loop[i][1] - from); act.at = stand.tail; break; } from = loop[i][1]; } }
-    walker.legs.forEach((l, i) => { const off = id === 'lame' && (i === 1 || i === 6); l.gone = off; l.upper.visible = l.lower.visible = !off; l.lame = id === 'numb' && i === 1; }); // two legs down: how it stands on what is left. One numb: how that leg lies
+    walker.legs.forEach((l, i) => { const off = id === 'lame' && (i === 1 || i === 6); l.gone = off; l.upper.visible = l.lower.visible = l.last.visible = !off; l.lame = id === 'numb' && i === 1; }); // two legs down: how it stands on what is left. One numb: how that leg lies
     update(dt, { x: 0, z: 0, yaw: 0, vx: id === 'walk' || id === 'charge' ? speed * sc : 0, vz: 0, treadmill: true, ground: (p) => { p.y = -KEEPER.ride * sc; }, time: stand.time,
       wary: id === 'wary' ? 1 : 0, look: stand.look, act, tuck: id === 'tuck', stun: id === 'stun', limp: id === 'down', rage: id === 'lame', sink: id === 'dig' ? clamp((stand.time % 3.2) / 1.2, 0, 1) : 0 });
   }
