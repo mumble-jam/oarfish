@@ -15,7 +15,7 @@ const args = process.argv.slice(2), take = (flag, has = true) => { const i = arg
 const ref = take('--ref'), beside = take('--beside'), nursery = !!take('--nursery', false), scale = +(take('--scale') || 10) / 2; // the picture has two pixels to each point it is drawn on
 const [seed, band, file] = [+(args[0] ?? 4242), +(args[1] ?? 0), args[2] || 'out/shots/map.jpg'];
 
-const NATURAL = /^(rock|kelp|stag|finger|table|tuft|pebble|star|brittle|urchin|clam|brain|seaFan|sponge|anemone|lily|glass|worms|lantern|pen)$/;
+const NATURAL = /^(rock|kelp|stag|finger|table|tuft|pebble|star|brittle|urchin|clam|brain|seaFan|sponge|anemone|lily|glass|worms|lantern|pen|giantKelp|coralHead|seaRod)$/;
 const LOW = /^(flag|rubble|shard|coin)$/; // stone that lies and does not stand: paving, rubble, sherds, coin
 // the ground a piece covers: the corners of its model, sized, turned and put in its place, seen from above, and the outline round them
 function footprint(THREE, p) {
@@ -45,6 +45,11 @@ async function survey(from) {
     hunters: [...seat(foes.hooks, (h) => h), ...seat(foes.biters, (b) => b.home), ...seat(foes.anglers, (a) => a.home), ...seat(foes.mines, (m) => m.home), ...seat(foes.leeches, (l) => l.home)],
     bloom: w.bloom && await (async () => { const { BLOOM } = await game.mod('bloom.js'), b = w.bloom, N = BLOOM.nettle, k = N.train * Math.cos(N.sag); // the bloom water (bloom.js): its bells, its nettles and their trains, the squid's home
       return { x: b.x, z: b.z, R: b.R, bells: b.bells.map((q) => [q.x, q.z]), nettles: b.nettles.map((n) => [n.x, n.z, n.x + b.cur.x * k, n.z + b.cur.z * k]), home: [b.home.x, b.home.z], squid: BLOOM.squid.n }; })(),
+    quiet: w.quiet && (() => { const q = w.quiet, P2 = (o) => [o.x, o.z], g = (p) => ({ x: p.gate.x, z: p.gate.z, yaw: p.gate.yaw, span: p.gate.span });
+      return { sand: { ...P2(q.sandflat), R: q.sandflat.R, meadow: [q.sandflat.meadow.x, q.sandflat.meadow.z, q.sandflat.meadow.r], tables: q.sandflat.tables.map(P2), burrows: q.sandflat.burrows.map(P2), puffer: [q.sandflat.puffer.x, q.sandflat.puffer.z, q.sandflat.puffer.r], gate: g(q.sandflat) },
+        reef: { ...P2(q.reef), R: q.reef.R, station: [q.reef.station.x, q.reef.station.z, q.reef.station.r], heads: q.reef.heads.map((h) => [h.x, h.z, h.r]), rods: q.reef.rods.map(P2), grow: q.reef.grow.map((o) => [o.x, o.z, o.order]), gate: g(q.reef) },
+        kelp: { axis: q.kelpwood.axis, lanes: q.kelpwood.lanes.map((l) => l.points), clearing: [q.kelpwood.clearing.x, q.kelpwood.clearing.z, q.kelpwood.clearing.r], nook: [q.kelpwood.nook.x, q.kelpwood.nook.z, q.kelpwood.nook.r], gate: g(q.kelpwood), mid: P2(q.kelpwood), R: q.kelpwood.R },
+        columns: q.colonnade.map((c) => [c.x, c.z, c.state, c.toward]) }; })(),
     count: { pieces: P.length, wild: wild.length, solid: solids.length, fish: w.schools.reduce((a, s) => a + s.n, 0), perKm2: Math.round(wild.length / ((size * size) / 1000)) } };
   w.dispose(); return out;
 }
@@ -112,6 +117,21 @@ function draw({ panels, scale }) {
       for (const [x, z] of p.hunters) mark.hunter(X(x), Y(z)); if (p.mural) mark.mural(X(p.mural[0]), Y(p.mural[1]), p.mural[2]);
       if (p.bloom) { const b = p.bloom; for (const [x, z] of b.bells) mark.bell(X(x), Y(z)); for (const [x, z, bx, bz] of b.nettles) mark.nettle(X(x), Y(z), X(bx), Y(bz)); mark.squid(X(b.home[0]), Y(b.home[1])); }
       for (const [x, z, n] of p.swarms) mark.swarm(X(x), Y(z), n); });
+    if (p.quiet) tiles(() => { const q = p.quiet, QC = '#6d5fc7', ring = (x, z, r, stroke, fill, lw = 1.4, dash) => { const f = () => dot(X(x), Y(z), r * scale, fill, stroke, lw); if (dash) dashed(dash, f); else f(); };
+      const gate = (o) => { const nx = Math.cos(o.yaw), nz = -Math.sin(o.yaw), h = o.span / 2; g.strokeStyle = QC; g.lineWidth = 3; g.beginPath(); g.moveTo(X(o.x - nx * h), Y(o.z - nz * h)); g.lineTo(X(o.x + nx * h), Y(o.z + nz * h)); g.stroke(); dot(X(o.x - nx * h), Y(o.z - nz * h), 3, QC); dot(X(o.x + nx * h), Y(o.z + nz * h), 3, QC); };
+      // the sand flat: pale ground, the meadow's rim, the tables, the burrows, the puffer's patch
+      ring(q.sand[0], q.sand[1], q.sand.R, QC, 'rgba(240,226,170,0.35)', 1.4, [6, 4]); ring(...q.sand.meadow, QC, 'rgba(109,95,199,0.07)', 1.2);
+      for (const [x, z] of q.sand.tables) { g.fillStyle = QC; g.fillRect(X(x) - 4, Y(z) - 4, 8, 8); } for (const [x, z] of q.sand.burrows) dot(X(x), Y(z), 4, SURFACE, QC, 2); ring(...q.sand.puffer, QC, 'rgba(109,95,199,0.15)', 1.2, [2, 2]); gate(q.sand.gate);
+      // the reef head: its ground, the station's middle, heads, rods, and the spots for coral to come, numbered in the order they fill
+      ring(q.reef[0], q.reef[1], q.reef.R, QC, 'rgba(240,160,130,0.10)', 1.4, [6, 4]); ring(...q.reef.station, FIND, null, 1.4, [3, 3]);
+      for (const [x, z, r] of q.reef.heads) dot(X(x), Y(z), r * scale, '#d98a5f', SURFACE, 1); for (const [x, z] of q.reef.rods) dot(X(x), Y(z), 2.5, '#9a4fa0'); 
+      for (const [x, z, o] of q.reef.grow) { dot(X(x), Y(z), 5.5, SURFACE, '#d98a5f', 1.3); text(String(o + 1), X(x), Y(z), { size: 7.5, color: '#9a4f2a', align: 'center' }); } gate(q.reef.gate);
+      // the kelp forest: its band, its lanes, the clearing and the nook
+      { const a = q.kelp.axis, L = Math.hypot(a.bx - a.ax, a.bz - a.az); g.save(); g.translate(X(a.ax), Y(a.az)); g.rotate(-Math.atan2(a.uz, a.ux)); g.fillStyle = 'rgba(60,140,90,0.13)'; g.strokeStyle = '#3c8c5a'; g.lineWidth = 1.4; g.beginPath(); g.roundRect(-a.half * scale, -a.half * scale, (L + 2 * a.half) * scale, 2 * a.half * scale, a.half * scale); g.fill(); dashed([6, 4], () => g.stroke()); g.restore();
+        for (const pts of q.kelp.lanes) { g.strokeStyle = '#2f7a4c'; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z)))); g.stroke(); }
+        ring(...q.kelp.clearing, '#2f7a4c', 'rgba(252,252,251,0.7)', 1.5); ring(...q.kelp.nook, '#2f7a4c', '#eda100', 1.2); gate(q.kelp.gate); }
+      // the colonnade: a column a ring; broken half filled; fallen a bar
+      for (const [x, z, st] of q.columns) { if (st === 'fallen') { g.fillStyle = INK; g.fillRect(X(x) - 5, Y(z) - 1.5, 10, 3); } else dot(X(x), Y(z), 4, st === 'standing' ? INK : MUTED, SURFACE, 1.4); } });
     if (p.nest) { g.save(); g.translate(X(sx), Y(sz)); g.rotate(p.nest.yaw); g.strokeStyle = INK; g.lineWidth = 1.2; g.strokeRect(-1.65 * scale, -0.6 * scale, 5.7 * scale, 8.7 * scale); g.restore(); } // the most ground the nest takes: the line of stones to the left of the body, the shells' places to its right
     mark.start(X(sx), Y(sz));
     // the words on the plan: each tries the places round its mark and takes the first that is clear of the words already there and of the marks that matter
@@ -132,6 +152,8 @@ function draw({ panels, scale }) {
     if (p.keeper && p.keeper.walks) label('Keeper’s ground', p.keeper.x, p.keeper.z, p.keeper.r * scale, {});
     if (p.mural) label('Mural', p.mural[0], p.mural[1], 9, {});
     if (p.bloom) label('Bloom water', p.bloom.x, p.bloom.z, p.bloom.R * scale, { weight: 600, size: 12.5 });
+    if (p.quiet) { label('Sand flat', p.quiet.sand[0], p.quiet.sand[1], p.quiet.sand.R * scale, { weight: 600, size: 12.5 }); label('Reef head', p.quiet.reef[0], p.quiet.reef[1], p.quiet.reef.R * scale, { weight: 600, size: 12.5 });
+      label('Kelp forest', p.quiet.kelp.mid[0], p.quiet.kelp.mid[1], p.quiet.kelp.R * scale * 0.6, { weight: 600, size: 12.5 }); }
     for (const q of p.puzzles) label(q.kind[0].toUpperCase() + q.kind.slice(1), q.x, q.z, 7, {});
     for (const [x, z, n, kind] of p.swarms) label(`${n}${kind ? ` (${kind}s)` : ''}`, x, z, Math.sqrt(n) * 0.9 + 1.2, { size: 10.5, color: INK2, onPlace: true });
     label(`sight through the fog: ${p.fog} m`, sx, sz - p.fog, 3, { size: 10.5, color: INK2 });
@@ -169,6 +191,12 @@ function draw({ panels, scale }) {
     if (any('stations')) item((cx, cy) => mark.station(cx, cy), 'Cleaning station');
     if (any('hunters')) item((cx, cy) => mark.hunter(cx, cy), 'Hunter’s seat', 'hook, biter, angler, drifter, leech');
     if (any('bloom')) { item((cx, cy) => { for (const [dx, dy] of [[-7, -3], [-2, 4], [3, -4], [7, 2], [0, 0], [-5, 5]]) mark.bell(cx + dx, cy + dy); }, 'Bloom water: a dot a moon jelly', 'no harm; fry under the bells'); item((cx, cy) => mark.nettle(cx - 8, cy, cx + 10, cy), 'Sea nettle, and its train', 'the train stings; the current runs along it'); item((cx, cy) => mark.squid(cx, cy), 'Where the squid shoal rests'); }
+    if (any('quiet')) { head('THE QUIET SIDE (empty for now: the next phase fills it)');
+      item((cx, cy) => { dashed([6, 4], () => dot(cx, cy, 9, 'rgba(240,226,170,0.35)', '#6d5fc7', 1.4)); }, 'Sand flat, reef head: their ground', 'dashed; the bar at the edge is the gate arch');
+      item((cx, cy) => { dot(cx - 6, cy, 6, 'rgba(109,95,199,0.07)', '#6d5fc7', 1.2); g.fillStyle = '#6d5fc7'; g.fillRect(cx + 4, cy - 4, 8, 8); }, 'Cistern rim (garden eels); market tables (hermits)', 'open circles: burrows; dotted: the puffer’s patch');
+      item((cx, cy) => { dot(cx - 7, cy, 5, '#d98a5f', SURFACE, 1); dot(cx + 1, cy, 2.5, '#9a4fa0'); dot(cx + 9, cy, 5.5, SURFACE, '#d98a5f', 1.3); }, 'Coral head; sea rod; spot for coral to come', 'numbered in the order they fill; green dashes: the station');
+      item((cx, cy) => { g.fillStyle = 'rgba(60,140,90,0.13)'; g.fillRect(cx - 11, cy - 6, 22, 12); g.strokeStyle = '#2f7a4c'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - 11, cy); g.lineTo(cx + 11, cy - 2); g.stroke(); dot(cx + 6, cy + 3, 2.5, '#eda100', '#2f7a4c', 1); }, 'Kelp forest, its lanes, the nook (gold)', 'white ring: the clearing');
+      item((cx, cy) => { dot(cx - 8, cy, 4, INK, SURFACE, 1.4); dot(cx, cy, 4, MUTED, SURFACE, 1.4); g.fillStyle = INK; g.fillRect(cx + 5, cy - 1.5, 10, 3); }, 'Colonnade: standing, broken, fallen'); }
     head('TO EAT');
     { const sizes = [8, 18, 36, 70]; let cx = x + 10; for (const n of sizes) { const r = Math.sqrt(n) * 0.9 + 1.2; mark.swarm(cx + r, y + 2, n); text(String(n), cx + r, y + 2 + r + 9, { size: 10.5, color: INK2, align: 'center' }); cx += r * 2 + 16; }
       text('Swarm: its area is its count', cx + 2, y - 4, { size: 12 }); text('the number beside each is its fish', cx + 2, y + 11, { size: 10.5, color: MUTED }); }

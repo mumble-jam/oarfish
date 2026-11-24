@@ -129,6 +129,28 @@ export function createShellKit() {
   };
 }
 
+// Where the i-th shell of a band lies, before anything standing pushes it aside: drawn from the field's own run of numbers (`rand`).
+//   world: { spawn, wrap, goal, rift (with in(x, z)), hall }; the world being built hands these over before it is finished (world.js, the quiet side)
+export function shellSpot(rand, i, floor, world) {
+  const rr = (a, b) => a + (b - a) * rand(), start = world.spawn, wrapD = world.wrap;
+  let x = 0, z = 0;
+  for (let t = 0; t < 30; t++) { // not in the rift, not in the hall, not on top of the start
+    const a = rr(0, Math.PI * 2), d = i === 0 && floor === 0 ? rr(13, 18) : rr(16, 48);
+    x = start.x + Math.sin(a) * d; z = start.z + Math.cos(a) * d;
+    const g = world.goal, h = world.hall;
+    if (Math.hypot(wrapD(x - g.x), wrapD(z - g.z)) < 11 || (world.rift && world.rift.in(x, z) > -3)) continue;
+    if (h && Math.hypot(wrapD(x - h.x), wrapD(z - h.z)) < h.R + 5) continue;
+    break;
+  }
+  return [x, z];
+}
+// Where every shell of a band will lie, without making any: the same numbers in the same order as createShellField (a spot, then the kind it
+// picks, then its phase), so that what the world builds can keep clear of them (world.js keeps the quiet side's stonework three metres off).
+export function shellSpots(world, { seed = 1, floor = 0, count = 3 } = {}) {
+  const rand = rng(seed * 53 + floor * 173 + 29);
+  return Array.from({ length: count }, (_, i) => { const p = shellSpot(rand, i, floor, world); rand(); rand(); return p; });
+}
+
 // The shells lying about one band. Swim the head over one to take it.
 export function createShellField(scene, world, kit, { seed = 1, floor = 0, count = 3, types = SHELL_TYPES } = {}) {
   const rand = rng(seed * 53 + floor * 173 + 29), rr = (a, b) => a + (b - a) * rand();
@@ -146,15 +168,7 @@ export function createShellField(scene, world, kit, { seed = 1, floor = 0, count
     return it;
   }
   for (let i = 0; i < count; i++) {
-    let x = 0, z = 0;
-    for (let t = 0; t < 30; t++) { // not in the rift, not in the hall, not on top of the start
-      const a = rr(0, Math.PI * 2), d = i === 0 && floor === 0 ? rr(13, 18) : rr(16, 48);
-      x = start.x + Math.sin(a) * d; z = start.z + Math.cos(a) * d;
-      const g = world.goal, h = world.hall;
-      if (Math.hypot(wrapD(x - g.x), wrapD(z - g.z)) < 11 || (world.rift && world.rift.in(x, z) > -3)) continue;
-      if (h && Math.hypot(wrapD(x - h.x), wrapD(z - h.z)) < h.R + 5) continue;
-      break;
-    }
+    const [x, z] = shellSpot(rand, i, floor, world);
     const p = new THREE.Vector3(x, world.height(x, z) + 1.2, z); world.pushOut(p, 1.2);
     drop(p.x, p.z, pool.splice(Math.floor(rand() * pool.length), 1)[0]);
   }

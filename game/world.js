@@ -8,6 +8,8 @@ import { rng, lerp, clamp, soup, M, glowTexture, beamTexture, poolTexture } from
 import { mesher, ringY, ringZ, shaded, alive, tint, dim, bright, growing, WAKE } from './kit.js';
 import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from './npc.js';
 import { layBloom } from './bloom.js';
+import { layQuiet, laneDistance, QUIET } from './quiet.js';
+import { shellSpots } from './shells.js';
 
 export const BASE = 144; // a band is this far across unless it says otherwise. What a band counts (rocks, kelp, the wave counts of its bed) is counted for a square of this size
 const CELL = 3, GRID = 46;
@@ -266,7 +268,38 @@ function geometries() {
     m.cap(at(-0.42, 0.8), [0, 1, 0], grey(0.75), 0.012).skin([at(-0.42, 0.8), at(-0.47), at(-0.83)], (i) => (i ? [grey(0.95), bright(1.08)] : [grey(0.75), grey(0.95)]));
     m.skin([at(-0.83), at(-0.9)], bright(1.7), true).skin([at(-0.9), at(-1)], [bright(1.08), grey(0.8)]).cap(at(-1), [0, -1, 0], grey(0.6), 0.01);
     return m.geometry(); })();
+  // --- what grows only on the quiet side (quiet.js), made from a run of numbers of their own so that the models above stay as they were
+  const qrand = rng(52711);
+  // a coral head: a massive coral, a cluster of rounded lobes with the brain coral's ridges, paler on top, a few short branches where it is still growing.
+  // About a unit across and a unit tall; scattered at two to four metres
+  const coralHead = (() => { const m = mesher(), ico = new THREE.IcosahedronGeometry(1, 1).toNonIndexed(), a = ico.attributes.position;
+    const lobe = (cx, cy, cz, rx, ry, rz, ph) => { for (let i = 0; i < a.count; i += 3) { const p = [0, 1, 2].map((k) => [a.getX(i + k), a.getY(i + k), a.getZ(i + k)]), my = (p[0][1] + p[1][1] + p[2][1]) / 3;
+      if (my < -0.45) continue; const mx = (p[0][0] + p[1][0] + p[2][0]) / 3, mz = (p[0][2] + p[1][2] + p[2][2]) / 3, ridge = Math.sin(Math.atan2(mx, mz) * 4 + my * 7 + ph) > 0;
+      const q = p.map(([x, y, z]) => [cx + x * rx, cy + Math.max(y, -0.45) * ry, cz + z * rz]), k = 0.62 + 0.38 * clamp((my + 0.4) / 1.2, 0, 1);
+      m.tri(q[0], q[1], q[2], ridge ? grey(k) : grey(k * 0.78)); } };
+    lobe(0, 0.3, 0, 0.95, 0.55, 0.9, 0); lobe(0.28, 0.66, 0.12, 0.6, 0.38, 0.55, 1.3); lobe(-0.3, 0.6, -0.16, 0.55, 0.36, 0.6, 2.4); lobe(0.02, 0.86, -0.04, 0.42, 0.22, 0.42, 3.1);
+    for (let i = 0; i < 6; i++) { const yaw = i * 1.05 + qrand() * 0.6, d = 0.2 + qrand() * 0.3, b = [Math.sin(yaw) * d, 0.82 + qrand() * 0.12, Math.cos(yaw) * d], t = add3(b, aim(yaw, 0.35 + qrand() * 0.4), 0.12 + qrand() * 0.12);
+      m.limb(b, t, 0.05, 0.025, 4, [grey(0.9), bright(1.45)]); }
+    return m.geometry(); })();
+  // a sea rod: a soft coral, a few tall thin stems that fork once and stand up into the water, the polyps paler toward the tips. A unit tall
+  const seaRod = (() => { const m = mesher();
+    for (let i = 0; i < 5; i++) { const yaw = i * 1.26 + qrand() * 0.5, d = i ? 0.04 : 0, a = [Math.sin(yaw) * d, 0, Math.cos(yaw) * d], tilt = i ? 0.1 + qrand() * 0.16 : 0.03, h = (i ? 0.45 : 0.55) + qrand() * 0.12, b = add3(a, aim(yaw, tilt), h);
+      m.limb(a, b, 0.026, 0.02, 4, [grey(0.55), grey(0.8)]);
+      for (const sg of [-1, 1]) { if (i && sg > 0 && qrand() < 0.5) continue; const c = add3(b, aim(yaw + sg * (0.4 + qrand() * 0.4), tilt * 0.6 + 0.08), 0.3 + qrand() * 0.25); m.limb(b, c, 0.02, 0.012, 4, [grey(0.82), bright(1.35)]); } }
+    return m.geometry(); })();
+  // giant kelp: one long stipe with a blade on a float every little way up it, by turns to either side, and at the top a spray of long fronds
+  // lying out on the water. A unit tall; scattered at nine to thirteen metres. Paler at the top, where the light is
+  const giantKelp = (() => { const m = mesher(), stipe = (t) => [0.05 * Math.sin(t * 3.1), t, 0.04 * Math.sin(t * 2.3 + 1)];
+    for (let i = 0; i < 4; i++) m.limb(stipe(i / 4), stipe((i + 1) / 4), 0.01, 0.008, 3, [grey(0.36 + 0.1 * i), grey(0.46 + 0.1 * i)]);
+    const blade = (t, yaw, len, wide, droop, k) => { const b = stipe(t), o = [Math.sin(yaw), Math.cos(yaw)], side = [Math.cos(yaw), -Math.sin(yaw)];
+      const at = (u, w) => [b[0] + o[0] * len * u + side[0] * w, b[1] + 0.04 * u - droop * u * u, b[2] + o[1] * len * u + side[1] * w];
+      m.quad(at(0.08, -wide * 0.5), at(0.08, wide * 0.5), at(0.6, wide), at(0.6, -wide), [grey(k * 0.8), grey(k * 0.8), grey(k)]).tri(at(0.6, -wide), at(0.6, wide), at(1, 0), [grey(k), grey(k), bright(k * 1.2)]);
+      m.tri([b[0], b[1] - 0.006, b[2]], at(0.08, -wide * 0.5), at(0.08, wide * 0.5), '#e8de8a'); }; // the float at its root
+    for (let i = 0; i < 9; i++) { const t = 0.14 + i * 0.085; blade(t, i * 2.4 + qrand() * 0.5, 0.2 + 0.03 * qrand(), 0.035, 0.05, 0.55 + 0.45 * t); }
+    for (let i = 0; i < 5; i++) blade(0.97, i * 1.26 + qrand() * 0.4, 0.3 + 0.08 * qrand(), 0.045, 0.1, 1.05);
+    return m.geometry(); })();
   GEO = {
+    coralHead, seaRod, giantKelp,
     rock: rockGeo, kelp: kelpGeo, chime, tuft, stag, brain, seaFan, sponge, anemone, star: star(0.38, 0.14), brittle: star(0.13, 0.07), urchin, clam, pebble, lily, glass, worms, pen, lantern,
     finger: stag, table: tableGeo,
     drum: grounded(plain([[new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1).translate(0, 0.5, 0), null]]), 0.8, 1.02),
@@ -293,6 +326,9 @@ function geometries() {
   const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
+  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, three times as tall as the kelp of the old field.', ['#4f9e74', '#5aa97d', '#6aa864', '#469687', '#62b38c'], { scale: [3, 11, 3], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
+  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A massive coral: rounded lobes with ridges in two tones, paler where the light falls, and a few short branches where it is still growing. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9b07a', '#d99a8a', '#c9b07f', '#e8c39a', '#b9a3c9'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
+  grows('searod', 'Sea rod', 'seaRod', [0], 2.8, 'A soft coral of a few tall thin stems that fork once, the polyps paler toward the tips. They stand among the coral heads of the reef head.', ['#b66fb0', '#8f5aa8', '#d0875f', '#c99a6a'], { scale: [1.8, 2.8, 1.8], n: 3, spread: 1.2 }, { sway: 0.6, give: 0.2 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
   grows('tablecoral', 'Table coral', 'table', [0, 1, 2, 3, 4], 2.4, 'Tiers of plates on a stalk, with a scalloped, paler rim and dark underneath.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 1 }, { double: false });
@@ -392,10 +428,14 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const area = (T * T) / (BASE * BASE), dense = (n) => Math.round(n * area); // what is scattered by chance is counted for a BASE square: a wider band has more of it, as thickly
   const wave = (n) => Math.round((n * T) / BASE) || Math.sign(n); // and the bed's rolls are counted the same way, so that a wider band has more of them and not longer ones
   const HOME = Math.min(F.home || T, T); // how far across the home water is: the square round the start in which swarms and hunters live (the whole band, unless it says less)
-  const rand = rng(seed * 977 + floor * 7919 + 13);
+  // the two runs of chance are read through `randNow` and `drandNow`, so that a place with a run of its own (the quiet side, below) can lend it to the
+  // builders the rest of the band uses (a column, a table, a lintel) and give the band's own back untouched
+  let randNow = rng(seed * 977 + floor * 7919 + 13);
+  const rand = () => randNow();
   const rr = (a, b) => a + (b - a) * rand();
   const pick = (list) => list[Math.floor(rand() * list.length)];
-  const drand = rng(seed * 977 + floor * 7919 + 4099), dr = (a, b) => a + (b - a) * drand(), dpick = (list) => list[Math.floor(drand() * list.length)]; // dressing only: never decides where anything that matters stands
+  let drandNow = rng(seed * 977 + floor * 7919 + 4099);
+  const drand = () => drandNow(), dr = (a, b) => a + (b - a) * drand(), dpick = (list) => list[Math.floor(drand() * list.length)]; // dressing only: never decides where anything that matters stands
   const xrand = rng(seed * 977 + floor * 7919 + 9001), xr = (a, b) => a + (b - a) * xrand(); // for what answers the fish (chimes, pilot fish): a run of its own, so that nothing else moves to make room
   const time = { value: 0 }, seaLight = { value: F.seaLight };
   const wake = { value: Array.from({ length: WAKE }, () => new THREE.Vector4()), bound: { value: new THREE.Vector3() } }; // where the fish's body is, and for a moment where its tail was: what grows leans from it or pulls in (kit.growing)
@@ -406,8 +446,11 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   const blanks = new Map(), blank = (m) => { if (m.map || m.alphaMap || m.alphaTest || m.wireframe) return m; const key = `${m.side}:${m.shadowSide}`;
     if (!blanks.has(key)) blanks.set(key, mat(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, side: m.side, shadowSide: m.shadowSide }))); return blanks.get(key); };
   // what grows and lies about by chance is kept off a place that wants open water (the bloom, below): taken out where it stands, so that nothing else moves
+  // (and off the quiet side's places, which also hand in what they grow themselves: `extras`, added to the band's own pieces of the same kind after that)
   let keepOff = null, wild = null;
+  const keeps = [], extras = new Map(), more = (geo, list) => { if (!extras.has(geo)) extras.set(geo, []); extras.get(geo).push(...list); };
   const scatter = (geo, material, items, opts) => { if (keepOff && (wild ||= new Set(['rock', 'kelp', 'finger', 'table', 'lantern', 'pen', 'tuft', 'pebble', 'star', 'brittle', 'urchin', 'clam', 'brain', 'seaFan', 'sponge', 'anemone', 'lily', 'glass', 'worms'].map((k) => G[k]))).has(geo)) for (let i = items.length; i--;) if (!keepOff(items[i].x, items[i].z)) items.splice(i, 1);
+    if (extras.has(geo)) { items.push(...extras.get(geo)); extras.delete(geo); }
     const s = new Scatter(geo, material, items, { ...opts, shade: blank(material), size: T }); scatters.push(s); add(s.mesh); if (s.shade) add(s.shade); return s; };
   const qY = (yaw, rx = 0, rz = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, yaw, rz, 'YXZ'));
   const S = (x, y = x, z = x) => new THREE.Vector3(x, y, z);
@@ -454,8 +497,10 @@ export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery 
   }
   const riftDrop = (q) => rift.step * smooth(clamp((q - RIM) / rift.lip, 0, 1)) + (rift.deep - rift.step) * smooth(clamp((q - rift.ledge) / (rift.wall - rift.ledge), 0, 1)); // the lip, RIM in from the line; then the ledge; then the wall
   const riftClear = (x, z, pad = 0) => !rift || riftIn(x, z) < -pad;
+  let flat = null; // the sand flat (the quiet side): level out to R, eased back into the bed over `blend` metres. Set once it is laid; nothing stands there before
   function height(x, z) {
     let h = bed(x, z);
+    if (flat) { const d = Math.hypot(wrapD(x - flat.x), wrapD(z - flat.z)); if (d < flat.R + flat.blend) h = lerp(h, flat.level, smooth(clamp((flat.R + flat.blend - d) / flat.blend, 0, 1))); }
     if (rift) {
       const q = riftIn(x, z);
       if (q > -10) { h = lerp(h, rift.y, smooth(clamp((q + 10) / 8, 0, 1))); if (q > 0) h -= riftDrop(q); }
@@ -515,6 +560,7 @@ float seaLight(vec2 p, float t) {
   owned.push({ dispose: () => tGeo.dispose() });
 
   const sandA = new THREE.Color('#c8c9a6'), sandB = new THREE.Color('#b9bd9b'), sandHi = new THREE.Color('#d3d2ad');
+  const paleA = new THREE.Color('#e4e1c3'), paleB = new THREE.Color('#d8d6b8'); // the sand flat's
   const grassA = new THREE.Color('#a5c09f'), grassB = new THREE.Color('#95b596'), pit = new THREE.Color(FLOORS[Math.min(floor + 1, FLOORS.length - 1)].water).multiplyScalar(0.55);
   const rockA = new THREE.Color('#a9ad97'), rockB = new THREE.Color('#7f8a80'); // the rock of the shelf, where the rift has laid it bare
   const vertexY = (ix, iz) => { const k = wrapI(iz, NCELL) * NCELL + wrapI(ix, NCELL); let y = cornerY[k]; if (y !== y) y = cornerY[k] = height(ix * CELL, iz * CELL) + (hash2(ix, iz) - 0.5) * 0.36; return y; };
@@ -557,6 +603,7 @@ float seaLight(vec2 p, float t) {
       const h = hash2(ax + bx + qx, az + bz + qz, salt);
       if (meadow(mx, mz) > 0.55) col.copy(grassA).lerp(grassB, h);
       else col.copy(sandA).lerp(sandB, h).lerp(sandHi, clamp((my + 1) / 4, 0, 1) * 0.5);
+      if (flat) { const d = Math.hypot(wrapD(mx - flat.x), wrapD(mz - flat.z)); if (d < flat.R + 3) col.lerp(paleA, smooth(clamp((flat.R + 3 - d) / 4.5, 0, 1))).lerp(paleB, h * 0.5 * smooth(clamp((flat.R + 3 - d) / 4.5, 0, 1))); } // the sand flat: paler, finer sand
       if (rift) {
         const q = riftIn(mx, mz);
         if (q > -1.5) { // the rift: bare rock in beds where the shelf has broken, darkening toward the next band
@@ -1037,10 +1084,96 @@ float seaLight(vec2 p, float t) {
     sc.twin = { ...sc, kind: 'half', tier: LOWER[sc.tier], n: 0, left: 0, ball: low.r, fit: low.r, slack: 1, gap: 0, whole: null, twin: null, of: sc, split: true, ring: null, arc: null };
     schools.push(sc.twin);
   }
+  // ------------------------------------------------------------ the quiet side, built (quiet.js lays it out; see there for what each place is for)
+  // Everything here draws from two runs of numbers of its own, lent to the band's builders while it is built (randNow, drandNow), so that nothing else in
+  // the band moves. What grows here that the band also grows is handed to the band's own scatter (`more`); what is new to it (coral heads, sea rods,
+  // giant kelp) is gathered in `quietGrown` and scattered after the rest.
+  const quietGrown = { heads: [], rods: [], tall: [] }, QUIET_GRASS = QUIET.sandflat.grass;
+  function buildQuiet(Q) {
+    const ownR = randNow, ownD = drandNow; randNow = rng(seed * 977 + 52713); drandNow = rng(seed * 977 + 52717);
+    const fingersBefore = grownFingers.length;
+    const S2 = Q.sandflat, RF = Q.reef, KW = Q.kelpwood;
+    // the sand flat is made level (`flat`, read by height()); the corners of the drawn bed under it are worked out again
+    flat = { x: S2.x, z: S2.z, R: S2.R, blend: S2.blend, level: S2.level };
+    { const reach = S2.R + S2.blend + CELL * 2; for (let iz = Math.floor((S2.z - reach) / CELL); iz <= Math.ceil((S2.z + reach) / CELL); iz++) for (let ix = Math.floor((S2.x - reach) / CELL); ix <= Math.ceil((S2.x + reach) / CELL); ix++) cornerY[wrapI(iz, NCELL) * NCELL + wrapI(ix, NCELL)] = NaN; }
+    // what grows by chance keeps off: all of the sand flat and the reef (which grow their own), the forest and its clearing, the arches and the columns
+    const axisD = (x, z) => { const a = KW.axis, dx = wrapD(x - a.ax), dz = wrapD(z - a.az), L = Math.hypot(a.bx - a.ax, a.bz - a.az), t = clamp(dx * a.ux + dz * a.uz, 0, L); return Math.hypot(dx - a.ux * t, dz - a.uz * t); };
+    keeps.push((x, z) => farFrom(x, z, S2.x, S2.z, S2.R + 0.5) && farFrom(x, z, RF.x, RF.z, RF.R) && axisD(x, z) > KW.axis.half + 0.5 && farFrom(x, z, KW.clearing.x, KW.clearing.z, KW.clearing.r + 1)
+      && Q.places.every((p) => farFrom(x, z, p.gate.x, p.gate.z, 4.5)) && Q.colonnade.every((c) => farFrom(x, z, c.x, c.z, 2.2)));
+    const tones = (id) => tonesOf(id);
+    const root = (id, x, z, s0, s1, sink = 0.06) => { const sz = dr(s0, s1); return { x, y: drawnY(x, z) - sink * sz, z, q: qY(drand() * 6.28, dr(-0.1, 0.1), dr(-0.1, 0.1)), s: S(sz), color: dpick(tones(id)) }; };
+    // an arch to come in by: two tall columns and a lintel, wide and tall enough for the fish to thread, and a little paving through it
+    const gateArch = (g) => { const nx = Math.cos(g.yaw), nz = -Math.sin(g.yaw), fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), h = g.span / 2;
+      const ax = g.x - nx * h, az = g.z - nz * h, bx = g.x + nx * h, bz = g.z + nz * h;
+      const top = Math.max(column(ax, az, g.tall, { yaw: g.yaw + Math.PI / 2 }), column(bx, bz, g.tall, { yaw: g.yaw + Math.PI / 2 }));
+      lintel(ax, az, bx, bz, top, 0.6, false); g.under = top - drawnY(g.x, g.z); // how much water there is under the lintel
+      paveRoad(g.x + fx * 3.5, g.z + fz * 3.5, g.x - fx * 3.5, g.z - fz * 3.5, 1.1, 1.15); };
+    // ---- the sand flat: the cistern's rim, broken; the market tables at one edge; sea grass round the edge; nothing else stands on it
+    { const M = S2.meadow, n = Math.round((Math.PI * 2 * M.r) / 1.2);
+      for (let i = 0; i < n; i++) { if (drand() < 0.2) continue; const a = (i / n) * Math.PI * 2 + dr(-0.03, 0.03), x = M.x + Math.sin(a) * M.r, z = M.z + Math.cos(a) * M.r, down = drand() < 0.15;
+        blocks.push({ x, y: drawnY(x, z) - (down ? 0.3 : 0.14), z, q: qY(a + dr(-0.06, 0.06), down ? dr(0.25, 0.5) : 0, dr(-0.04, 0.04)), s: S(dr(1.0, 1.2), dr(0.38, 0.55), 0.46), color: stoneLike(dpick(stoneTones)) });
+        if (i % 7 === 3) blocks.push({ x, y: drawnY(x, z) + 0.36, z, q: qY(a), s: S(1.05, 0.08, 0.5), color: district }); } // a painted coping stone here and there
+      for (const t of S2.tables) table(t.x, t.z, t.size, 2 + Math.floor(rand() * 3));
+      const grass = [], [g0, g1] = QUIET_GRASS;
+      for (let i = 0, want = Math.round(Math.PI * ((S2.R + g1) ** 2 - (S2.R + g0) ** 2) * 0.5); i < want * 2 && grass.length < want; i++) {
+        const a = drand() * 6.28, d = Math.sqrt(dr((S2.R + g0) ** 2, (S2.R + g1) ** 2)), x = S2.x + Math.sin(a) * d, z = S2.z + Math.cos(a) * d;
+        if (!farFrom(x, z, S2.gate.x, S2.gate.z, 4) || drand() > smooth(clamp((d - S2.R - g0) / 2.2, 0, 1)) || !clearNow(x, z, 0.5)) continue; // thinning toward the sand, and clear of the way in
+        grass.push({ x, y: drawnY(x, z) - 0.04, z, q: qY(drand() * 6.28), s: S(dr(1.1, 1.8), dr(0.45, 1.0), dr(1.1, 1.8)), color: dpick(tones('seagrass')) }); }
+      more(G.tuft, grass);
+      gateArch(S2.gate); }
+    // ---- the reef head: coral heads round a clear middle, sea rods among them, a garden round the outside, the spots for coral to come marked by bare rubble
+    { for (const h of RF.heads) { const y = drawnY(h.x, h.z, h.r * 0.6) - 0.15; quietGrown.heads.push({ x: h.x, y, z: h.z, q: qY(h.yaw, dr(-0.05, 0.05), dr(-0.05, 0.05)), s: S(h.r, h.tall, h.r * dr(0.85, 1.05)), color: dpick(tones('coralhead')) });
+        colliders.push({ x: h.x, z: h.z, r: h.r * 0.82, top: y + h.tall * 0.92 }); growOn(h.x, y + h.tall * 0.95, h.z, 0.6); }
+      for (const r of RF.rods) quietGrown.rods.push({ x: r.x, y: drawnY(r.x, r.z) - 0.05, z: r.z, q: qY(r.yaw), s: S(dr(1.6, 2.1), r.tall, dr(1.6, 2.1)), color: dpick(tones('searod')) });
+      const taken = [...RF.heads, ...RF.rods.map((r) => ({ ...r, r: 0.7 })), ...RF.grow.map((g) => ({ ...g, r: g.r - 0.4 }))];
+      const garden = (geo, id, n, s0, s1, sink, gap) => { const out = [];
+        for (let t = 0; t < n * 12 && out.length < n; t++) { const a = drand() * 6.28, d = dr(RF.garden[0], RF.garden[1]), x = RF.x + Math.sin(a) * d, z = RF.z + Math.cos(a) * d;
+          if (Math.abs(Math.atan2(Math.sin(a - RF.facing), Math.cos(a - RF.facing))) < 0.32 || !taken.every((o) => Math.hypot(x - o.x, z - o.z) > (o.r || 0) + gap)) continue;
+          const it = root(id, x, z, s0, s1, sink); out.push(it); taken.push({ x, z, r: gap * 0.5 }); }
+        more(geo, out); return out; };
+      garden(G.finger, 'staghorn', 16, 0.9, 1.8, 0.06, 0.7); garden(G.table, 'tablecoral', 5, 1.0, 1.7, 0.06, 1.2); garden(G.brain, 'braincoral', 6, 0.5, 0.9, 0.1, 0.9);
+      garden(G.anemone, 'anemone', 9, 0.7, 1.2, 0.03, 0.6); garden(G.clam, 'clam', 7, 0.18, 0.3, 0.0, 0.5); garden(G.seaFan, 'seafan', 6, 1.1, 1.9, 0.06, 0.8); garden(G.sponge, 'sponge', 5, 0.8, 1.3, 0.06, 0.8);
+      const bone = ['#efe9d6', '#e2dcc6', '#d9d2bb'], rubble = [];
+      for (const g of RF.grow) for (let k = 0; k < 4; k++) { const a = (k / 4) * 6.28 + dr(0, 1.2), d = dr(0.25, 0.75), x = g.x + Math.sin(a) * d, z = g.z + Math.cos(a) * d, sz = dr(0.1, 0.2);
+        rubble.push({ x, y: drawnY(x, z) - sz * 0.25, z, q: lie(x, z), s: S(sz * dr(1, 1.6), sz, sz * dr(0.9, 1.4)), color: dpick(bone) }); } // dead coral where new coral will take: pale, low, nothing to bump
+      more(G.pebble, rubble);
+      gateArch(RF.gate); }
+    // ---- the kelp forest: giant kelp, shorter toward its edge, with lanes, a clearing and a nook left open; a thin run of it back to the field if it starts further out
+    { const a = KW.axis, L = Math.hypot(a.bx - a.ax, a.bz - a.az), step = QUIET.kelpwood.stem, vx = a.uz, vz = -a.ux, kt = tones('giantkelp');
+      const open = (x, z) => KW.lanes.some((ln) => laneDistance(ln, x, z) < ln.half + 0.5) || !farFrom(x, z, KW.clearing.x, KW.clearing.z, KW.clearing.r + 0.5)
+        || !farFrom(x, z, KW.nook.x, KW.nook.z, KW.nook.r + 0.4) || !farFrom(x, z, KW.gate.x, KW.gate.z, 4.2);
+      const stem = (x, z, k) => quietGrown.tall.push({ x, y: drawnY(x, z) - 0.2, z, q: qY(drand() * 6.28), s: S(dr(2.5, 3.3), dr(9, 13.5) * k, dr(2.5, 3.3)), color: dpick(kt) });
+      for (let s = -a.half; s <= L + a.half; s += step) for (let v = -a.half; v <= a.half; v += step * 0.87) {
+        const x = a.ax + a.ux * s + vx * (v + (Math.round(s / step) % 2 ? step * 0.43 : 0)) + dr(-0.5, 0.5), z = a.az + a.uz * s + vz * (v + (Math.round(s / step) % 2 ? step * 0.43 : 0)) + dr(-0.5, 0.5), e = axisD(x, z);
+        if (e > a.half || open(x, z) || !clearNow(x, z, 0.6)) continue;
+        stem(x, z, 0.7 + 0.3 * smooth(clamp((a.half - e) / 3.5, 0, 1))); }
+      { const fx = KW.field.x, fz = KW.field.z, d = Math.hypot(a.ax - fx, a.az - fz); // the run back to the field, when the forest begins away from it
+        if (d > 16) for (let s = 12; s < d - 3; s += 3.2) { const x = fx + (a.ax - fx) * (s / d) + dr(-2, 2), z = fz + (a.az - fz) * (s / d) + dr(-2, 2); if (clearNow(x, z, 1)) stem(x, z, dr(0.55, 0.75)); } }
+      // the clearing's rim is the band's own kelp, lower, so the giant kelp stands back from it
+      const rim = []; for (let i = 0; i < 14; i++) { const t = (i / 14) * 6.28, x = KW.clearing.x + Math.sin(t) * (KW.clearing.r + 0.9), z = KW.clearing.z + Math.cos(t) * (KW.clearing.r + 0.9); if (drand() < 0.75 && !KW.lanes.some((ln) => laneDistance(ln, x, z) < ln.half + 0.3) && clearNow(x, z, 0.5)) rim.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(drand() * 6.28), s: S(1.7, dr(3.5, 5), 1.7), color: dpick(tones('kelp')) }); }
+      more(G.kelp, rim);
+      gateArch(KW.gate); }
+    // ---- the colonnade
+    for (const c of Q.colonnade) {
+      if (c.state === 'standing') column(c.x, c.z, c.h, { yaw: c.yaw });
+      else if (c.state === 'broken') column(c.x, c.z, c.h, { capital: false, yaw: c.yaw });
+      else { column(c.x, c.z, dr(0.8, 1.3), { capital: false, yaw: c.yaw }); fallen(c.x + Math.sin(c.yaw) * 1.4, c.z + Math.cos(c.yaw) * 1.4, c.h, c.yaw); } }
+    // what took root on this stonework is coloured here, from this run, and handed in with the band's coral (coloured where the band's own is, it would ask the band's run for more)
+    more(G.finger, grownFingers.splice(fingersBefore).map((g) => ({ ...g, color: dpick(tones('staghorn')) })));
+    randNow = ownR; drandNow = ownD;
+  }
   // The bloom water (bloom.js), in the first band: laid after the swarms and before anything is scattered, from a run of numbers of its own, so that what is
   // scattered keeps off it and nothing placed before it moves. Its fry are a swarm like the others, added last (their fish have numbers of the bloom's own).
   const bloom = floor === 0 ? layBloom({ seed, spawn: SPAWN, goalAngle, clear: clearNow, drawn: height, wrap: wrapD, size: T, swarm: SWARMS.s, tone: schoolTones[0] }) : null;
-  if (bloom) keepOff = (x, z) => farFrom(x, z, bloom.x, bloom.z, bloom.R * 0.85);
+  if (bloom) keeps.push((x, z) => farFrom(x, z, bloom.x, bloom.z, bloom.R * 0.85));
+  // The quiet side (quiet.js): the sand flat, the reef head, the kelp forest and the colonnade, laid out from a run of numbers of their own after the bloom
+  // and before anything is scattered, and built here, with the band's own builders lent runs of their own. Their ground is claimed after the scatter, as the bloom's is.
+  const quiet = floor === 0 ? layQuiet({ seed, spawn: SPAWN, goalAngle, size: T, wrap: wrapD, height, sites, field: polar(goalAngle - 1.1, 22),
+    swarms: schools.filter((sc) => sc.n > 0).map((sc) => ({ hx: sc.hx, hz: sc.hz, ball: sc.ball })), bloom,
+    shells: shellSpots({ spawn: SPAWN, wrap: wrapD, goal, rift: rift && { in: riftIn }, hall }, { seed, floor, count: hall ? 2 : 3 }),
+    riftIn, keeper: rift ? { x: rift.x - rift.nx * 24, z: rift.z - rift.nz * 24, r: 14 } : null }) : null;
+  if (quiet) buildQuiet(quiet);
+  if (keeps.length) keepOff = (x, z) => keeps.every((k) => k(x, z));
   const total = schools.reduce((a, sc) => a + sc.n, 0) + (bloom ? bloom.fry.n : 0);
   const minnowMat = mat(fishKit.material), fishSize = new THREE.Vector3().setScalar(fishKit.scale);
   const fishMesh = add(new THREE.InstancedMesh(fishKit.geometry, minnowMat, Math.max(total, 1)));
@@ -1159,7 +1292,12 @@ float seaLight(vec2 p, float t) {
     scatter(G.glass, still, strew(at([0, 0, 14, 40, 40]), () => (drand() < 0.5 ? byReef(1, 8) : open()), rooted(tonesOf('glasssponge'), 0.6, 1.4)));
     scatter(G.worms, plant({ double: false, shy: 1 }), (grownAt.tubeworms = strew(at([0, 0, 0, 30, 50]), () => byReef(0.8, 4), (x, z) => ({ ...rooted(tonesOf('tubeworms'), 0.8, 1.5)(x, z) }))));
   }
-  if (bloom) sites.push([bloom.x, bloom.z, bloom.R, 'bloom']); // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
+  if (bloom) sites.push([bloom.x, bloom.z, bloom.R, 'bloom']);
+  if (quiet) { for (const [x, z, r] of quiet.claimed) sites.push([x, z, r, 'quiet']); for (const c of quiet.colonnade) sites.push([c.x, c.z, 2, 'quiet']); } // the quiet side's ground, claimed likewise
+  if (quiet) { // what grows only on the quiet side
+    scatter(G.coralHead, plant({ double: false }), (grownAt.coralhead = quietGrown.heads));
+    scatter(G.seaRod, plant({ sway: 0.6, give: 0.2 }), (grownAt.searod = quietGrown.rods), { receive: false });
+    scatter(G.giantKelp, plant({ sway: 1, give: 0.25 }), (grownAt.giantkelp = quietGrown.tall), { receive: false }); } // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
 
   // ------------------------------------------------------------ drifting specks and slow light shafts
   const SPECKS = 320, BOX = new THREE.Vector3(46, 16, 46);
@@ -1947,6 +2085,6 @@ float seaLight(vec2 p, float t) {
   const sorting = (on) => { sight.on = on; sight.fx = NaN; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
   // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed
-  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, nibble, revive,
+  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, veil: riftVeil, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, quiet, nibble, revive,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

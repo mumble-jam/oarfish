@@ -1,3 +1,25 @@
+# The quiet side (branch quiet-side): progress
+
+Phase one of George's "quiet side" expansion: the ground, plants and stone of three new places in band 1 (sand flat, reef head, kelp forest), a colonnade and gate arches. No creatures. Worktree `/home/claude/oarfish-quiet`, logs in `/home/claude/quiet-logs/`, throwaway scripts in `/home/claude/quiet-scripts/`.
+
+## Done
+- [x] `game/quiet.js`: the layout (QUIET numbers, layQuiet, laneDistance). Own run of numbers. Searched over 400 worlds (and 300 nursery ones): no fallback needed.
+- [x] `world.js`: rand/drand read through randNow/drandNow so the quiet side lends its own runs to the band's builders; buildQuiet; sand flat made level and paler; keepOff generalised (`keeps`), `extras` for plants of kinds the band already scatters; three new models (coralHead, seaRod, giantKelp) registered as components; `world.quiet`.
+- [x] `shells.js`: shellSpot/shellSpots exported (same numbers as before) so the stone keeps 3.5 m off where shells lie.
+- [x] digest bands 2-5: identical (7 seeds). Band 1: swarms, shells, hunters, keeper, main run of chance unchanged; puzzles, fragments, mural, jars, pilots, chimes, bloom, all earlier sites identical in 60 seeds x (nursery and not).
+- [x] shot_map draws it.
+
+## Decisions (and why)
+- Kelp forest: grown out of the old field where there is room (most worlds); when pens/ruins block it, it starts further out with a thin run of giant kelp back to the field. Forest alone is up to 2.3x the old field's ground (3.3x with the field); smaller in a few worlds.
+- Colonnade to the kelp forest runs along its flank out to the clearing (its arch is next to the town).
+- Previous job's notes are below, kept.
+
+## To do
+- [ ] pictures, sheet; tune looks
+- [ ] main.js Go to buttons; checks; perf; CLAUDE.md; suites; merge
+
+---
+
 # Keeper rework: progress
 
 Running notes so someone else can take over. Brief: make the Keeper's hit model honest (stage A, branch `keeper-shapes`), then make it a tall crab whose legs are the fight (stage B, branch `keeper-tall`, on top of A). George is away; decisions are written here and in the hand-back.
