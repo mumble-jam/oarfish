@@ -6,12 +6,16 @@ Worktree `/home/claude/oarfish-kelp`, from `squid-play` 26b7785. Scratch and log
 - [x] Lighter giant kelp: 35 faces a stem (was 92), every stem turned to one current along the forest, lanes walled and the rest thinned one in two (107 -> 73 stems in 4242). Same draws from the run of chance: `tools/kelp_fn.mjs` says nothing else in band 1 moved.
 - [x] `game/kelpwood.js`: KELPWOOD table; box jelly patrol, shies from the body, fenced, sting by joints touching the drawn tentacles, bounded; shell laid as a cache prize; the nook's fragment handed to the world's fragments; nest mark.
 - [x] main.js hooks (kelpHooks, create after the shell field, dispose x2, update, Empty the nest, `__game.kelp`); npc.js box jelly to Hunters, band 1.
-- [ ] checks, existing checks' counts filtered for the forest's own shell and fragment
-- [ ] cost at 9a7f568 / 26b7785 / final
+- [x] checks (game suite: seven kelp checks), existing checks' counts filtered for the forest's own shell and fragment; library checks moved the box jelly; box jelly has an instrument (music.js)
+- [x] fill counts (deterministic): kelp fragments down about 60% (plate) / 45% (adventure), faces 9,844 -> 2,275
+- [ ] frame time at 9a7f568 / 26b7785 / final, both cameras, under /tmp/oarfish-heavy.lock (kelp-work/final.sh -> perf3.txt)
 - [ ] pictures: /home/claude/kelp-sheet.jpg
-- [ ] CLAUDE.md, CREATURES.md
+- [x] CLAUDE.md, CREATURES.md
+- [ ] game + library suites under the lock (kelp-work/game3.txt, library3.txt); teach, boss passed earlier on 59c8db9 (before eddc9d0)
 
 ## Decisions (and why)
+- Kelp lowered to 0.7 of its height (4.9-6.7 m) and thinned one row in three away from the lanes; lane walls (2.4 m from a lane's edge) all kept. Blades marked to give light (translucent), so undersides are golden, not dark.
+- Judged from the adventure camera first (George's change of default), the plate second.
 - The nook's find is a fragment (a fallen column top), not a jar: a sealed jar pays in fish (or a shell, and the clearing already gives one). A fragment pays in the nest when given to the rift.
 - The forest's shell and fragment are tagged `kelp: true`; the old checks that count "three shells, two fragments" a band count the band's own.
 - Patrol goes corner to opposite corner through the middle (where the shell is), then along a side: it crosses the middle about every ten seconds.
