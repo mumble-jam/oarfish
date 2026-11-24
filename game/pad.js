@@ -1,6 +1,7 @@
 // A game controller, read through the browser's Gamepad API. Buttons are numbered by the "standard"
 // layout, which is what Chrome and Edge report for a DualSense, a DualShock 4 and an Xbox pad alike.
-// The browser only hands out snapshots, so poll() is called once a frame.
+// The browser only hands out snapshots, so poll() is called once a frame. A DualSense the page has taken over (the direct line, below)
+// is read from its own input reports instead, and its frozen Gamepad entry is passed over while they arrive.
 
 export const BTN = { cross: 0, circle: 1, square: 2, triangle: 3, l1: 4, r1: 5, l2: 6, r2: 7, create: 8, options: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 };
 
@@ -37,6 +38,43 @@ export function senseReport(strong, weak, bt = false, seq = 0, flags = 'both') {
   return { id: bt ? 0x31 : 0x02, data };
 }
 
+// ---- What a DualSense says, read from the controller itself. Once the page holds the controller (the direct line above), the
+// browser's Gamepad API can stop seeing it: over Bluetooth, the controller leaves its simple mode as soon as the host reads a feature
+// report or sends the full output report, and from then on sends report 0x31 in Sony's own layout, which Chrome on Windows does not
+// decode, so the Gamepad entry stays listed with its buttons and sticks frozen. So while the line is open the game reads the controller's
+// own input reports. The layout is the Linux driver's (hid-playstation.c, struct dualsense_input_report), counted from the first byte
+// after the report's number, which is where WebHID's data starts: over a cable, report 0x01 of 63 bytes, the block at 0; over Bluetooth
+// in full mode, report 0x31, one byte (a counter and a tag) and then the block. The block: sticks (0 to 3; 0..255, 128 centred, y down),
+// triggers (4, 5), a counter (6), buttons (7 to 9: the hat in 7's low four bits, 0 up and on clockwise in eighths, 8 none; square, cross,
+// circle, triangle in its high four; L1 R1 L2 R2 create options L3 R3 in 8; PS, touchpad, mute in 9). Over Bluetooth in simple mode the
+// controller sends report 0x01 in a shorter layout (SDL's SDL_hidapi_ps5.c, PS5SimpleStatePacket_t; the Linux driver does not read it):
+// sticks 0 to 3, buttons 4 to 6 (the same three bytes), triggers 7 and 8. It is 9 bytes, or 77 where the system pads it, so a 0x01 report
+// is the cable's only at exactly 63 bytes.
+// Returns { layout: 'cable' | 'bluetooth' | 'simple', axes: [lx, ly, rx, ry] in -1..1, buttons: 18 values 0..1 in the standard layout }
+export function senseInput(reportId, view) {
+  const n = view?.byteLength || 0, u = (i) => (i < n ? view.getUint8(i) : 0);
+  let layout;
+  if (reportId === 0x31 && n >= 11) layout = 'bluetooth';
+  else if (reportId === 0x01 && n === 63) layout = 'cable';
+  else if (reportId === 0x01 && n >= 9) layout = 'simple';
+  else return null;
+  const at = layout === 'bluetooth' ? 1 : 0, simple = layout === 'simple';
+  const axis = (v) => Math.max(-1, Math.min(1, (v - 128) / 127));
+  const axes = [axis(u(at)), axis(u(at + 1)), axis(u(at + 2)), axis(u(at + 3))];
+  const lt = simple ? u(7) : u(at + 4), rt = simple ? u(8) : u(at + 5);
+  const b0 = simple ? u(4) : u(at + 7), b1 = simple ? u(5) : u(at + 8), b2 = simple ? u(6) : u(at + 9);
+  const hat = b0 & 15, bit = (b, m) => (b & m ? 1 : 0), b = new Float32Array(COUNT);
+  b[0] = bit(b0, 0x20); b[1] = bit(b0, 0x40); b[2] = bit(b0, 0x10); b[3] = bit(b0, 0x80);
+  b[4] = bit(b1, 0x01); b[5] = bit(b1, 0x02);
+  b[6] = lt ? lt / 255 : bit(b1, 0x04); b[7] = rt ? rt / 255 : bit(b1, 0x08);
+  b[8] = bit(b1, 0x10); b[9] = bit(b1, 0x20); b[10] = bit(b1, 0x40); b[11] = bit(b1, 0x80);
+  b[12] = +(hat === 7 || hat === 0 || hat === 1); b[13] = +(hat >= 3 && hat <= 5); b[14] = +(hat >= 5 && hat <= 7); b[15] = +(hat >= 1 && hat <= 3);
+  b[16] = bit(b2, 0x01); b[17] = bit(b2, 0x02);
+  return { layout, axes, buttons: b };
+}
+// reports newer than this are the controller as it is now; past it, the Gamepad API is read again
+const FRESH = 250, SILENT = 1500;
+
 export function createPad() {
   const s = {
     connected: false, blocked: false, standard: true, name: '', kind: 'ps',
@@ -55,8 +93,23 @@ export function createPad() {
   };
 
   // the direct line to a DualSense, when there is one
-  const hid = { device: null, bt: false, flags: 'both', seq: 0, want: null, busy: false, timer: 0, sent: 0, last: '' };
+  const hid = { device: null, bt: false, flags: 'both', seq: 0, want: null, busy: false, timer: 0, sent: 0, last: '',
+    // what the controller itself last said (senseInput), when, since when the line has been open, and what the status lines are told
+    axes: [0, 0, 0, 0], btn: new Float32Array(COUNT), layout: '', inAt: 0, openAt: 0, reports: 0, status: 'off', onstatus: null };
   const hidOn = () => !!hid.device && hid.device.opened;
+  function onInput(e) {
+    if (e.device && e.device !== hid.device) return;
+    const got = senseInput(e.reportId, e.data);
+    if (!got) return;
+    hid.axes = got.axes; hid.btn.set(got.buttons); hid.layout = got.layout; hid.inAt = performance.now(); hid.reports++;
+  }
+  function letGo() { // the line is closed: nothing the controller said before counts any more
+    try { hid.device?.removeEventListener?.('inputreport', onInput); } catch { /* gone already */ }
+    hid.device = null; hid.inAt = 0; hid.layout = ''; hid.btn.fill(0); hid.axes = [0, 0, 0, 0]; clearTimeout(hid.timer);
+  }
+  const hex = (v) => v.toString(16).padStart(4, '0');
+  // a Gamepad entry that is this same controller, as the browser lists it ("… Vendor: 054c Product: 0ce6", or "054c-0ce6-…")
+  const same = (g) => { const id = (g.id || '').toLowerCase(); return !!hid.device && id.includes(hex(SONY)) && id.includes(hex(hid.device.productId)); };
   function hidSend(strong, weak) {
     hid.want = [strong, weak];
     if (hid.busy || !hidOn()) return;
@@ -69,7 +122,9 @@ export function createPad() {
   async function adopt(device) {
     if (!device || device.vendorId !== SONY || !SENSE.includes(device.productId)) return false;
     try { if (!device.opened) await device.open(); } catch (e) { hid.last = `could not open it (${e?.name || 'error'}); another program may be holding it`; return false; }
-    hid.device = device; hid.last = ''; hid.seq = 0;
+    if (hid.device && hid.device !== device) letGo();
+    hid.device = device; hid.last = ''; hid.seq = 0; hid.inAt = 0; hid.reports = 0; hid.openAt = performance.now();
+    try { device.addEventListener('inputreport', onInput); } catch { /* it cannot be listened to: the Gamepad API it is */ } // the same listener twice is one
     hid.bt = (device.collections || []).some((c) => (c.outputReports || []).some((r) => r.reportId === 0x31));
     hid.flags = device.productId === 0x0df2 ? 'new' : 'both';
     try { // which flag its firmware wants: the version is in feature report 0x20, as the Linux driver reads it
@@ -80,7 +135,7 @@ export function createPad() {
     return true;
   }
   try {
-    navigator.hid?.addEventListener('disconnect', (e) => { if (e.device === hid.device) { hid.device = null; clearTimeout(hid.timer); } });
+    navigator.hid?.addEventListener('disconnect', (e) => { if (e.device === hid.device) letGo(); });
     navigator.hid?.addEventListener('connect', (e) => { if (!hidOn()) adopt(e.device); }); // only ones the player has already allowed arrive here
   } catch { /* no such thing in this browser */ }
 
@@ -102,25 +157,35 @@ export function createPad() {
     poll() {
       was.set(now);
       pad = null;
+      const t = performance.now(), on = hidOn();
+      if (!on && hid.device) letGo(); // closed without a word
+      const live = on && hid.inAt > 0 && t - hid.inAt < FRESH; // the controller is speaking for itself
+      const status = !on ? 'off' : live ? 'reading' : hid.reports ? 'stopped' : t - hid.openAt > SILENT ? 'silent' : 'waiting';
+      if (status !== hid.status) { const old = hid.status; hid.status = status; try { hid.onstatus?.(status, old); } catch { /* the page's own trouble */ } }
       if (!s.blocked) {
         try {
-          for (const g of navigator.getGamepads?.() || []) if (g && g.connected && (!pad || (g.mapping === 'standard' && pad.mapping !== 'standard'))) pad = g;
+          // while it speaks for itself, the browser's entry for the same controller is a frozen copy: it is passed over, never added in
+          for (const g of navigator.getGamepads?.() || []) if (g && g.connected && !(live && same(g)) && (!pad || (g.mapping === 'standard' && pad.mapping !== 'standard'))) pad = g;
         } catch { s.blocked = true; } // the frame the page runs in does not let controllers through
       }
-      s.connected = !!pad;
-      if (!pad) { now.fill(0); s.lx = s.ly = s.rx = s.ry = 0; s.active = false; return s; }
-      if (s.name !== pad.id) {
-        s.name = pad.id;
-        s.kind = /xbox|xinput|microsoft|045e/i.test(pad.id) ? 'xbox' : 'ps';
+      s.connected = live || !!pad;
+      if (!s.connected) { now.fill(0); s.lx = s.ly = s.rx = s.ry = 0; s.active = false; return s; }
+      let name = pad ? pad.id : '';
+      if (live) { name = ''; try { for (const g of navigator.getGamepads?.() || []) if (g && same(g)) { name = g.id; break; } } catch { /* blocked */ } name ||= hid.device.productName || 'DualSense Wireless Controller'; }
+      if (s.name !== name) {
+        s.name = name;
+        s.kind = /xbox|xinput|microsoft|045e/i.test(name) ? 'xbox' : 'ps';
       }
-      s.standard = pad.mapping === 'standard';
-      const a = pad.axes;
-      [s.lx, s.ly] = stick(a[0] || 0, a[1] || 0);
-      [s.rx, s.ry] = stick(a[2] || 0, a[3] || 0);
+      s.standard = !pad || pad.mapping === 'standard';
+      // the DualSense read directly and any other controller held at the same time both count: the stick pushed further, the button pushed harder
+      const a = pad ? pad.axes : [], d = live ? hid.axes : [0, 0, 0, 0];
+      const pick = (p, q) => (Math.hypot(q[0], q[1]) > Math.hypot(p[0], p[1]) ? q : p);
+      [s.lx, s.ly] = pick(stick(a[0] || 0, a[1] || 0), stick(d[0], d[1]));
+      [s.rx, s.ry] = pick(stick(a[2] || 0, a[3] || 0), stick(d[2], d[3]));
       let any = !!(s.lx || s.ly || s.rx || s.ry);
       for (let i = 0; i < COUNT; i++) {
-        const b = pad.buttons[i];
-        now[i] = b ? Math.max(b.value || 0, b.pressed ? 1 : 0) : 0;
+        const b = pad?.buttons[i];
+        now[i] = Math.max(b ? Math.max(b.value || 0, b.pressed ? 1 : 0) : 0, live ? hid.btn[i] : 0);
         if (now[i] > 0.3) any = true;
       }
       s.active = any;
@@ -160,6 +225,13 @@ export function createPad() {
       get connected() { return hidOn(); },
       get how() { return hidOn() ? `${hid.bt ? 'Bluetooth' : 'cable'}, ${hid.flags === 'both' ? 'firmware unknown' : hid.flags === 'new' ? 'current firmware' : 'old firmware'}` : ''; },
       get sent() { return hid.sent; },
+      // whether the game is reading the buttons and sticks from the controller itself right now, and in which of its layouts
+      get reading() { return hidOn() && hid.inAt > 0 && performance.now() - hid.inAt < FRESH; },
+      get layout() { return hid.layout; },
+      // 'off', 'waiting' (just opened), 'reading', 'stopped' (it was, and no report for a while), 'silent' (it never sent one);
+      // onstatus(now, before) is told each change, from poll()
+      get status() { return hid.status; },
+      set onstatus(fn) { hid.onstatus = fn; },
       get trouble() { return hid.last; },
       async connect() {
         if (!navigator.hid) return 'unsupported';
