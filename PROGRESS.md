@@ -1,22 +1,25 @@
 # The quiet side (branch quiet-side): progress
 
-Phase one of George's "quiet side" expansion: the ground, plants and stone of three new places in band 1 (sand flat, reef head, kelp forest), a colonnade and gate arches. No creatures. Worktree `/home/claude/oarfish-quiet`, logs in `/home/claude/quiet-logs/`, throwaway scripts in `/home/claude/quiet-scripts/`.
+Phase one of George's "quiet side": ground, plants and stone for the sand flat, reef head, kelp forest, colonnade and gate arches in band 1. No creatures. Worktree `/home/claude/oarfish-quiet`; logs `/home/claude/quiet-logs/`; sheet `/home/claude/quiet-side-sheet.jpg`.
 
 ## Done
-- [x] `game/quiet.js`: the layout (QUIET numbers, layQuiet, laneDistance). Own run of numbers. Searched over 400 worlds (and 300 nursery ones): no fallback needed.
-- [x] `world.js`: rand/drand read through randNow/drandNow so the quiet side lends its own runs to the band's builders; buildQuiet; sand flat made level and paler; keepOff generalised (`keeps`), `extras` for plants of kinds the band already scatters; three new models (coralHead, seaRod, giantKelp) registered as components; `world.quiet`.
-- [x] `shells.js`: shellSpot/shellSpots exported (same numbers as before) so the stone keeps 3.5 m off where shells lie.
-- [x] digest bands 2-5: identical (7 seeds). Band 1: swarms, shells, hunters, keeper, main run of chance unchanged; puzzles, fragments, mural, jars, pilots, chimes, bloom, all earlier sites identical in 60 seeds x (nursery and not).
-- [x] shot_map draws it.
+- [x] `game/quiet.js` layout (own run of numbers); `world.js` builds it (`buildQuiet`, `randNow`/`drandNow`, `keeps`, `extras`, level pale sand, three new models); `shells.js` `shellSpots`; `world.quiet` documented in CLAUDE.md.
+- [x] Go to buttons (index.html, main.js); `tools/shot_quiet.mjs`, `tools/quiet_fn.mjs`; shot_map draws it.
+- [x] Checks in the game suite: go-to and swim-through, layout audit over 80 worlds, bands 2-5 digest vs 5428c39. Library count 74 -> 77.
+- [x] Merged squid-play (9a7f568, moon jellies) in; conflicts in CLAUDE.md and test_game.mjs resolved by keeping both.
+- [x] All five suites pass after the merge (game 99, boss 30, teach 9, library 17, controls 55).
+- [x] Cost vs 9a7f568: start +8% tris, +2% calls; sand flat +10%, reef +10%, kelp +11% tris and +39% frame time there.
 
 ## Decisions (and why)
-- Kelp forest: grown out of the old field where there is room (most worlds); when pens/ruins block it, it starts further out with a thin run of giant kelp back to the field. Forest alone is up to 2.3x the old field's ground (3.3x with the field); smaller in a few worlds.
-- Colonnade to the kelp forest runs along its flank out to the clearing (its arch is next to the town).
-- Previous job's notes are below, kept.
+- Kelp forest grows out of the old field where there is room; else starts further out with a thin run back. Usually 2.3x the field's ground (3.3x with it); smaller in some worlds.
+- Kelp colonnade runs along the forest's flank to the clearing (its arch is next to the town).
+- Colonnade columns stand beside the way (3.5 m to the right), not on the line, so they never block the approach.
+- Arches 4.3 m columns (about 5 m under the lintel), lower than first built, so the plate camera clears them more.
+- Giant kelp 7-9.5 m, golden brown, blades streaming one way (looked like bamboo when tall, green and symmetric).
+- Coral heads: pillar-coral style, each head its own colour round the ring (round lumps read as boulders).
+- Hooks can move (about 1 world in 7): openSpot keeps off the new ground.
 
-## To do
-- [ ] pictures, sheet; tune looks
-- [ ] main.js Go to buttons; checks; perf; CLAUDE.md; suites; merge
+---
 
 ---
 
