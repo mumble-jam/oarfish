@@ -1,3 +1,30 @@
+# The reef head's life (branch reef-life): progress
+
+Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfish, coral that grows from dive to dive. All behaviour in `game/reef.js` (`REEF` table); hooks in main.js and npc.js are one block each. Worktree `/home/claude/oarfish-reef`; logs `/home/claude/reef-logs/`; sheet `/home/claude/reef-sheet.jpg`.
+
+## Done
+- [x] reef.js: station, trumpetfish, coral; main.js hook (one import, one hooks block, one line in enterFloor, one in the step, one extra Empty-the-nest listener, one line exposing it to the checks); npc.js block moving the trumpetfish to the first band (Rivals) and the cleaner to band 0 too.
+- [x] tools/shot_reef.mjs: pictures from the dive's camera.
+
+## To do
+- [x] checks in test_game.mjs (three); library checks updated for the moved trumpetfish; CLAUDE.md, CREATURES.md.
+- [x] perf before/after (see CLAUDE.md, *The reef's cost*); sheet /home/claude/reef-sheet.jpg.
+- [x] Final runs (coordinator: game, boss and library only, one at a time under /tmp/oarfish-heavy.lock): boss 30/30, library 17/17; game see hand-back. An earlier game run under load timed out after 98 passes, none failing; a run before that failed the two fingerprint checks because the station's new numbers were fingerprinted (fixed: kept in `st.whole`).
+- [ ] Cost not measured again after the whole-body ring (two more draw calls a station near it: the bright arc and the warm points).
+
+## Decisions (and why)
+- (Mid-task, from George through the coordinator) Every cleaning station, in every band: the whole body has to be in the ring. Ring 3.5 m for the starting body (was 3.2) and 0.3 m wider per metre of body past it (5.0 m at 26 segments), because a resting fish creeps at 0.22 m/s and a scripted curl-and-rest reached 3.3 m (10 segs) to 4.6 m (26) from the middle. Shown by a bright arc as far round as the share in, warm points on what is out. Checks: head only, half in, curled in at 10 and 26, at the reef and in band 3.
+- (Mid-task) Pictures from both cameras, adventure first.
+- Station rule without tail-biters: it mends, it does not feed. It gives back only what this dive has lost (body shorter than this dive's longest); a whole fish gets nothing (no ring, cleaners stay on the coral), and nothing goes to the crest. Uses, rest, time, reach and stillness are CLEAN's own numbers. Not solid (a low brain coral the fish hovers over), so world.js's colliders are untouched. It is reef.js's own station, not one of world.react.stations, so the deeper bands' station check and the truce code are untouched.
+- Trumpetfish strike when the loop round a swarm is half closed (sc.progress >= 0.5), not after it closes: the catch happens in main.js before reef.update runs, so taking the fish at the close would mean editing the catch loop. Halfway round is still 'closing a loop' to the eye.
+- Coil shake-off counts only coiling round nothing (no swarm being ringed), since wrapping a swarm is itself a coil. rig.coiling also counts hard turns, so a sharp turn shakes it too (the report's 'a coil, a sharp turn or a dash').
+- New coral grows in the first time the fish comes within 30 m of the reef in a later dive, not at the very start of the dive (the reef is 80 m from the start, so a growing-in at the start would never be seen).
+- Goals counted: every carving won on any band's mural (world.react.earn answering true), wrapped inside reef.js. The mural is unchanged.
+- The reef disposes itself when its world is disposed (it wraps world.dispose), so main.js's three dispose lines are not touched (other branches edit them).
+- Trumpetfish hang by the rods nearest the way in from the arch, so they are met on arrival; tilted 0.95 rad head down (straight down is a dot from the camera); drawn 1.2 times the model (which is already 1.4 times the real fish) because at 1.0 the hanging ones could not be found in the pictures.
+
+---
+
 # The quiet side (branch quiet-side): progress
 
 Phase one of George's "quiet side": ground, plants and stone for the sand flat, reef head, kelp forest, colonnade and gate arches in band 1. No creatures. Worktree `/home/claude/oarfish-quiet`; logs `/home/claude/quiet-logs/`; sheet `/home/claude/quiet-side-sheet.jpg`.

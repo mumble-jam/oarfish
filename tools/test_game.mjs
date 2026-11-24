@@ -685,9 +685,9 @@ check('swarms have tempers, the same in every dive: one bolts straight up when c
 s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
   out.bands = []; for (let f = 0; f < 5; f++) { g.startRun(4242); if (f) g.enterFloor(f, false); const S = g.world.react.stations; out.bands.push(S.length + (S.every((x) => g.foes.biters.filter((b) => Math.hypot(b.pos.x - x.x, b.pos.z - x.z) < C.call).length >= 2) ? '' : '!')); }
   g.startRun(4242); g.enterFloor(1, false); g.run.safe = 0; g.sim(0.1, T.none());
-  const st = g.world.react.stations[0], segs = g.run.segs, over = () => { T.put(st.x, st.top + 1.2, st.z - 1.0, 0); }, round = () => g.foes.biters.filter((b) => b.state === 'circle'), far = () => round().map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz));
+  const st = g.world.react.stations[0], segs = g.run.segs, over = () => { const was = g.run.safe; g.run.safe = 1e9; T.aroundPoint(st.x, st.top + 1.2, st.z, 0); T.coil((g.rig.length + 0.8) / 1.6); g.run.safe = was; for (const b of g.foes.biters) { b.pos.copy(b.home); b.vel.set(0, 0, 0); b.state = 'roam'; } }, /* the whole body curled inside the ring: a coil round its middle */ round = () => g.foes.biters.filter((b) => b.state === 'circle'), far = () => round().map((b) => Math.hypot(b.pos.x - st.cx, b.pos.z - st.cz));
   // broken off: a start, the hunters come, then the head leaves and nothing is given
-  over(); g.sim(2.5, still); const k1 = +st.k.toFixed(2), came = round().length; T.put(st.x + 30, st.top + 1.2, st.z, 0); g.sim(2, still); out.broke = { k1, came, k: st.k, segs: g.run.segs - segs, uses: st.uses, truce: round().length };
+  over(); g.sim(3, still); const k1 = +st.k.toFixed(2), came = round().length; T.put(st.x + 30, st.top + 1.2, st.z, 0); g.sim(2, still); out.broke = { k1, came, k: st.k, segs: g.run.segs - segs, uses: st.uses, truce: round().length };
   // held to the end
   over(); g.foes.biters.forEach((b) => { b.cool = 0; }); let t = 0, most = 0, ring0 = 0; const news = [];
   while (st.uses === C.uses && t < 12) { g.sim(0.1, still); t += 0.1; most = Math.max(most, round().length); if (Math.abs(t - 1.5) < 0.05) ring0 = Math.min(...far()); }
@@ -1133,6 +1133,102 @@ s = await page.evaluate(() => { const g = window.__game, W = g.world, out = []; 
     out.push({ speed, below, over, worst: +worst.toFixed(3) }); }
   g.startRun(4242); return out; });
 check('a fish rising beside a column and over its top: the tail goes over with it, and no joint jumps (most a joint\'s step changes in a frame under 0.3 m; it was 0.66)', s.every((o) => o.over && o.worst < 0.3), JSON.stringify(s));
+// ---- the reef head's life (reef.js): its station mends and does not feed, its trumpetfish ride and take, its coral is a record of mural goals
+s = await ev(() => { const g = window.__game, T = window.T, R = g.REEF, out = {}, still = { ...T.none(), amount: 0 };
+  const fresh = () => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.2, T.none()); return g.reef; };
+  const over = (r) => { const o = r.debug.off, st = r.debug.st, L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); T.aroundPoint(st.x + o.x, st.top + 1.2, st.z + o.z, 0); T.coil((L + 0.8) / v); }; // the whole body curled inside the ring
+  const hold = (r, secs) => { for (let t = 0; t < secs; t += 0.1) g.sim(0.1, still); };
+  // whole: nothing to mend, no ring, nothing given
+  let r = fresh(); over(r); hold(r, 9); out.whole = { segs: g.run.segs, ring: r.debug.ring.visible, k: r.debug.st.k, uses: r.debug.st.uses };
+  // two lost: held still it mends one in its time, the ring filling; then it rests; then the second; then it is spent and gives no more
+  r = fresh(); g.run.longest = 12; g.run.segs = 10; g.buildFish(10); over(r); let t = 0, ring = false, half = 0;
+  while (r.debug.st.uses === R.station.uses && t < 12) { g.sim(0.1, still); t += 0.1; ring ||= r.debug.ring.visible; if (Math.abs(t - 3.5) < 0.05) half = r.debug.st.k; }
+  out.first = { t: +t.toFixed(1), segs: g.run.segs, ring, half: +half.toFixed(2), uses: r.debug.st.uses };
+  hold(r, 6); out.resting = { segs: g.run.segs, k: r.debug.st.k };
+  r.debug.st.rest = 0; over(r); hold(r, 8); out.second = { segs: g.run.segs, uses: r.debug.st.uses };
+  g.run.segs = 9; g.buildFish(9); r.debug.st.rest = 0; over(r); hold(r, 9); out.spent = { segs: g.run.segs, ring: r.debug.ring.visible, cleaned: g.run.cleaned };
+  // a station that is left gives nothing
+  r = fresh(); g.run.longest = 12; g.run.segs = 10; g.buildFish(10); over(r); hold(r, 3); const k1 = r.debug.st.k; T.put(r.debug.st.x + r.debug.off.x + 25, 3, r.debug.st.z + r.debug.off.z, 0); hold(r, 2); out.left = { k1: +k1.toFixed(2), k: r.debug.st.k, segs: g.run.segs };
+  out.deep = []; for (let f = 1; f < 5; f++) { g.enterFloor(f, false); out.deep.push(!!g.reef?.debug.st); }
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('the reef head has a cleaning station that mends and does not feed: a whole fish held still over it is given nothing and sees no ring; a fish two short of its longest is mended one segment in the station’s time, the ring filling, then it rests, then mends the second, and then it is spent; left half done it gives nothing; no deeper band has it',
+  s.whole.segs === 10 && !s.whole.ring && s.whole.k === 0 && s.whole.uses === 2 && s.first.segs === 11 && s.first.ring && s.first.half > 0.3 && s.first.half < 0.7 && s.first.t > 6 && s.first.t < 8 && s.first.uses === 1
+  && s.resting.segs === 11 && s.resting.k === 0 && s.second.segs === 12 && s.second.uses === 0 && s.spent.segs === 9 && !s.spent.ring && s.spent.cleaned === 2 && s.left.k1 > 0.2 && s.left.k === 0 && s.left.segs === 10 && s.deep.every((x) => !x), JSON.stringify(s));
+
+// every station, the reef's and the deeper bands': the whole body has to be inside the ring. The head alone does nothing; half in does nothing, and the ring is drawn
+// only as far round as the share of the body in it, with the parts outside marked; curled up inside, a starting body is mended, and so is the longest body there can be
+s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
+  const at = (band) => { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false; g.sim(0.2, T.none());
+    if (band) { const st = g.world.react.stations[0]; return { st, x: st.x, z: st.z, top: st.top, k: () => st.k, share: () => st.whole.share, R: () => st.whole.reach, ring: () => st.inside, marks: () => st.marks.points, uses: () => st.uses }; }
+    const r = g.reef, st = r.debug.st, o = r.debug.off; return { st, x: st.x + o.x, z: st.z + o.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => r.debug.inside, marks: () => r.debug.marks.points, uses: () => st.uses }; };
+  const size = (segs) => { g.run.longest = Math.max(segs + 2, g.run.longest); g.run.segs = segs; g.buildFish(segs); g.sim(0.1, T.none()); };
+  const curl = (S) => { const L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); T.aroundPoint(S.x, S.top + 1.2, S.z, 0); T.coil((L + 0.8) / v); };
+  for (const [name, band] of [['reef', 0], ['deep', 2]]) { const o = out[name] = {};
+    // the head alone in the middle, the body trailing out
+    let S = at(band); size(10); T.put(S.x, S.top + 1.2, S.z - S.R() + 0.4, 0); g.sim(0.3, still); const share0 = +S.share().toFixed(2); g.sim(4, still); o.head = { k: S.k(), share: share0, uses: S.uses() };
+    // half in: drawn half round, the rest marked
+    S = at(band); size(10); T.put(S.x, S.top + 1.2, S.z - S.R() + 0.5 * g.rig.length + 0.2, 0); g.sim(0.3, still);
+    const ring = S.ring(), drawn = ring.geometry.drawRange.count; o.half = { share: +S.share().toFixed(2), drawn, visible: ring.visible }; g.sim(3, still); o.half.k = S.k();
+    const mk = S.marks(); o.half.marks = mk.visible ? mk.geometry.drawRange.count : 0;
+    // curled up inside, at the starting length and the longest: mended, within the station's time and a little more
+    for (const segs of [10, 26]) { S = at(band); size(segs); const before = g.run.segs, L = +g.rig.length.toFixed(1); curl(S); let t = 0, all = 1;
+      while (S.uses() === C.uses && t < 12) { g.sim(0.1, still); t += 0.1; all = Math.min(all, S.k() > 0.05 ? S.share() : 1); }
+      o['curl' + segs] = { L, R: +S.R().toFixed(2), t: +t.toFixed(1), done: S.uses() < C.uses, gained: g.run.segs - before, kept: all }; } } // (the longest is full grown: its mending goes to the crest, or nowhere at the reef)
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('at every cleaning station, the reef head’s and the deeper bands’, the whole body has to be inside the ring: the head alone does nothing; half in does nothing, the ring drawn only about half round and the parts outside marked; curled up inside and resting, a starting body is mended in the station’s time, and the longest body there can be has the work done too (its ring a little wider, far less than the body is longer)',
+  ['reef', 'deep'].every((n) => { const o = s[n]; return o.head.k === 0 && o.head.share < 0.5 && o.head.uses === 2 && o.half.visible && o.half.share > 0.3 && o.half.share < 0.8 && o.half.drawn > 12 && o.half.drawn < 42 && o.half.k === 0
+    && o.half.marks >= 3 && o.curl10.gained === 1 && o.curl10.done && o.curl10.t < 9 && o.curl26.done && o.curl26.t < 9.5 && o.curl26.R - o.curl10.R < (o.curl26.L - o.curl10.L) * 0.4; }), JSON.stringify(s));
+
+s = await ev(() => { const g = window.__game, T = window.T, R = g.REEF.trumpet, out = {};
+  const fresh = () => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.2, T.none()); return g.reef; };
+  // swim by one of them, a little to one side of it, at the ordinary pace
+  const pass = (r, f, aside = 1.6, extra = {}) => { const o = r.debug.off, a = f.homeYaw, sx = Math.sin(a), sz = Math.cos(a); T.put(f.home.x + o.x - sx * 5 + sz * aside, f.home.y, f.home.z + o.z - sz * 5 - sx * aside, a);
+    for (let t = 0; t < 3; t += 0.1) g.sim(0.1, { ...T.none(), dir: { x: sx, y: 0, z: sz }, ...extra }); };
+  const ride = (r) => { for (let t = 0; t < 6 && r.rider && r.rider.do !== 'ride'; t += 0.1) g.sim(0.1, { ...T.none(), dir: { x: Math.sin(g.rig.yaw), y: 0, z: Math.cos(g.rig.yaw) } }); };
+  let r = fresh(); out.n = r.fish.length; out.hanging = r.fish.every((f) => f.do === 'hang' && f.pitch > 0.8);
+  // held still beside one: nothing comes
+  { const f = r.fish[0], o = r.debug.off; T.put(f.home.x + o.x + 1.2, f.home.y, f.home.z + o.z, 0); g.sim(4, { ...T.none(), amount: 0 }); out.still = r.rider ? r.rider.do : null; }
+  // swum by: one peels off, comes after the body and lies along its flank, yellow; only one at a time
+  r = fresh(); pass(r, r.fish[0]); out.joined = r.rider ? r.rider.do : null; ride(r); const f = r.rider;
+  g.sim(1, { ...T.none(), dir: { x: Math.sin(g.rig.yaw), y: 0, z: Math.cos(g.rig.yaw) } });
+  out.ride = f ? { do: f.do, phase: +f.a.rig.pose.phase.toFixed(2), gap: +Math.min(...g.rig.joints.map((j) => Math.hypot(j.x - f.pos.x - r.debug.off.x, j.z - f.pos.z - r.debug.off.z))).toFixed(2), riders: r.fish.filter((x) => x.do === 'ride' || x.do === 'join').length } : null;
+  // carried to a small swarm and a loop closed on it: it strikes once, a flash, and the catch is one fish short
+  const sc = g.world.schools.find((x) => x.tier === 's' && !x.kind && !x.bloom && x.left > 0), n = sc.left, caught0 = g.run.caught, cl = (g.rig.length + 0.8) / (Math.PI * 2);
+  g.sim(0.05, T.none()); g.rig.reset(g.rig.pos.clone().set(sc.x - cl, sc.y, sc.z), 0); g.snap(); const o = r.debug.off; f.pos.set(g.rig.joints[4].x - o.x, g.rig.joints[4].y, g.rig.joints[4].z - o.z);
+  let t = 0, flash = false, struckAt = -1; while (sc.left > 0 && t < 10) { g.sim(0.05, { ...T.none(), coil: 1 }); t += 0.05; flash ||= r.debug.flash.visible; if (struckAt < 0 && r.state.strikes) struckAt = +sc.progress.toFixed(2); }
+  g.sim(2.5, T.none()); out.strike = { n, took: r.state.took, strikes: r.state.strikes, flash, left: sc.left, ate: g.run.caught - caught0, still: f.do, struckAt };
+  // a dash shakes it off: flung aside, it goes home to its rod in its own colours, and none rides again for a while
+  ride(r); g.sim(1 / 60, { ...T.none(), dir: { x: Math.sin(g.rig.yaw), y: 0, z: Math.cos(g.rig.yaw) }, dash: true, dashNow: true }); g.sim(0.5, T.none());
+  out.dash = { rider: r.rider ? r.rider.do : null, it: f.do, shaken: r.state.shaken }; g.sim(3, T.none()); out.dash.phase = +f.a.rig.pose.phase.toFixed(2);
+  pass(r, r.fish[1]); out.again = r.rider ? r.rider.do : null;
+  // a coil round nothing shakes it off too; a fish that sprints straight on past is not caught up
+  r = fresh(); pass(r, r.fish[0]); ride(r); g.sim(2.5, { ...T.none(), coil: 1 }); out.coil = { rider: r.rider ? r.rider.do : null, shaken: r.state.shaken };
+  r = fresh(); pass(r, r.fish[0], 1.6, { sprint: true }); for (let i = 0; i < 60 && r.rider; i++) g.sim(0.1, { ...T.none(), dir: { x: Math.sin(g.rig.yaw), y: 0, z: Math.cos(g.rig.yaw) }, sprint: true }); out.outswum = { joined: r.state.joined, rider: r.rider ? r.rider.do : null, home: r.fish[0].do };
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('trumpetfish hang head down by the reef’s sea rods; one swum by close peels off and lies yellow along the flank, one at a time; a fish held still draws none; a loop closed on a swarm with it aboard has it strike once, with a flash, and the catch is one fish short; a dash shakes it off and it goes home in its own colours, and none rides again for a while; a coil round nothing shakes it too, and a sprint outswims it',
+  s.n >= 2 && s.n <= 3 && s.hanging && s.still === null && !!s.joined && s.ride && s.ride.do === 'ride' && s.ride.phase > 0.8 && s.ride.gap < 1 && s.ride.riders === 1
+  && s.strike.took === 1 && s.strike.strikes === 1 && s.strike.flash && s.strike.left === 0 && s.strike.ate === s.strike.n - 1 && s.strike.struckAt >= 0.5 && s.strike.still === 'ride'
+  && s.dash.rider === null && (s.dash.it === 'flung' || s.dash.it === 'home') && s.dash.shaken === 1 && s.dash.phase < 0.2 && s.again === null && s.coil.rider === null && s.coil.shaken === 1 && s.outswum.rider === null, JSON.stringify(s));
+
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, K = g.REEF.coral;
+  const fresh = () => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.2, T.none()); return g.reef; };
+  const visit = (r, secs = 6) => { const o = r.debug.off; T.put(r.plan.x + o.x, g.world.height(r.plan.x + o.x, r.plan.z + o.z) + 2, r.plan.z + o.z, 0); for (let t = 0; t < secs; t += 0.1) g.sim(0.1, { ...T.none(), amount: 0 }); };
+  const shown = (r) => r.debug.pieces.filter((p) => r.debug.grownBy(p) > 0.99).length;
+  Object.assign(g.nest, { reef: null }); let r = fresh(); out.none = r.debug.pieces.length;
+  // a goal of the mural won: one coral is owed; it is not there in this dive, the same goal again owes nothing more
+  out.won = g.world.react.earn('cache'); out.twice = g.world.react.earn('cache'); out.kept = JSON.parse(localStorage.getItem('oarfish.nest')).reef; out.thisDive = r.debug.pieces.length;
+  // the next dive: it is there, and grows in when the fish comes to the reef; the dive after, it stands from the first
+  r = fresh(); out.next = { pieces: r.debug.pieces.length, before: shown(r) }; visit(r, 1.5); out.next.growing = +r.debug.grownBy(r.debug.pieces[0]).toFixed(2); visit(r, 5); out.next.after = shown(r); out.next.seen = g.nest.reef.seen;
+  r = fresh(); out.later = shown(r);
+  // a goal won in another band counts too, and the spots fill in order and stop when they are full
+  g.enterFloor(2, false); g.world.react.earn('guard'); r = fresh(); out.two = { coral: new Set(r.debug.pieces.map((p) => p.spot)).size, spots: [...new Set(r.debug.pieces.map((p) => p.spot))].join() };
+  Object.assign(g.nest, { reef: { grown: 40, seen: 40 } }); r = fresh(); out.full = { coral: new Set(r.debug.pieces.map((p) => p.spot)).size, spots: r.plan.grow.length, draws: Object.keys(r.debug.meshes).length };
+  // Empty the nest forgets it
+  document.getElementById('dev-forget').click(); r = fresh(); out.emptied = { pieces: r.debug.pieces.length, kept: JSON.parse(localStorage.getItem('oarfish.nest')).reef ?? null };
+  g.startRun(4242); g.run.safe = 0; return out; });
+check('the reef grows from dive to dive: a goal of a mural won (in any band) owes one coral, kept with the nest; it is not there in the dive it was won in, grows in when the fish comes to the reef in the next, and stands from the first in the one after; the spots fill in order and stop when they are full, drawn as one instanced piece a kind; Empty the nest takes them away',
+  s.none === 0 && s.won === true && s.twice === false && s.kept && s.kept.grown === 1 && s.thisDive === 0 && s.next.pieces >= 1 && s.next.before === 0 && s.next.growing > 0.05 && s.next.growing < 0.95 && s.next.after === s.next.pieces && s.next.seen === 1
+  && s.later === s.next.pieces && s.two.coral === 2 && s.two.spots === '0,1' && s.full.coral === s.full.spots && s.full.draws === 5 && s.emptied.pieces === 0 && s.emptied.kept === null, JSON.stringify(s));
 
 await page.close();
 
