@@ -279,8 +279,8 @@ function geometries() {
       m.tri(q[0], q[1], q[2], ridge ? grey(k) : grey(k * 0.7)); } };
     lobe(0, 0.12, 0, 0.95, 0.36, 0.9, 0); lobe(0.42, 0.18, -0.3, 0.45, 0.28, 0.45, 2);
     const pillar = (x, z, h, r) => { const n = 7, groove = (y, rr) => Array.from({ length: n * 2 }, (_, k) => { const t = (k / (n * 2)) * Math.PI * 2, d = rr * (k % 2 ? 0.82 : 1); return [x + Math.sin(t) * d, y, z + Math.cos(t) * d]; });
-      const rings = [groove(0.15, r * 1.1), groove(h * 0.55, r), groove(h, r * 0.92)]; m.skin(rings, (i2, k) => (k % 2 ? [grey(0.62 + i2 * 0.15), grey(0.7 + i2 * 0.18)] : [grey(0.78 + i2 * 0.12), grey(0.88 + i2 * 0.12)]));
-      m.cap(rings[2], [0, 1, 0], bright(1.35), r * 0.7); };
+      const rings = [groove(0.15, r * 1.1), groove(h * 0.55, r), groove(h, r * 0.92), groove(h + r * 0.4, r * 0.66)]; m.skin(rings, (i2, k) => (k % 2 ? [grey(0.62 + i2 * 0.12), grey(0.7 + i2 * 0.14)] : [grey(0.78 + i2 * 0.1), i2 === 2 ? bright(1.2) : grey(0.88 + i2 * 0.1)]));
+      m.cap(rings[3], [0, 1, 0], bright(1.3), r * 0.22); }; // rounded at the tip, where it is growing: a pillar of coral, not a crystal
     for (const [x, z, h, r] of [[0, 0, 1.0, 0.17], [0.3, 0.18, 0.78, 0.15], [-0.28, 0.22, 0.7, 0.15], [-0.12, -0.32, 0.86, 0.16], [0.36, -0.22, 0.55, 0.13], [-0.45, -0.08, 0.5, 0.13], [0.1, 0.45, 0.6, 0.13]]) pillar(x, z, h, r);
     { const rim = (sc, dy) => Array.from({ length: 9 }, (_, i) => { const t = 2.2 + (i / 8) * 1.9, d = sc * (0.85 + 0.15 * Math.sin(i * 2.1)); return [Math.sin(t) * d, 0.3 + dy, Math.cos(t) * d]; });
       const inner = rim(0.75, 0.02), outer = rim(1.3, 0.09); for (let i = 0; i < 8; i++) m.quad(inner[i], outer[i], outer[i + 1], inner[i + 1], [grey(0.7), bright(1.25), bright(1.25)]); }
@@ -299,8 +299,9 @@ function geometries() {
       const at = (u, w) => [b[0] + o[0] * len * u + side[0] * w, b[1] + 0.04 * u - droop * u * u, b[2] + o[1] * len * u + side[1] * w];
       m.quad(at(0.08, -wide * 0.5), at(0.08, wide * 0.5), at(0.6, wide), at(0.6, -wide), [grey(k * 0.8), grey(k * 0.8), grey(k)]).tri(at(0.6, -wide), at(0.6, wide), at(1, 0), [grey(k), grey(k), bright(k * 1.2)]);
       m.tri([b[0], b[1] - 0.006, b[2]], at(0.08, -wide * 0.5), at(0.08, wide * 0.5), '#e8de8a'); }; // the float at its root
-    for (let i = 0; i < 14; i++) { const t = 0.1 + i * 0.062; blade(t, i * 2.4 + qrand() * 0.5, 0.26 + 0.05 * qrand(), 0.05, 0.08, 0.5 + 0.5 * t); }
-    for (let i = 0; i < 6; i++) blade(0.97, i * 1.05 + qrand() * 0.4, 0.34 + 0.08 * qrand(), 0.055, 0.12, 1.05);
+    // the blades stream one way, as kelp does in a current, long and hanging: that, and not their number, is what tells it from a reed
+    for (let i = 0; i < 12; i++) { const t = 0.12 + i * 0.07; blade(t, (i % 2 ? 0.55 : -0.55) + qrand() * 0.5 - 0.25, 0.36 + 0.06 * qrand(), 0.06, 0.2, 0.5 + 0.5 * t); }
+    for (let i = 0; i < 5; i++) blade(0.97, -0.9 + i * 0.45 + qrand() * 0.2, 0.42 + 0.08 * qrand(), 0.06, 0.24, 1.05);
     return m.geometry(); })();
   GEO = {
     coralHead, seaRod, giantKelp,
@@ -330,8 +331,8 @@ function geometries() {
   const thing = (group) => (id, name, geo, bands, length, about, tones, show, material = {}) => register({ id, group, name, bands, length, about, role: material.shy ? 'Pulls in when the fish comes by, and opens again when it has gone.' : material.give ? 'Leans out of the way of the fish, and comes back.' : group === 'On the bed' ? 'Lies on the bed. Nothing to the fish but something to swim over.' : 'Grows where it grows. The fish swims through or round it.', palette: pal(tones), build: () => geometries()[geo], material, show, ...(answers(material) ? { states: answers(material) } : {}) });
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
-  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#a8923f', '#9c8a3c', '#b59b48', '#8f8a3e', '#a39a4a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
-  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with grooved pillars standing up out of it, as pillar coral grows, paler at the tips, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#f0a868', '#ec8a8a', '#c08ae8', '#e9c25a', '#7fc9b8'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
+  grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#8f7d34', '#9a8a3e', '#7f7a35', '#a08a40', '#86803a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25 });
+  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with grooved pillars standing up out of it, as pillar coral grows, paler at the tips, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9a86f', '#e38f8a', '#b99ad6', '#e2c46a', '#86c2b0'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
   grows('searod', 'Sea rod', 'seaRod', [0], 2.8, 'A soft coral of a few tall thin stems that fork once, the polyps paler toward the tips. They stand among the coral heads of the reef head.', ['#b66fb0', '#8f5aa8', '#d0875f', '#c99a6a'], { scale: [1.8, 2.8, 1.8], n: 3, spread: 1.2 }, { sway: 0.6, give: 0.2 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
@@ -1127,8 +1128,8 @@ float seaLight(vec2 p, float t) {
       more(G.tuft, grass);
       gateArch(S2.gate); }
     // ---- the reef head: coral heads round a clear middle, sea rods among them, a garden round the outside, the spots for coral to come marked by bare rubble
-    { for (const h of RF.heads) { const y = drawnY(h.x, h.z, h.r * 0.6) - 0.15; quietGrown.heads.push({ x: h.x, y, z: h.z, q: qY(h.yaw, dr(-0.05, 0.05), dr(-0.05, 0.05)), s: S(h.r, h.tall, h.r * dr(0.85, 1.05)), color: dpick(tones('coralhead')) });
-        colliders.push({ x: h.x, z: h.z, r: h.r * 0.82, top: y + h.tall * 0.92 }); growOn(h.x, y + h.tall * 0.95, h.z, 0.6); }
+    { const headTones = tones('coralhead'), first = Math.floor(drand() * headTones.length); RF.heads.forEach((h, i) => { const y = drawnY(h.x, h.z, h.r * 0.6) - 0.15; quietGrown.heads.push({ x: h.x, y, z: h.z, q: qY(h.yaw, dr(-0.05, 0.05), dr(-0.05, 0.05)), s: S(h.r, h.tall, h.r * dr(0.85, 1.05)), color: headTones[(first + i) % headTones.length] }); // each its own colour, round the ring
+        colliders.push({ x: h.x, z: h.z, r: h.r * 0.82, top: y + h.tall * 0.92 }); growOn(h.x, y + h.tall * 0.95, h.z, 0.6); });
       for (const r of RF.rods) quietGrown.rods.push({ x: r.x, y: drawnY(r.x, r.z) - 0.05, z: r.z, q: qY(r.yaw), s: S(dr(1.6, 2.1), r.tall, dr(1.6, 2.1)), color: dpick(tones('searod')) });
       const taken = [...RF.heads, ...RF.rods.map((r) => ({ ...r, r: 0.7 })), ...RF.grow.map((g) => ({ ...g, r: g.r - 0.4 }))];
       const garden = (geo, id, n, s0, s1, sink, gap) => { const out = [];
