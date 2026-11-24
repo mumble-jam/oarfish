@@ -49,6 +49,32 @@ Four creatures given their lives at the sand flat, all in `game/sandflat.js` (nu
 
 ---
 
+# The kelp forest's life (branch kelpwood-life): progress
+
+Worktree `/home/claude/oarfish-kelp`, from `squid-play` 26b7785. Scratch and logs in `/home/claude/kelp-work/`. Frozen copies of the two "before" commits for cost: `/home/claude/kelp-work/base-9a7` (9a7f568) and `base-26b` (26b7785).
+
+## Steps
+- [x] Lighter giant kelp: 35 faces a stem (was 92), every stem turned to one current along the forest, lanes walled and the rest thinned one in two (107 -> 73 stems in 4242). Same draws from the run of chance: `tools/kelp_fn.mjs` says nothing else in band 1 moved.
+- [x] `game/kelpwood.js`: KELPWOOD table; box jelly patrol, shies from the body, fenced, sting by joints touching the drawn tentacles, bounded; shell laid as a cache prize; the nook's fragment handed to the world's fragments; nest mark.
+- [x] main.js hooks (kelpHooks, create after the shell field, dispose x2, update, Empty the nest, `__game.kelp`); npc.js box jelly to Hunters, band 1.
+- [x] checks (game suite: seven kelp checks), existing checks' counts filtered for the forest's own shell and fragment; library checks moved the box jelly; box jelly has an instrument (music.js)
+- [x] fill counts (deterministic): kelp fragments down about 60% (plate) / 45% (adventure), faces 9,844 -> 2,275
+- [x] frame time under the lock (kelp-work/perf3.txt): look +25%/+14%, plate +27%/+31% over 9a7f568 (was +33%/+27%, +37%/+43%). 15% NOT reached.
+- [x] pictures: /home/claude/kelp-sheet.jpg (both cameras)
+- [x] CLAUDE.md, CREATURES.md
+- [x] game and library suites pass under the lock on eddc9d0 (kelp-work/game3.txt, library3.txt); teach and boss passed on 59c8db9; controls not run (coordinator: merger runs all five)
+
+## Decisions (and why)
+- Kelp lowered to 0.7 of its height (4.9-6.7 m) and thinned one row in three away from the lanes; lane walls (2.4 m from a lane's edge) all kept. Blades marked to give light (translucent), so undersides are golden, not dark.
+- Judged from the adventure camera first (George's change of default), the plate second.
+- The nook's find is a fragment (a fallen column top), not a jar: a sealed jar pays in fish (or a shell, and the clearing already gives one). A fragment pays in the nest when given to the rift.
+- The forest's shell and fragment are tagged `kelp: true`; the old checks that count "three shells, two fragments" a band count the band's own.
+- Patrol goes corner to opposite corner through the middle (where the shell is), then along a side: it crosses the middle about every ten seconds.
+- On patrol it hunts with its tentacles let out (mood drift, beating); going away from the body it beats hard with them drawn up short (mood pulse). That is the tell that it is safe to follow.
+- Nest mark: a small square slab with a pale glass cube, behind the squid's slab (0.75 m back of the start line, 2.9 m right). Bright: a clean take; dim: a take with stings.
+
+---
+
 # The quiet side (branch quiet-side): progress
 
 Phase one of George's "quiet side": ground, plants and stone for the sand flat, reef head, kelp forest, colonnade and gate arches in band 1. No creatures. Worktree `/home/claude/oarfish-quiet`; logs `/home/claude/quiet-logs/`; sheet `/home/claude/quiet-side-sheet.jpg`.

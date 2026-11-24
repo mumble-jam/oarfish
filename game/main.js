@@ -17,6 +17,7 @@ import { clamp, damp, lerp, glowTexture } from './geo.js';
 import { SAND_PETS, bringSand } from './sandpets.js';
 import { createBloom, BLOOM } from './bloom.js';
 import { createSandflat, SANDFLAT } from './sandflat.js';
+import { createKelpwood, KELPWOOD } from './kelpwood.js';
 import { createShapeView } from './shapes.js';
 import { SEAL } from './seal.js';
 import { createReef, REEF } from './reef.js';
@@ -322,6 +323,10 @@ export async function start(saved = {}) {
   $('dev-forget').addEventListener('click', () => { nest.sandflat = null; store.set('oarfish.nest', nest); }); // Empty the nest forgets the sand flat too
   Object.defineProperty(window, '__sand', { get: () => sand, configurable: true }); // for the checks: window.__sand
 
+  // the kelp forest's box jelly, its shell and the nook's fragment (kelpwood.js): it stings as the nettle does; the shell is laid as a cache's prize is; a clean take is kept in the nest
+  let kelp = null; const BH = bloomHooks, kelpHooks = { rig, safe: BH.safe, bite: BH.bite, hurt: BH.hurt, segs: BH.segs, playing: BH.playing, moment: BH.moment, say: BH.say, get best() { return nest.kelp; }, prize(x, z, lift) { const have = new Set([...run.shells.map((s) => s.type), ...field.items.filter((it) => !it.taken).map((it) => it.type)]); return field.drop(x, z, run.pool.find((t) => !have.has(t)) || SHELL_TYPES[(run.floor * 3 + 1) % SHELL_TYPES.length], lift); },
+    took(r) { run.kelp = r; if (r.best) { nest.kelp = r.kept; store.set('oarfish.nest', nest); tell(r.stings ? `${r.time} seconds, stung ${r.stings} ${r.stings === 1 ? 'time' : 'times'}.` : `${r.time} seconds, and not stung once.`, 6, { kind: 'note', kick: 'A new best', title: 'The box jelly\u2019s shell' }); } } };
+
   function applyLook(F) {
     scene.background.set(F.water); scene.fog.color.set(F.water);
     hemi.color.set(F.sky); hemi.groundColor.set(F.bed); hemi.intensity = F.hemi;
@@ -347,6 +352,7 @@ export async function start(saved = {}) {
     bloom?.dispose(); bloom = world.bloom ? createBloom(scene, world, bloomHooks) : null;
     reef = createReef(scene, world, reefHooks); // (it goes when the world does)
     field?.dispose(); field = createShellField(scene, world, kit, { seed: run.seed, floor: index, count: world.hall ? 2 : 3, types: run.pool || SHELL_TYPES });
+    kelp?.dispose(); kelp = world.quiet ? createKelpwood(scene, world, kelpHooks) : null;
     Object.assign(tut, { on: !!world.nursery, step: 0, stall: 0, told: false, was: 0, prize: null });
     if (tut.on && field.items[0]) { const it = field.items[0]; it.taken = true; it.group.visible = false; tut.prize = it.type; } // the band's first shell waits in the sealed jar
     $('btn-skip').hidden = !tut.on;
@@ -674,6 +680,7 @@ export async function start(saved = {}) {
   function riseInto(index) { // up out of the rift it once went down
     sum?.dispose(); sum = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
     world.dispose(); foes.dispose(); bloom?.dispose(); bloom = null;
+    kelp?.dispose(); kelp = null;
     run.floor = index;
     world = createWorld(scene, { seed: run.seed, floor: index, calm });
     foes = createFoes(scene, world, { seed: run.seed }, game);
@@ -688,6 +695,7 @@ export async function start(saved = {}) {
   }
   function surface() { // under an empty sky
     world.dispose(); foes.dispose(); bloom?.dispose(); bloom = null; field?.dispose(); field = null; guard?.dispose(); guard = null;
+    kelp?.dispose(); kelp = null;
     const at = { x: rig.pos.x, z: rig.pos.z };
     world = createSurface(scene, at, { x: at.x - Math.sin(cam.yaw) * 10, z: at.z - Math.cos(cam.yaw) * 10 }); // the raft lies beyond the fish, in view
     foes = NO_FOES; arena = world; run.floor = 0;
@@ -852,6 +860,7 @@ export async function start(saved = {}) {
     if (guard && !guard.done) most(guard.kind, nearBy(guard.pos, 30));
     if (sum) most('sum', sum.state.awake ? 1 : 0.35 * nearBy(world.hall, 40));
     bloom?.cast(most, nearBy);
+    kelp?.cast(most, nearBy);
     return c;
   }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
@@ -1442,7 +1451,7 @@ export async function start(saved = {}) {
   $('dev-grow').addEventListener('click', () => { run.segs = Math.min(MAX_SEGS, run.segs + 4); run.longest = Math.max(run.longest, run.segs); buildFish(run.segs); showDev(`${run.segs} segments now.`); });
   $('dev-unlock').addEventListener('click', () => { for (const k of Object.values(SHELL_FEATS)) nest.feats[k] = true; store.set('oarfish.nest', nest); showDev('Every kind of shell can be found, from the next dive on.'); });
   $('dev-forget').addEventListener('click', () => { nest.reef = null; }); // the reef's coral (reef.js) is forgotten with the rest
-  $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {}, squid: null }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked, no best with the squid. It shows from the next dive.'); });
+  $('dev-forget').addEventListener('click', () => { Object.assign(nest, { record: 0, shells: [], fragments: 0, feats: {}, squid: null, kelp: null }); store.set('oarfish.nest', nest); showDev('The nest remembers nothing: no record, no shells, no fragments, nothing unlocked, no best with the squid or the box jelly. It shows from the next dive.'); });
   $('dev-bloom').addEventListener('click', (e) => { if (ended()) return; if (run.floor !== 0) enterFloor(0, false); const b = world.bloom; if (!b) return; // to the edge of the bloom water, on the side toward the start, facing in
     const dx = b.x - world.spawn.x, dz = b.z - world.spawn.z, d = Math.hypot(dx, dz), x = b.x - (dx / d) * (b.R + 9), z = b.z - (dz / d) * (b.R + 9);
     rig.reset(new THREE.Vector3(x, world.height(x, z) + 3.3, z), Math.atan2(dx, dz)); focus.copy(rig.joints[0]); run.safe = 1.5; setPaused(false); if (e.isTrusted) grab(true); });
@@ -1928,6 +1937,7 @@ export async function start(saved = {}) {
     bloom?.update(dt, camera);
     reef?.update(dt);
     sandStep(dt);
+    kelp?.update(dt, camera);
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {
@@ -2043,7 +2053,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get kelp() { return kelp; }, KELPWOOD, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx, devSee, tutTarget,
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
