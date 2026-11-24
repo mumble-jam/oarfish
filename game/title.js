@@ -21,11 +21,11 @@ import { OarfishRig, SPEED } from './rig.js';
 
 // ---------------------------------------------------------------- every number of the page
 export const FRONT = {
-  bones: 36, // the fish is long, as on the plate: the plate's body is about 26 times as long as it is deep
+  bones: 32, // the fish is long, as on the plate: the plate's body is about 26 times as long as it is deep
   crest: 1.15, // the crest against the model's own (CREST in oarfish.js)
   // The S. Three runs one above and behind the other, joined by two turns. The page is drawn in an oblique projection, as old
   // plates were: a flank is seen square on, and what is farther back is drawn higher by `k` of its depth.
-  s: { k: 0.5, lift: 0.4, R: 0.42, runs: [7.4, 6.3, 6.5] }, // lift and R in metres (the body is 0.4 m deep at the neck); runs: the plate's own proportions
+  s: { k: 0.5, lift: 0.22, R: 0.4, runs: [7.4, 6.3, 6.5] }, // lift and R in metres (the body is 0.4 m deep at the neck); runs: the plate's own proportions
   breathe: { rate: 0.16, wave: 0.55, curl: 0.035 }, // how fast the body's slow wave goes (beats a second), how big against an idle swim, how much the S swells
   fps: 30, idle: 90, // at most this many frames a second; nothing drawn after this many seconds untouched
   colours: { paper: '#f3eedb', ink: '#3b3026', water: '#1d5a68', deep: '#c94d5d', line: '#4a3a30' },
@@ -210,9 +210,9 @@ function printMaterial(name, colour, shared) {
         #endif
         #ifdef BODY
           float top = smoothstep(-0.05, 0.12, vRest.y);
-          float s = stip(vec2(vRest.z * 34.0, vRest.y * 34.0 + vRest.x * 7.0));
-          float s2 = stip(vec2(vRest.z * 47.0 + 3.7, vRest.y * 47.0 + 1.3));
-          base *= 1.0 - (s * mix(0.16, 0.3, top) + s2 * 0.14 * top);
+          float s = stip(vec2(vRest.z * 52.0, vRest.y * 52.0 + vRest.x * 7.0));
+          float s2 = stip(vec2(vRest.z * 83.0 + 3.7, vRest.y * 83.0 + 1.3));
+          base *= 1.0 - (s * mix(0.14, 0.26, top) + s2 * mix(0.06, 0.16, top));
         #endif
         vec4 diffuseColor = vec4(base * tone, opacity);`);
   };
@@ -298,17 +298,20 @@ const PRESS_F = `${NOISE}
     vec3 ink = (f.rgb + l.rgb + r.rgb + dn.rgb + up.rgb) / max(f.a + l.a + r.a + dn.a + up.a, 1e-3);
     float stone = 0.94 + 0.06 * fbm(p * 0.09 + 5.0); // the stone's own texture in a flat tone
     float cover = f.a * uInk * (0.9 + 0.1 * paper.a);
-    vec3 col = mix(paper.rgb, ink * stone * (paper.rgb / uPaper), cover);
-    col = mix(col, mix(uLine, ink * 0.45, 0.45) * (paper.rgb / uPaper), line * a * 0.75 * uInk);
-    // the water's wash, for diving in: it comes in from the edges, with a ragged wet front
+    vec3 grainy = paper.rgb / uPaper; // the paper's own grain and tone, under whatever is laid on it
+    vec3 ground = paper.rgb;
+    // the water's wash, for diving in: it soaks into the paper from the edges inward, with a ragged wet front, under the fish
     if (uWash > 0.0) {
       vec2 q = vUv - 0.5; q.x *= uCss.x / uCss.y;
-      float r0 = length(q) * 1.15 + (fbm(p * 0.008 + uTime * 0.2) - 0.5) * 0.35;
-      float wet = smoothstep(r0 + 0.02, r0 - 0.06, (uWash * 1.6 - 0.1) * 1.0) ;
-      wet = max(wet, smoothstep(0.0, 1.0, (uWash - 0.55) * 2.6));
-      vec3 water = uWater * (0.92 + 0.08 * paper.a + 0.06 * (fbm(p * 0.01 + uTime * 0.05) - 0.5));
-      col = mix(col, water, clamp(wet, 0.0, 1.0));
+      float r0 = length(q) / length(vec2(0.5 * uCss.x / uCss.y, 0.5)) + (fbm(p * 0.006 + 3.0) - 0.5) * 0.45;
+      float th = (1.0 - uWash) * 1.3;
+      float wet = smoothstep(th - 0.06, th + 0.01, r0);
+      vec3 water = uWater * (0.93 + 0.07 * paper.a + 0.08 * (fbm(p * 0.01 + uTime * 0.05) - 0.5));
+      float edge = smoothstep(0.0, 0.05, abs(r0 - th)) ; // the wet front is a shade darker, as wet paper is
+      ground = mix(ground, water, wet) * mix(0.9, 1.0, edge * 0.7 + 0.3 * (1.0 - wet));
     }
+    vec3 col = mix(ground, ink * stone * grainy, cover);
+    col = mix(col, mix(uLine, ink * 0.45, 0.45) * grainy, line * a * 0.75 * uInk);
     gl_FragColor = vec4(col, 1.0);
     #include <colorspace_fragment>
   }`;
@@ -611,7 +614,6 @@ export async function openFront({ boot }) {
       press.uniforms.uWash.value = clamp(t / D.wash, 0, 1);
       S.straight = clamp((t - 0.15) / D.straighten, 0, 1);
       const sw = clamp((t - 0.35) / D.swim, 0, 1); S.off = (sw * sw) * (view.W / view.s + rig.length + 1); // it gathers speed as it goes, and is off the page
-      press.uniforms.uInk.value = 1 - clamp((t - D.wash * 0.9) / 0.5, 0, 1);
       if (!T.released && t >= D.release) release();
       if (T.released) { // the dive has drawn its first frames under the water's colour: the page lifts off it
         T.rt += dt; const k = clamp((T.rt - 0.06) / (T.skip ? D.skip : D.reveal), 0, 1);
@@ -666,7 +668,8 @@ export async function openFront({ boot }) {
   }
   function advance(secs) { for (let t = 0; t < secs - 1e-6; t += 1 / 60) { animate(1 / 60); tickTransition(1 / 60); } frame(); draw(); }
   // ---- what the checks read and drive (tools/test_title.mjs)
-  Object.assign(F, { root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, get cur() { return menu[cur].dataset.go; }, renderer, rig, FRONT, box, at, advance });
+  Object.assign(F, { root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, renderer, rig, FRONT, box, at, advance });
+  Object.defineProperty(F, 'cur', { get: () => menu[cur].dataset.go }); // a getter, read each time (Object.assign would copy its value once)
   wake();
   return F;
 }

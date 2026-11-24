@@ -86,7 +86,7 @@ const items = await ev(() => window.__front.menu.map((b) => b.dataset.go));
 const screenOf = () => ev(() => { const st = document.getElementById('stage'), p = document.getElementById('pause'); return { lib: st.classList.contains('lib'), pause: p.classList.contains('on'), noting: p.classList.contains('noting'), drawer: document.getElementById('drawer').classList.contains('open'), over: window.__front.over, holds: window.__front.holds, time: window.__game.run.time, frame: window.__game.renderer.info.render.frame, z: getComputedStyle(p).zIndex, resume: document.getElementById('btn-resume').textContent }; });
 const want = { library: (s) => s.lib, band: (s) => s.pause && s.drawer, settings: (s) => s.pause && !s.noting && !s.drawer, feedback: (s) => s.noting };
 for (const go of ['library', 'band', 'settings', 'feedback']) {
-  while ((await ev(() => window.__front.cur)) !== go) await page.keyboard.press('ArrowRight');
+  for (let n = 0; n < 6 && (await ev(() => window.__front.cur)) !== go; n++) await page.keyboard.press('ArrowRight');
   const before = await screenOf();
   await page.keyboard.press('Enter'); await sleep(700);
   const s = await screenOf();
@@ -99,7 +99,7 @@ for (const go of ['library', 'band', 'settings', 'feedback']) {
 { const s = await ev(() => ({ band: window.__game.music.running, playing: window.__front.music.playing })); check('none of it started the band behind the page, and the page\'s music plays on', !s.band && s.playing, JSON.stringify(s)); }
 
 // ---- 5. the sound switch and the volume, set in the band's own drawer over the page
-while ((await ev(() => window.__front.cur)) !== 'band') await page.keyboard.press('ArrowRight');
+for (let n = 0; n < 6 && (await ev(() => window.__front.cur)) !== 'band'; n++) await page.keyboard.press('ArrowRight');
 await page.keyboard.press('Enter'); await sleep(600);
 { await ev(() => { const v = document.getElementById('m-volume'); v.value = '20'; v.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(700);
   const quiet = await ev(() => window.__front.music.master.gain.value);
