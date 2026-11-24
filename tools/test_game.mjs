@@ -724,7 +724,7 @@ check('every rift has a mural with three carvings, dark at first: the band\u2019
   && s.near.first !== '11 11 11' && s.near.then === '11 11 11' && s.near.whole && s.near.top > 0.4 && s.near.sign > 0.6, JSON.stringify(s));
 
 // ---- the nest remembers: a line of stones as long as the record body, and a place for every kind of shell
-s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom).length; // (the squid's stones, bloom.js, are checked with the bloom)
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), shown = (N) => N.group.children.filter((c) => !c.isInstancedMesh && !c.userData.sign && !c.userData.bloom && !c.userData.sandflat).length; // (the squid's stones, bloom.js, are checked with the bloom; the sand flat's mark with the sand flat)
   Object.assign(g.nest, { record: 0, shells: [], fragments: 0 }); g.startRun(4242); let N = g.world.react.nest;
   out.bare = { line: N.line, stones: N.stones, places: N.places.length, found: N.places.filter((p) => p.found).length, stood: N.stood, shown: shown(N) };
   Object.assign(g.nest, { record: 19, shells: ['spire', 'fan', 'ring', 'cap', 'lamp'], fragments: 3 }); g.startRun(4242); N = g.world.react.nest; g.sim(0.2, T.none());
@@ -1229,6 +1229,114 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {}, K = g.REEF
 check('the reef grows from dive to dive: a goal of a mural won (in any band) owes one coral, kept with the nest; it is not there in the dive it was won in, grows in when the fish comes to the reef in the next, and stands from the first in the one after; the spots fill in order and stop when they are full, drawn as one instanced piece a kind; Empty the nest takes them away',
   s.none === 0 && s.won === true && s.twice === false && s.kept && s.kept.grown === 1 && s.thisDive === 0 && s.next.pieces >= 1 && s.next.before === 0 && s.next.growing > 0.05 && s.next.growing < 0.95 && s.next.after === s.next.pieces && s.next.seen === 1
   && s.later === s.next.pieces && s.two.coral === 2 && s.two.spots === '0,1' && s.full.coral === s.full.spots && s.full.draws === 5 && s.emptied.pieces === 0 && s.emptied.kept === null, JSON.stringify(s));
+// ---- the sand flat's life (sandflat.js): four creatures, each with one rule from the real animal, each paying in something other than fish. A scripted fish
+// plays each. window.__sand is what lives there; it is made when the band's world has a sand flat and the fish is in it
+await ev(() => { window.SF = {
+  fresh: () => window.__game.startRun(4242),
+  // a straight swim from `from` metres out on one side of (x, z) to as far out on the other, at `amount` (0: the slowest swim, 1.5 m/s; 1: a plain swim, 3.3)
+  across: (x, z, a, from, amount, more = {}) => { const g = window.__game, T = window.T, px = x + Math.sin(a) * from, pz = z + Math.cos(a) * from; T.put(px, g.world.height(px, pz) + 1.6, pz, a + Math.PI); g.sim(0.3, T.none());
+    let t = 0; for (; t < 40; t += 0.1) { g.sim(0.1, { ...T.none(), dir: { x: -Math.sin(a), y: 0, z: -Math.cos(a) }, amount, ...more }); const h = g.rig.snout; if ((h.x - x) * Math.sin(a) + (h.z - z) * Math.cos(a) < -from) break; } return t; },
+}; });
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest); g.nest.sandflat = null;
+  SF.fresh(); g.run.safe = 1e9; g.sim(0.2, T.none()); let sd = window.__sand; const q = g.world.quiet.sandflat, M = q.meadow, a = Math.atan2(-q.fx, -q.fz) + 0.3;
+  out.made = { flat: !!sd, eels: sd.debug.allEels.length, patches: sd.debug.patches.length, inRim: sd.debug.allEels.every((e) => Math.hypot(e.x - M.x, e.z - M.z) < M.r - 0.3) };
+  // careless: a plain swim straight across
+  g.run.safe = 0; g.run.hush = 0; SF.across(M.x, M.z, a, M.r + 4, 1); out.careless = { ...sd.state.eels.last, near: +sd.state.eels.near.toFixed(2) };
+  // careful: the slowest swim along the same line; the eels nearest sink part way (the field shows the body) and none goes all the way down
+  let least = 1; const watch = () => { for (const e of sd.debug.allEels) least = Math.min(least, e.want); };
+  { const px = M.x + Math.sin(a) * (M.r + 4), pz = M.z + Math.cos(a) * (M.r + 4); T.put(px, g.world.height(px, pz) + 1.6, pz, a + Math.PI); g.sim(0.3, T.none());
+    for (let t = 0; t < 40; t += 0.1) { g.sim(0.1, { ...T.none(), dir: { x: -Math.sin(a), y: 0, z: -Math.cos(a) }, amount: 0 }); watch(); const h = g.rig.snout; if ((h.x - M.x) * Math.sin(a) + (h.z - M.z) * Math.cos(a) < -(M.r + 4)) break; } }
+  out.careful = { ...sd.state.eels.last, least: +least.toFixed(2), near: +sd.state.eels.near.toFixed(2), saved: JSON.parse(localStorage.getItem('oarfish.nest')).sandflat?.eels, mark: sd.debug.mark?.userData.sandflat };
+  // a worse crossing after it does not take the best away; a dash makes the eels' distance huge
+  SF.across(M.x, M.z, a + 1.2, M.r + 4, 1); out.after = { grade: sd.state.eels.last.grade, best: sd.state.eels.best };
+  T.put(M.x, g.world.height(M.x, M.z) + 1.6, M.z, a); g.sim(0.05, { ...T.none(), dir: { x: 1, y: 0, z: 0 }, dashNow: true }); out.dash = +sd.state.eels.near.toFixed(1);
+  SF.fresh(); g.sim(0.2, T.none()); out.next = window.__sand.debug.mark?.userData.sandflat;
+  Object.assign(g.nest, JSON.parse(kept)); localStorage.setItem('oarfish.nest', kept); SF.fresh(); return out; });
+check('the garden eels fill the cistern rim (thirteen colonies of twenty); a crossing at a plain swim sends the eels by the body down (graded low), one at the slowest swim leaves every eel it passed up (graded three) though the nearest sink part way; the best is kept in the nest and shown there as three eels standing, in the dive after too; a worse crossing does not take it away; a dash makes them go down from far off',
+  s.made.flat && s.made.eels === 260 && s.made.patches === 13 && s.made.inRim && s.careless.across && s.careless.passed >= 12 && s.careless.down >= 10 && s.careless.grade <= 1 && s.careless.near > 1.8
+  && s.careful.across && s.careful.passed >= 12 && s.careful.down === 0 && s.careful.grade === 3 && s.careful.least < 0.6 && s.careful.near < 1.0 && s.careful.saved?.grade === 3 && s.careful.mark?.grade === 3
+  && s.after.grade < 3 && s.after.best.grade === 3 && s.dash > 6 && s.next?.grade === 3, JSON.stringify(s));
+
+// the hermit crabs' market: lie across the table, still, with a shell-carrying segment over it, and that shell goes down the line; the smallest's old shell is the
+// player's to take. Twice a dive. A fast body sends the waiting crabs in
+s = await ev(() => { const g = window.__game, T = window.T, out = {};
+  SF.fresh(); g.run.safe = 1e9; g.run.segs = 16; g.buildFish(16); g.dropShells(); g.giveShell('horn'); g.giveShell('fan'); g.giveShell('spire'); g.sim(0.2, T.none()); const sd = window.__sand, C = sd.debug.crabs, tb = sd.debug.table, f = sd.debug.foot;
+  const kinds = () => C.map((c) => c.a.rig.worn.kind), before = kinds(); out.before = { kinds: before, sizes: C.map((c) => +c.k.toFixed(2)), game: before.every((k) => !!g.SHELLS[k]) };
+  // the fish near by, slow: they come out and watch; the prize glows in the smallest's colour
+  { const yaw = Math.atan2(f.x - tb.x, f.z - tb.z) + Math.PI / 2, px = f.x - Math.sin(yaw) * 3.5 + Math.sin(yaw - Math.PI / 2) * 2.5, pz = f.z - Math.cos(yaw) * 3.5 + Math.cos(yaw - Math.PI / 2) * 2.5; T.put(px, g.world.height(px, pz) + 1.6, pz, yaw); g.sim(3, T.none());
+    let prize = null; g.scene.traverse((o) => { if (o.isSprite && o.parent?.name === 'sandflat' && o.material.opacity > 0.2 && o.material.color.getHexString() === g.SHELLS[before[3]].colour.slice(1).toLowerCase()) prize = o; }); out.prize = !!prize;
+    out.calm = C.map((c) => +c.a.rig.pose.in.toFixed(2)); }
+  // rushed past: they go in
+  { const px = f.x + 6, pz = f.z; T.put(px, g.world.height(px, pz) + 1.6, pz, -Math.PI / 2); g.run.safe = 0; g.run.hush = 0; let most = 0; for (let t = 0; t < 3; t += 0.1) { g.sim(0.1, { ...T.none(), dir: { x: -1, y: 0, z: 0 }, amount: 1 }); most = Math.max(most, ...C.map((c) => c.a.rig.pose.in)); } out.rushed = +most.toFixed(2); g.run.safe = 1e9; g.sim(4, T.none()); }
+  const lie = (type) => { const sh = g.run.shells.find((x) => x.type === type), yaw = Math.atan2(f.x - tb.x, f.z - tb.z) + Math.PI / 2; T.put(tb.x + Math.sin(yaw) * 6, g.world.height(tb.x, tb.z) + 1.6, tb.z + Math.cos(yaw) * 6, yaw); g.sim(0.05, T.none());
+    const j = g.rig.joints[sh.seg]; T.put(g.rig.pos.x + tb.x - j.x, g.rig.pos.y, g.rig.pos.z + tb.z - j.z, yaw); };
+  const trade = (type) => { const had = g.run.shells.length; lie(type); let t = 0; for (; t < 3 && sd.state.market.busy == null; t += 0.1) g.sim(0.1, T.none()); const set = t; const gone = !g.run.shells.some((x) => x.type === type);
+    for (t = 0; t < 25 && sd.state.market.busy; t += 0.1) g.sim(0.1, T.none()); return { set: +set.toFixed(1), gone, had, done: +t.toFixed(1), kinds: kinds(), last: sd.state.market.last }; };
+  out.one = trade('horn');
+  // the shell the smallest left is lying to be taken, risen from the sand at the end of the line; the head over it takes it
+  const takeUp = (L) => { T.put(L.x, g.world.height(L.x, L.z) + 1.4, L.z, 0); g.sim(0.05, T.none()); T.put(2 * L.x - g.rig.snout.x, g.rig.pos.y, 2 * L.z - g.rig.snout.z, 0); g.sim(0.6, T.none()); }; // the snout over it
+  { const got = out.one.last?.got; takeUp(out.one.last); out.one.took = g.run.shells.some((x) => x.type === got); }
+  out.two = trade('fan');
+  takeUp(out.two.last);
+  // a third time, nothing: the shell stays on the body
+  lie('spire'); g.sim(4, T.none()); out.three = { kept: g.run.shells.some((x) => x.type === 'spire'), trades: sd.state.market.trades, busy: !!sd.state.market.busy };
+  SF.fresh(); return out; });
+{ const o = s.one, b = s.before.kinds;
+  check('the hermit crabs\' market: four crabs of rising size wait at a table, each in one of the game\'s shells, and the smallest\'s glows faintly while a trade is to be had; a fast body sends them in, a slow one near by they come out for; a shell on a segment lying still across the table slides off to the head of the line, each crab moves up into the house ahead, and the smallest\'s old shell lies for the head to take; twice a dive, and not a third time',
+    s.before.game && new Set(b).size === 4 && s.before.sizes.every((k, i, A) => !i || k < A[i - 1]) && s.prize && s.calm.every((v) => v < 0.3) && s.rushed > 0.8
+    && o.gone && o.set < 2 && o.done < 20 && o.kinds.join() === ['horn', ...b.slice(0, 3)].join() && o.last.got === b[3] && o.last.given === 'horn' && o.took
+    && s.two.gone && s.two.kinds.join() === ['fan', 'horn', ...b.slice(0, 2)].join() && s.two.last.got === b[2] && s.three.kept && s.three.trades === 2 && !s.three.busy, JSON.stringify(s)); }
+
+// the goby and the pistol shrimp: a fast approach sends both down for a while; a slow one near by brings the goby's flick; a fish holding still near by
+// lets the shrimp dig, and after a while it pushes up a shell fragment, which the head takes up; two a burrow in a dive
+s = await ev(() => { const g = window.__game, T = window.T, out = {};
+  SF.fresh(); g.run.safe = 1e9; g.sim(0.2, T.none()); const sd = window.__sand, q = g.world.quiet.sandflat, B = sd.debug.burrows[0], b = q.burrows[0], a = Math.atan2(q.x - b.x, q.z - b.z), live = () => { g.run.safe = 0; g.run.hush = 0; };
+  const hold = (secs, back = 3.5) => { let t = 0; while (t < secs) { const px = b.x + Math.sin(a) * back, pz = b.z + Math.cos(a) * back; T.put(px, g.world.height(px, pz) + 1.6, pz, a + Math.PI / 2); live(); g.sim(Math.min(4, secs - t), T.none()); t += 4; } };
+  // slow, near: a flick, and they stay up
+  { const px = b.x + Math.sin(a) * 9, pz = b.z + Math.cos(a) * 9; T.put(px, g.world.height(px, pz) + 1.6, pz, a + Math.PI); live(); const moods = new Set(); for (let t = 0; t < 8; t += 0.1) { const d = Math.hypot(g.rig.snout.x - b.x, g.rig.snout.z - b.z); g.sim(0.1, d > 3.6 ? { ...T.none(), dir: { x: -Math.sin(a), y: 0, z: -Math.cos(a) }, amount: 0 } : T.none()); moods.add(B.mood); } out.slow = { moods: [...moods].join(), gone: B.gone, flicks: B.flicks }; }
+  // hold still near by: the work goes on, and up comes a fragment
+  { const dug = B.dig; let t = 0; for (; t < 30 && !B.frag; t += 4) hold(4); out.still = { t, frag: !!B.frag, mood: B.mood, given: B.given }; }
+  // the head over it takes it up
+  { const f = B.frag; if (f) { T.put(f.position.x, g.world.height(f.position.x, f.position.z) + 1.5, f.position.z, 0); g.sim(0.3, T.none()); } out.take = { carry: !!sd.state.carry, left: !!B.frag, carried: sd.state.carried }; }
+  // fast: a plain swim straight at it from 12 m; both go down, and stay down while the fish waits near by, then come up again
+  { g.sim(0.1); B.mood = 'work'; const px = b.x + Math.sin(a) * 12, pz = b.z + Math.cos(a) * 12; T.put(px, g.world.height(px, pz) + 1.6, pz, a + Math.PI); live(); const gone0 = B.gone;
+    for (let t = 0; t < 4 && B.gone === gone0; t += 0.1) g.sim(0.1, { ...T.none(), dir: { x: -Math.sin(a), y: 0, z: -Math.cos(a) }, amount: 1 });
+    out.fast = { went: B.gone > gone0, at: +Math.hypot(g.rig.snout.x - b.x, g.rig.snout.z - b.z).toFixed(1) }; let down = 0; for (let t = 0; t < 40 && B.mood === 'gone'; t += 1) { hold(1, 5); down = t + 1; } out.fast.down = down; out.fast.back = B.mood; }
+  // a second find, and then no more from this burrow in this dive
+  { sd.state.carry = null; for (let t = 0; t < 40 && B.given < 2; t += 4) hold(4); if (B.frag) { const f = B.frag; T.put(f.position.x, g.world.height(f.position.x, f.position.z) + 1.5, f.position.z, 0); g.sim(0.3, T.none()); } sd.state.carry = null; hold(30); out.more = { given: B.given, frag: !!B.frag, dig: +B.dig.toFixed(1) }; }
+  SF.fresh(); return out; });
+check('the goby and the pistol shrimp: coming near slowly brings the goby\'s flick and nothing more; a fish holding still near by lets the shrimp dig, and within half a minute it pushes up a shell fragment, which the head takes up; a plain swim straight at them sends both down, and they stay down ten seconds and more while the fish waits near by, then come up; two fragments a burrow in a dive',
+  s.slow.flicks >= 1 && s.slow.gone === 0 && /work/.test(s.slow.moods) && s.still.frag && s.still.t <= 24 && s.take.carry && !s.take.left && s.take.carried === 1
+  && s.fast.went && s.fast.at > 2.5 && s.fast.down >= 10 && s.fast.back !== 'gone' && s.more.given === 2 && !s.more.frag && s.more.dig === 0, JSON.stringify(s));
+
+// the puffer's circle: a stage further at the start of each dive (kept in the nest); a fragment carried in over it is set on a ridge and moves it on; a body
+// swept fast over it flattens it back; finished, its calm middle gives the breath back, the nest keeps a ring for it, and the dive after a new one is begun
+// beside it, the old one left flattening. Empty the nest forgets all of it
+s = await ev(() => { const g = window.__game, T = window.T, out = {}, kept = JSON.stringify(g.nest), sand = () => (g.sim(0.1, T.none()), window.__sand), saved = () => JSON.parse(localStorage.getItem('oarfish.nest')).sandflat?.circle;
+  g.nest.sandflat = null; localStorage.setItem('oarfish.nest', JSON.stringify(g.nest)); out.dives = [];
+  for (let i = 0; i < 3; i++) { SF.fresh(); g.run.safe = 1e9; const sd = sand(); out.dives.push({ p: sd.debug.C0.p, stage: +sd.debug.stageOf(sd.debug.C0.p).toFixed(2), saved: saved()?.p, drawn: +sd.debug.circle.rig.pose.stage.toFixed(2) }); }
+  let sd = window.__sand; const c = sd.debug.circle.object.position, RC = sd.debug.RC, q = sd.plan, a = Math.atan2(q.x - c.x, q.z - c.z), live = () => { g.run.safe = 0; g.run.hush = 0; };
+  // a fragment, carried in slowly over it
+  { sd.debug.fragment(); const p0 = sd.debug.C0.p; SF.across(c.x, c.z, a, RC + 5, 0); g.sim(1.2, T.none()); out.frag = { from: p0, to: +sd.debug.C0.p.toFixed(2), frags: sd.debug.C0.frags, placed: sd.debug.placed.length, saved: saved()?.frags, onRidge: sd.debug.placed.every((f) => Math.hypot(f.position.x - c.x, f.position.z - c.z) < RC) }; }
+  // swept over at a sprint: flattened back
+  { const p0 = sd.debug.C0.p; live(); SF.across(c.x, c.z, a + 1, RC + 6, 1, { sprint: true }); out.swept = { from: +p0.toFixed(2), to: +sd.debug.C0.p.toFixed(2) }; }
+  // finished: the gift, the calm middle, the nest's ring
+  { sd.debug.C0.p = 2.9; sd.debug.fragment(); g.run.safe = 1e9; SF.across(c.x, c.z, a, RC + 5, 0); g.sim(1.2, T.none()); out.done = { p: +sd.debug.C0.p.toFixed(2), paid: sd.debug.C0.paid, done: sd.debug.C0.done, ring: sd.debug.mark?.userData.sandflat.rings, saved: saved()?.done };
+    g.run.stamina = 0.1; g.run.winded = true; T.put(c.x, g.world.height(c.x, c.z) + 1.6, c.z, 0); g.sim(0.05, T.none()); T.put(c.x - (g.rig.snout.x - c.x), g.rig.pos.y, c.z - (g.rig.snout.z - c.z), 0); live(); g.sim(2, T.none()); out.done.stamina = +g.run.stamina.toFixed(2); out.done.winded = g.run.winded; }
+  // the dive after: a new circle on fresh sand beside the old, which lies flattening
+  { SF.fresh(); g.run.safe = 1e9; sd = sand(); const C0 = sd.debug.C0, n = sd.debug.circle.object.position, o = sd.debug.old?.object.position; out.after = { p: C0.p, site: C0.site, left: C0.left, apart: o ? +Math.hypot(n.x - o.x, n.z - o.z).toFixed(1) : 0, old: o ? +sd.debug.old.rig.pose.stage.toFixed(2) : null, ring: sd.debug.mark?.userData.sandflat.rings };
+    const S = g.world.quiet.sandflat, clear = (p) => Math.min(...S.tables.map((t) => Math.hypot(t.x - p.x, t.z - p.z) - t.size), ...S.burrows.map((b) => Math.hypot(b.x - p.x, b.z - p.z)), Math.hypot(S.meadow.x - p.x, S.meadow.z - p.z) - S.meadow.r, S.R - Math.hypot(S.x - p.x, S.z - p.z));
+    out.after.clear = +Math.min(...sd.debug.sites.map(clear)).toFixed(2); }
+  // the nest emptied: it forgets the sand flat
+  document.getElementById('dev-forget').click(); out.forgot = JSON.parse(localStorage.getItem('oarfish.nest')).sandflat ?? null;
+  // and only the first band has any of it
+  g.enterFloor(1, false); g.sim(0.2, T.none()); out.band2 = { sand: !!window.__sand, root: g.scene.children.some((x) => x.name === 'sandflat') };
+  Object.assign(g.nest, JSON.parse(kept)); localStorage.setItem('oarfish.nest', kept); SF.fresh(); return out; });
+check('the puffer\'s circle is a step further at the start of each dive (the first ring, the valleys, the ridges), kept in the nest; a fragment carried in over it slowly is set on a ridge and moves it on; a body swept over it at a sprint flattens it back; finished, the nest keeps a ring for it and its calm middle gives the breath back; the dive after, a new one is begun on clear sand beside the old, which lies flattening; Empty the nest forgets the sand flat; no other band has any of it',
+  s.dives.map((d) => d.p).join() === '0,1,2' && s.dives.map((d) => d.stage).join() === '0.15,0.4,0.7' && s.dives.every((d) => d.saved === d.p && Math.abs(d.drawn - d.stage) < 0.01)
+  && s.frag.to === +(s.frag.from + 0.35).toFixed(2) && s.frag.frags === 1 && s.frag.placed === 1 && s.frag.saved === 1 && s.frag.onRidge && s.swept.to < s.swept.from - 0.1
+  && s.done.p >= 3 && s.done.paid && s.done.done === 1 && s.done.ring === 1 && s.done.saved === 1 && s.done.stamina === 1 && !s.done.winded
+  && s.after.p === 0 && s.after.site === 1 && s.after.left === 0 && s.after.apart > 4 && s.after.old === 1.3 && s.after.ring === 1 && s.after.clear > 1 && s.forgot === null && !s.band2.sand && !s.band2.root, JSON.stringify(s));
 
 await page.close();
 

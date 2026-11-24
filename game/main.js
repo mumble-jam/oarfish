@@ -16,6 +16,7 @@ import { SHELLS, SHELL_TYPES, SHELL_FEATS, shellPool, SLOT_EVERY, shellMods, cre
 import { clamp, damp, lerp, glowTexture } from './geo.js';
 import { SAND_PETS, bringSand } from './sandpets.js';
 import { createBloom, BLOOM } from './bloom.js';
+import { createSandflat, SANDFLAT } from './sandflat.js';
 import { createShapeView } from './shapes.js';
 import { SEAL } from './seal.js';
 import { createReef, REEF } from './reef.js';
@@ -308,6 +309,18 @@ export async function start(saved = {}) {
   // the reef head (reef.js): its station mends what this dive has lost, its trumpetfish ride and take, its coral is the nest's record of mural goals won
   let reef = null; const reefHooks = { rig, playing: () => run.state === 'play', safe: () => game.safe(), lost: () => Math.max(0, run.longest - run.segs), say: (id, text) => say(id, text, 8), moment: (k, v) => moment(k, v), gulp: (i, n, v) => music.gulp(i, n, v), get nest() { return nest; }, keep: () => store.set('oarfish.nest', nest),
     mend() { run.cleaned++; run.segs = Math.min(MAX_SEGS, run.segs + 1); buildFish(run.segs); remember(); growPulse(1, false); music.gulp(6, 7, 0.8); pulse('grow'); moment('grow', 0.7); } };
+
+  // ---- the sand flat (sandflat.js): its four creatures, made the first time the band's world is seen with it and thrown away with that world. It pays in
+  // shells (the hermit crabs' trade), fragments for the circle, and records kept under nest.sandflat; `fresh` moves the puffer's circle on a step each dive
+  let sand = null, sandDive = -1;
+  const sandHooks = { rig, playing: () => run.state === 'play', shells: () => run.shells, pool: () => run.pool, say: (id, text) => say(id, text, 9), gulp: (i, n, v) => music.gulp(i, n, v), moment: (k, v) => moment(k, v),
+    setDown(seg) { const i = run.shells.findIndex((s) => s.seg === seg); if (i < 0) return null; const [sh] = run.shells.splice(i, 1); shellsChanged(); buildFish(run.segs); return sh.type; },
+    drop: (x, z, type) => field?.drop(x, z, type, 1.0), rest() { run.stamina = 1; run.winded = false; run.dashCool = 0; pulse('grow'); }, kept: () => nest.sandflat || null, keep(v) { nest.sandflat = v; store.set('oarfish.nest', nest); } };
+  function sandStep(dt) { if (sand && sand.world !== world) { sand.dispose(); sand = null; }
+    if (!sand && world?.quiet?.sandflat && run.floor === 0) { sand = createSandflat(scene, world, { ...sandHooks, seed: run.seed, fresh: sandDive !== session.dives }); sandDive = session.dives; }
+    sand?.update(dt, camera); }
+  $('dev-forget').addEventListener('click', () => { nest.sandflat = null; store.set('oarfish.nest', nest); }); // Empty the nest forgets the sand flat too
+  Object.defineProperty(window, '__sand', { get: () => sand, configurable: true }); // for the checks: window.__sand
 
   function applyLook(F) {
     scene.background.set(F.water); scene.fog.color.set(F.water);
@@ -1914,6 +1927,7 @@ export async function start(saved = {}) {
     foes.update(dt, ctx);
     bloom?.update(dt, camera);
     reef?.update(dt);
+    sandStep(dt);
     field?.update(dt, focus, world.time.value);
     if (foes.state.mineNear) say('mine', 'A spined drifter costs a segment if your body brushes it. Head first it only breaks: dash through it, or wrap it.', 8);
     if (sum || guard) {

@@ -25,6 +25,30 @@ Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfis
 
 ---
 
+# The sand flat's life (branch sandflat-life): progress
+
+Four creatures given their lives at the sand flat, all in `game/sandflat.js` (numbers in `SANDFLAT`). Worktree `/home/claude/oarfish-sandflat`; logs `/home/claude/sandflat-logs/`; sheet `/home/claude/sandflat-sheet.jpg`.
+
+## Done
+- [x] `game/sandflat.js`: eels, market, burrows, circle, nest mark; hooked into `main.js` in one block (+ import, + one update line).
+- [x] `tools/shot_sandflat.mjs`: pictures from the dive's camera.
+
+- [x] npc.js / CREATURES.md: the four moved into the first band (Company).
+- [x] Checks (four, scripted fish) in the game suite; library and nest checks updated for the move.
+- [x] Cost before/after (logs/perf-*.txt); CLAUDE.md bullets; contact sheet from both cameras (adventure first, per George's new default).
+- [x] hermit.js bug fixed: lowest() clobbered the vector leave()/lay() used, so left or laid shells went to the wrong place.
+- First full run (r1): boss, teach, controls passed; game failed one (nest count saw the sand flat's mark), library one (button order): both fixed. Last runs: game (r6, under the machine lock) all passed; library (r2) all passed. Earlier game runs that failed did so on a Keeper timing check (r2) and the death card (r5), both passing before and after, and two were cut off by their time limit on the busy machine.
+
+## Decisions (and why)
+- Eels: how near a body may come grows with its "noise" (speed + a little for speeding up or slowing down): 0.9 m at a slow swim, about 2.1 m at a plain swim (the divers' figure), 4.3 m at a sprint, 7.7 m dashing. So a slow crossing is possible and a plain one is not.
+- Market: the move is lying still across the table with a shell-carrying segment over it (stillness, and the body as the tool); the shell slides off to the head of the line on the sand (crabs are not put on the table top: they walk on the bed). The shell handed down the line moves from one crab's rig to the next (each rig owns its shells), laid where it lay.
+- Fragments: a shrimp's find is a shell fragment the head carries in its mouth, one at a time, to the circle. Two per burrow per dive.
+- Circle: one step a dive (4 dives from the first ring to finished); a fragment is 0.35 of a step (a diligent player finishes in two dives); careless crossing takes 0.3 steps a second. The gift: the calm middle gives the breath back (stamina) for the rest of that dive, and the nest keeps a ring of fragments per circle finished. Modest on purpose: the circle comes by itself over dives, so a strong prize would be a chore to farm.
+- New site: the second site is the first turned about the flat's middle by 5.5 m of arc, the way that keeps clear of tables, burrows and the meadow. Two sites, used by turns (the real one never reuses a site; ours does, every other circle).
+- Main.js: the sand flat is made lazily in `sandStep` when the world has a sand flat and thrown away when the world changes, so `enterFloor`, `riseInto` and `surface` are untouched (fewer merge conflicts). `window.__sand` for the checks, not a new key on `__game`.
+
+---
+
 # The quiet side (branch quiet-side): progress
 
 Phase one of George's "quiet side": ground, plants and stone for the sand flat, reef head, kelp forest, colonnade and gate arches in band 1. No creatures. Worktree `/home/claude/oarfish-quiet`; logs `/home/claude/quiet-logs/`; sheet `/home/claude/quiet-side-sheet.jpg`.

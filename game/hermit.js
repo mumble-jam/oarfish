@@ -76,7 +76,8 @@ export function hermitRig(a, pal, { shellOf = null } = {}) {
   }
   const P = new THREE.Vector3(), Q = new THREE.Quaternion(), S3 = new THREE.Vector3(), M1 = new THREE.Matrix4(), M2 = new THREE.Matrix4(), inv = new THREE.Matrix4();
   // how far under a matrix's origin the lowest corner of a shell is, once turned and sized by it
-  const lowest = (geo, m) => { const p = geo.attributes.position; let lo = Infinity; for (let i = 0; i < p.count; i += 3) { P.fromBufferAttribute(p, i).applyMatrix4(m); lo = Math.min(lo, P.y); } return lo; };
+  const LP = new THREE.Vector3(); // (its own: it was P, which leave and lay were holding a place in, so a shell left or laid went to the shell's last corner)
+  const lowest = (geo, m) => { const p = geo.attributes.position; let lo = Infinity; for (let i = 0; i < p.count; i += 3) { LP.fromBufferAttribute(p, i).applyMatrix4(m); lo = Math.min(lo, LP.y); } return lo; };
   const shells = [0, 1].map(() => { const mesh = new THREE.Mesh(geoOf('snail'), shellMat); mesh.matrixAutoUpdate = false; mesh.castShadow = true; mesh.visible = false; group.add(mesh); return { mesh, kind: 'snail', mode: 'off', M: new THREE.Matrix4(), from: new THREE.Matrix4(), t: 0 }; });
   let worn = shells[0];
   function setKind(sh, kind) { sh.kind = HERMIT_WEAR[kind] ? kind : 'snail'; sh.mesh.geometry = geoOf(sh.kind); }
