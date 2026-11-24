@@ -408,8 +408,8 @@ function geometries() {
 // instanced decoration that re-seats itself on the nearest copy of the repeating world, and casts a shadow only from inside the sun's box
 const SIGHT = { step: 2, light: 4 }; // it is seated again when the fish has gone this far, and the box is taken this much wider to cover that
 // (review polish) the circle small things are drawn in, as parts of how far the camera sees: its middle `ahead` of the camera, its radius `wide`.
-// It holds everything within the fog's far edge out to 50 degrees either side of where the camera looks, and behind it to 0.6 of that
-const VIEW_REACH = { ahead: 0.3, wide: 0.9, step: 2, turn: 0.12 };
+// It holds everything within the fog's far edge out to 75 degrees either side of where the camera looks, and behind it to 0.7 of that
+const VIEW_REACH = { ahead: 0.3, wide: 1.0, step: 2, turn: 0.12 };
 class Scatter {
   // reach: small things are only drawn within this many metres of the fish; beyond it they are too small to miss
   // size: how far across the world it is scattered in is

@@ -12,9 +12,13 @@ Brief: the reviewer's ranked visual faults (/home/claude/review-findings.md), it
 - [x] Checks added to test_game.mjs (arches/lane/keeper seen share, Keeper's ground, title vs beads in 4 bands, moment lines, dressing by view, ring fade).
 - [x] CLAUDE.md written (costs to fill).
 
+- [x] After-runs: pass (seen share), stills both cameras, perf both cameras. Sheet /home/claude/polish-sheet.jpg.
+- [x] First suite round: boss, teach, library, controls passed; game failed 4 Keeper checks + crashed in my new block (world read before startRun). Measured the walk/claw scenario at 2ff5016 and now (lean 0.05/0.02, wary 0.65/0.59, big claw 0.81/1.65): thresholds moved with the numbers in the check; column-spot count >= 3.
+- [x] Merged squid-play (frame gauge) into review-polish: 55b6965 (test_game.mjs conflict: both blocks kept).
+
 ## To do
-- [ ] after-runs queued 20:32 (misc stills, pass, perf) behind other engineers' runs
-- [ ] five suites; sheet; merge; pub-copy
+- [ ] five suites on the merged tree (queued under the lock)
+- [ ] fast-forward squid-play; pub-copy; hand back
 
 ## Decisions (and why)
 - One general answer for 1-3 and the kelp: a screen-space stipple (4x4 ordered dither) in the materials, not smooth transparency (no sorting, flat look). Cuts only fragments at least 0.7 m nearer than the fish (full by 2.2 m), inside a capsule from the head to 2.6 m down the body; anything nearer the lens than 3.2 m is stippled out. Shadows untouched.
