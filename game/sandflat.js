@@ -75,6 +75,8 @@ export const SANDFLAT = {
 };
 
 const TAU = Math.PI * 2, UP = new THREE.Vector3(0, 1, 0);
+// two geometries with position, normal and colour, as one (neither indexed)
+function mergeTwo(a, b) { const g = new THREE.BufferGeometry(); for (const k of ['position', 'normal', 'color']) { const x = a.attributes[k].array, y = b.attributes[k].array, z = new Float32Array(x.length + y.length); z.set(x); z.set(y, x.length); g.setAttribute(k, new THREE.BufferAttribute(z, 3)); } return g; }
 const ease = (t) => t * t * (3 - 2 * t);
 const yawTo = (dx, dz) => Math.atan2(dx, dz);
 const turnTo = (a, b, k) => a + clamp(Math.atan2(Math.sin(b - a), Math.cos(b - a)), -k, k);
@@ -99,6 +101,9 @@ export function createSandflat(scene, world, hooks) {
   const owned = [], made = [], own = (o) => { owned.push(o); return o; };
   const mk = (id) => { const a = make(id); made.push(a); root.add(a.object); return a; };
   const pale = (a) => a.body.material.color.setRGB(...SANDFLAT.pale); // a patch of sand brought to the flat's paler sand, so it does not show as a disc
+  // what casts a shadow: the sand patches are ground and cast none; the eels, the goby and shrimp and the puffer's fins are too thin or too small for theirs
+  // to be seen from the dive's camera, and each is a draw more in the sun's pass; of a hermit crab only its shell and its body cast
+  const noShadow = (o, keep = () => false) => o.traverse((x) => { if (x.isMesh && !keep(x)) x.castShadow = false; });
   const glow = own(glowTexture());
   const off = { x: 0, z: 0 }, J = [], head = new THREE.Vector3();
   const r = rng((hooks.seed | 0) * 977 + 71503); // the crabs' shells, and nothing else
@@ -113,11 +118,18 @@ export function createSandflat(scene, world, hooks) {
   const patches = [];
   { const spots = [[0, 0]]; for (let ring = 1; ring < 4; ring++) for (let k = 0; k < 6; k++) for (let s = 0; s < ring; s++) { const a = (k / 6) * TAU, b = ((k + 1) / 6) * TAU, u = s / ring;
       const x = ring * E.apart * lerp(Math.sin(a), Math.sin(b), u), z = ring * E.apart * lerp(Math.cos(a), Math.cos(b), u); if (Math.hypot(x, z) <= M.r - E.keep) spots.push([x, z]); }
-    spots.forEach(([dx, dz], i) => { const a = mk('gardeneel'); pale(a); const turn = i * 2.39996, x = M.x + dx, z = M.z + dz; a.object.position.set(x, world.drawn(x, z) + 0.008, z); a.object.rotation.y = turn; a.object.updateMatrix();
+    spots.forEach(([dx, dz], i) => { const a = mk('gardeneel'); pale(a); noShadow(a.object); a.body.visible = false; const turn = i * 2.39996, x = M.x + dx, z = M.z + dz; a.object.position.set(x, world.drawn(x, z) + 0.008, z); a.object.rotation.y = turn; a.object.updateMatrix();
       const k = a.object.scale.x, c = Math.cos(turn), s = Math.sin(turn);
       const eels = a.rig.eels.map((e) => ({ x: x + (e.x * c + e.z * s) * k, z: z + (-e.x * s + e.z * c) * k, down: false, passed: false }));
       patches.push({ a, x, z, turn, eels, want: (j) => eels[j].want ?? 1 }); }); }
   const allEels = patches.flatMap((p) => p.eels);
+  // their holes, all in one piece: each colony's own patch of sand is not drawn (thirteen discs of ground laid over the ground were a sixth of the cost of
+  // the place, and showed as discs), so the holes are drawn here, a dark mouth in a low pale lip, where every eel is
+  { const lip = new THREE.CylinderGeometry(0.11, 0.14, 0.03, 7), mouth = new THREE.CircleGeometry(0.06, 7); mouth.rotateX(-Math.PI / 2); mouth.translate(0, 0.016, 0);
+    const holeMat = own(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })), tone = (g, c) => { const col = new THREE.Color(c), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.toArray(a, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g.index ? g.toNonIndexed() : g; };
+    const parts = [tone(lip, "#d6d2b4"), tone(mouth, "#2c2a22")], geo = own(mergeTwo(parts[0], parts[1])); for (const g of [lip, mouth, ...parts]) g.dispose();
+    const holes = new THREE.InstancedMesh(geo, holeMat, allEels.length), m4 = new THREE.Matrix4(); holes.receiveShadow = true; holes.frustumCulled = false; own({ dispose: () => holes.dispose() });
+    allEels.forEach((e, i) => holes.setMatrixAt(i, m4.makeTranslation(e.x, world.drawn(e.x, e.z) - 0.004, e.z))); holes.instanceMatrix.needsUpdate = true; root.add(holes); state.holes = holes; }
   const noise = { v: 0, was: rig.speed, jerk: 0 };
   function eelStep(dt, t) {
     const ER = E;
@@ -161,7 +173,7 @@ export function createSandflat(scene, world, hooks) {
   const lineYaw = yawTo(-tan.x, -tan.z); // each faces up the line, toward the head of it
   const crabs = []; { let d = 0; const sizes = [...HERMIT.sizes].reverse(); // the biggest first, at the head of the line
     sizes.forEach((k0, i) => { const k = k0 * K.scale; if (i) d += K.gap * (k + sizes[i - 1] * K.scale); else d = 0.2 * k;
-      const a = mk('hermit'); a.object.scale.multiplyScalar(k); a.rig.wear(kinds[i] || 'snail');
+      const a = mk('hermit'); a.object.scale.multiplyScalar(k); a.rig.wear(kinds[i] || 'snail'); noShadow(a.object, (x) => x === a.body || a.rig.shells.some((sh) => sh.mesh === x));
       const pos = new THREE.Vector3(foot.x + tan.x * d, 0, foot.z + tan.z * d); ground(pos);
       crabs.push({ a, k: a.object.scale.x, i, pos, yaw: lineYaw, want: lineYaw, away: 9, phase: 'wait', t: 0, i0: i }); }); }
   const prize = sprite('#ffffff', 0); prize.scale.setScalar(1.1); // what the smallest wears, lit faintly while a trade is to be had
@@ -222,7 +234,7 @@ export function createSandflat(scene, world, hooks) {
   const heapGeo = own(new THREE.ConeGeometry(1, 1, 9, 1)), heapMat = own(new THREE.MeshLambertMaterial({ color: sandCol, flatShading: true, emissive: '#fff6dc', emissiveIntensity: 0.12 }));
   const puffGeo = own(new THREE.IcosahedronGeometry(B.puff, 0)), puffMat = own(new THREE.MeshLambertMaterial({ color: '#f7f2dc', flatShading: true, transparent: true, opacity: 0.9, depthWrite: false, emissive: '#fffbe8', emissiveIntensity: 0.25 }));
   state.burrows = S.burrows.map((spot, i) => {
-    const a = mk('burrow'); pale(a); a.object.scale.multiplyScalar(B.scale); const face = yawTo(S.x - spot.x, S.z - spot.z) + 0.6;
+    const a = mk('burrow'); pale(a); noShadow(a.object); a.object.scale.multiplyScalar(B.scale); const face = yawTo(S.x - spot.x, S.z - spot.z) + 0.6;
     a.object.position.set(spot.x, world.drawn(spot.x, spot.z) + 0.008, spot.z); a.object.rotation.y = face; a.object.updateMatrix();
     const inv = new THREE.Matrix4().copy(a.object.matrix).invert();
     const heapAt = new THREE.Vector3(Math.cos(-0.5), 0, Math.sin(-0.5)).multiplyScalar(0.18).applyMatrix4(a.object.matrix); // beside the hole, on the heap's side (BURROW.heap is near this)
@@ -272,11 +284,11 @@ export function createSandflat(scene, world, hooks) {
   }
   save();
   const stageOf = (p) => { const st = CI.stages, i = Math.min(st.length - 2, Math.floor(p)), u = clamp(p - i, 0, 1); return lerp(st[i], st[i + 1], u); };
-  const circ = mk('sandcircle'), site = sites[C0.site]; circ.object.scale.multiplyScalar(CI.scale); circ.object.position.set(site.x, world.drawn(site.x, site.z) + 0.01, site.z); circ.object.rotation.y = C0.site * 0.7; circ.object.updateMatrix();
+  const circ = mk('sandcircle'), site = sites[C0.site]; noShadow(circ.object); circ.object.scale.multiplyScalar(CI.scale); circ.object.position.set(site.x, world.drawn(site.x, site.z) + 0.01, site.z); circ.object.rotation.y = C0.site * 0.7; circ.object.updateMatrix();
   circ.rig.update(0, { stage: stageOf(C0.p) }); // (drawn at its stage from the first, even from far off)
   const RC = (CIRCLE.R + 0.1) * circ.object.scale.x; // the circle's radius in the world
-  let old = null; if (C0.left >= 0 && C0.left !== C0.site) { old = mk('sandcircle'); const o = sites[C0.left]; old.object.scale.multiplyScalar(CI.scale); old.object.position.set(o.x, world.drawn(o.x, o.z) + 0.005, o.z); old.object.rotation.y = C0.left * 0.7; old.rig.update(0, { stage: 1.3 }); }
-  const fish = mk('puffer'); fish.object.scale.multiplyScalar(CI.fish);
+  let old = null; if (C0.left >= 0 && C0.left !== C0.site) { old = mk('sandcircle'); noShadow(old.object); const o = sites[C0.left]; old.object.scale.multiplyScalar(CI.scale); old.object.position.set(o.x, world.drawn(o.x, o.z) + 0.005, o.z); old.object.rotation.y = C0.left * 0.7; old.rig.update(0, { stage: 1.3 }); }
+  const fish = mk('puffer'); fish.object.scale.multiplyScalar(CI.fish); noShadow(fish.object, (x) => x === fish.body);
   const placed = []; // the fragments the player has brought, on the ridges
   const slot = (n) => { const ridge = 1 + 2 * ((n * 5) % 14), a = (ridge / CIRCLE.ridges) * TAU, rr = 1.02 + 0.22 * ((n * 0.618) % 1); return new THREE.Vector3(Math.cos(a) * rr, 0.05, Math.sin(a) * rr).applyMatrix4(circ.object.matrix); };
   function setFrag(n, f = fragment(11)) { const p = slot(n); f.position.copy(p); f.position.y = world.drawn(p.x, p.z) + 0.07 + 0.06 * clamp(stageOf(C0.p) / 1, 0, 1); f.userData.halo.scale.setScalar(0.9); placed.push(f); return f; }
