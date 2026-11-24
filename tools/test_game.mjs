@@ -1002,6 +1002,51 @@ check('the squid\'s mini-game: a fish that comes close slowly, and waits when th
   s.before.grade === 0 && s.before.lit === 0 && s.before.stones === 5 && s.won.settled && s.won.run.grade >= 1 && s.won.saved && s.won.saved.grade === s.won.run.grade && s.won.saved.time === s.won.run.time && s.won.mark === s.won.run.grade && s.won.lit === s.won.run.grade && s.won.turned >= 3
   && s.tame.shoal === 'rest' && s.next.grade === s.won.run.grade && s.next.lit === s.won.run.grade && s.next.inNest && !s.rushed.settled && s.rushed.kept && s.forgot === null, JSON.stringify(s));
 
+// the moon jellies are one drawing (bloom.js, jellyCrowd in jelly.js): George saw them change from a flat far version to the whole animal as the fish came
+// near. Now every bell is the whole animal at every distance, all of them in one InstancedMesh with one geometry and one material; nothing about a bell is
+// chosen by how near it is. (Its shadow is a disc drawn only into the sun's shadow map, never to the screen.)
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); const b = g.bloom, m = b.debug.jellies, P = b.plan, drawn = [], rigged = [];
+  g.scene.traverse((o) => { if (o.isMesh && o.visible && (o.count ?? 1) > 0 && /^crowd-moon/.test(o.name)) drawn.push(o.name); if (o.name === 'jelly-moon') rigged.push(o); });
+  return { drawn, rigged: rigged.length, instanced: !!m.isInstancedMesh, count: m.count, bells: P.bells.length, oneMaterial: !Array.isArray(m.material) && !!m.material.isMaterial, groups: m.geometry.groups.length,
+    whole: ['flex', 'veil', 'drift', 'iBeat'].every((k) => !!m.geometry.attributes[k]), faces: m.geometry.attributes.position.count / 3, shadow: { count: b.debug.crowd.shade.count, only: !!b.debug.crowd.shade.userData.shadowOnly, casts: b.debug.crowd.shade.castShadow, main: m.castShadow } }; });
+check('the bloom\'s moon jellies are drawn by one mesh: every bell an instance of one geometry (the whole animal: bell, rings, arms, fringe) in one material; no single rigged moon jelly is in the water; their shadow disc is never drawn to the screen',
+  s.drawn.length === 1 && s.drawn[0] === 'crowd-moon' && s.rigged === 0 && s.instanced && s.count === 70 && s.bells === 70 && s.oneMaterial && s.groups === 0 && s.whole && s.faces > 300 && s.shadow.count === 0 && s.shadow.only && s.shadow.casts && !s.shadow.main, JSON.stringify(s));
+
+// swimming in from 20 m outside the bloom to its middle changes nothing about how any bell is drawn: the same mesh, geometry and material every frame,
+// every bell an instance of it at its own size, nothing shown or hidden, no rigged moon jelly put in the water
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); const b = g.bloom, P = b.plan, m = b.debug.jellies, s = g.world.spawn;
+  const u = { x: s.x - P.x, z: s.z - P.z }, L = Math.hypot(u.x, u.z); u.x /= L; u.z /= L; const o = b.debug.off;
+  T.put(P.x + u.x * (P.R + 20) + o.x, g.world.height(P.x, P.z) + 3.4, P.z + u.z * (P.R + 20) + o.z, Math.atan2(-u.x, -u.z));
+  const first = { geo: m.geometry.uuid, mat: m.material.uuid, parent: m.parent }, bad = { swap: 0, hidden: 0, count: 0, rigged: 0, size: 0 }; let frames = 0, nearest = 99, far = 0; const M4 = m.matrixWorld.clone(), sc = [0, 0, 0];
+  for (let t = 0; t < 30; t += 0.1) { const o2 = b.debug.off, dx = P.x + o2.x - g.rig.pos.x, dz = P.z + o2.z - g.rig.pos.z, d = Math.hypot(dx, dz); if (d < 1) break;
+    g.sim(0.1, { ...T.none(), dir: { x: dx / d, y: 0, z: dz / d }, amount: 1 }); frames++; far = Math.max(far, d);
+    if (m.geometry.uuid !== first.geo || m.material.uuid !== first.mat || m.parent !== first.parent) bad.swap++;
+    if (!m.visible) bad.hidden++; if (m.count !== P.bells.length) bad.count++;
+    let rig = 0; g.scene.traverse((x) => { if (x.name === 'jelly-moon' && x.visible) rig++; }); bad.rigged += rig;
+    for (const q of P.bells) { m.getMatrixAt(q.slot, M4); const e = M4.elements; sc[0] = Math.hypot(e[0], e[1], e[2]); if (Math.abs(sc[0] - q.s) > 1e-3) bad.size++; nearest = Math.min(nearest, Math.hypot(q.at.x - g.rig.snout.x, q.at.y - g.rig.snout.y, q.at.z - g.rig.snout.z)); } }
+  return { frames, from: +far.toFixed(1), nearest: +nearest.toFixed(2), bad }; });
+check('swimming from 20 m outside the bloom to its middle changes nothing about how a moon jelly is drawn: the same one mesh, geometry and material every frame, every bell in it at its own size, nothing hidden or shown, nothing put in or taken out',
+  s.frames > 40 && s.from > 30 && s.nearest < 1.5 && Object.values(s.bad).every((v) => v === 0), JSON.stringify(s));
+
+// a picture: one jelly photographed from the same place beside it with the fish 14 m away and with the fish 3 m away is the same drawing
+s = await ev(async () => { const g = window.__game, T = window.T, THREE = await import('three'); const W = 240, H = 240, rt = new THREE.WebGLRenderTarget(W, H), eye = new THREE.PerspectiveCamera(40, 1, 0.05, 200);
+  const photo = (dist, hide = false) => { g.startRun(4242); g.run.safe = 1e9; g.sim(0.3, T.none()); const b = g.bloom, P = b.plan;
+    // the jelly: at the edge, off to the side of the current (away from the squid and the nettles), with no other bell close by
+    const pick = P.bells.map((q, i) => [i, Math.abs((q.x - P.x) * P.cur.z - (q.z - P.z) * P.cur.x) - 3 * P.bells.filter((r) => r !== q && Math.hypot(r.x - q.x, r.z - q.z) < 2.5).length]).sort((a, c) => c[1] - a[1])[0][0], B = P.bells[pick];
+    const out = { x: B.x - P.x, z: B.z - P.z }, L = Math.hypot(out.x, out.z); out.x /= L; out.z /= L; const side = { x: out.z, z: -out.x };
+    T.put(B.x + side.x * dist, B.y, B.z + side.z * dist, 0); g.sim(0.5, T.none()); // the fish off to one side of it, out of the photograph
+    for (const q of P.bells) { q.ox = q.oy = q.oz = 0; q.q = 0.3; q.sway = 2; q.touched = 0; } b.state.t = 40; // the same moment of every stroke
+    const at = B.at.clone(); b.update(0, eye); at.copy(B.at); eye.position.set(at.x + out.x * 2.3, at.y - 0.7, at.z + out.z * 2.3); eye.lookAt(at); eye.updateMatrixWorld(); b.update(0, eye); // from just outside, a little below: the water behind it
+    // the jellies alone, out of the fog (whatever else swims by, and how far the fog reaches after the checks before this one, are not the question)
+    const shown = []; g.scene.traverse((o) => { if (o.visible && !o.isLight && o !== g.scene && o !== b.debug.jellies && !o.isBone) { let p = b.debug.jellies.parent === o; if (!p) { o.visible = false; shown.push(o); } } }); const fog = g.scene.fog; g.scene.fog = null;
+    b.debug.jellies.visible = !hide; g.renderer.setRenderTarget(rt); g.renderer.render(g.scene, eye); const px = new Uint8Array(W * H * 4); g.renderer.readRenderTargetPixels(rt, 0, 0, W, H, px); g.renderer.setRenderTarget(null); b.debug.jellies.visible = true;
+    for (const o of shown) o.visible = true; g.scene.fog = fog;
+    return { px, d: +Math.hypot(B.at.x - g.rig.snout.x, B.at.z - g.rig.snout.z).toFixed(1), pick }; };
+  const far = photo(14), near = photo(3), none = photo(3, true), diff = (a, c) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - c[i]), Math.abs(a[i + 1] - c[i + 1]), Math.abs(a[i + 2] - c[i + 2])) > 20) n++; return n / (a.length / 4); };
+  rt.dispose(); g.startRun(4242); return { far: far.d, near: near.d, same: far.pick === near.pick, changed: +diff(far.px, near.px).toFixed(4), jelly: +diff(near.px, none.px).toFixed(3) }; });
+check('one moon jelly photographed from the same place beside it, with the fish 14 m off and 3 m off, is the same drawing (and there is a jelly in the photograph; the jellies are photographed alone, out of the fog)',
+  s.same && s.far > 12 && s.near < 4.5 && s.changed < 0.01 && s.jelly > 0.05, JSON.stringify(s));
+
 // ---- the quiet side (quiet.js, world.quiet): three places and a colonnade, built for the creatures to come; nothing lives there yet
 // the Go to buttons put the fish outside each place's arch, facing in, from any band; and from there it swims in through the arch (for the kelp forest,
 // on down the main lane to the clearing at the far end) with nothing stopping it

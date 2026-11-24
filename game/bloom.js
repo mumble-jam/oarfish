@@ -32,7 +32,7 @@
 // follow; a nettle's train takes a fry, or stings a squid, that blunders into it.
 import * as THREE from 'three';
 import { make, geometry, resolve } from './npc.js';
-import * as model from './critters.js';
+import { jellyCrowd } from './jelly.js';
 import { rng, clamp, lerp, damp, glowTexture, beamTexture } from './geo.js';
 
 // ---------------------------------------------------------------- every number, in one place
@@ -41,10 +41,10 @@ export const BLOOM = {
   place: { off: [0.5, 0.85], dist: [62, 78], R: 13, tries: 400 },
   current: { speed: 0.5, swing: 0.6 }, // a slow current through it, outward from the start give or take `swing`: every nettle's train streams with it
   shafts: { n: 3, wide: [6, 9], tall: 44, glow: 0.3, colour: '#f4fff0' }, // the sun it hangs in: seen past the fog, as the rift's beam is
-  // the moon jellies. scale: of the 0.4 m model. high: how far over the bed. live: how many of the nearest are drawn whole, with every strand;
-  // the rest are a lighter version (critters.js, moonFar: the saucer and its horseshoes in about sixty faces), drawn all at once. part: how near a part of the body has to be
-  // before a bell gives way; push: how hard; back: how fast it comes back. beat: strokes a second. lean: how far each lies over into the current
-  moon: { n: 70, scale: 1.8, high: [1.6, 5.6], live: 4, near: 22, part: 1.7, push: 4, back: 0.9, beat: 0.5, lean: 0.35 },
+  // the moon jellies. scale: of the 0.4 m model (each bell 0.8 to 1.15 of it). high: how far over the bed. Every one is the whole animal, the same at
+  // every distance, all drawn at once (jellyCrowd in jelly.js). part: how near a part of the body has to be before a bell gives way; push: how hard;
+  // back: how fast it comes back. beat: strokes a second. lean: how far each lies over into the current
+  moon: { n: 70, scale: 1.8, high: [1.6, 5.6], part: 1.7, push: 4, back: 0.9, beat: 0.5, lean: 0.35 },
   // the fry, a swarm of the smallest size (a few fish more than the band's food, and they come back: one every `back` seconds while nothing is in the bloom,
 // up to their number; slow enough that waiting for them is never worth it). inside: how far in (of R) the head has to be before they can be cornered; hide: where they keep while it is
   // not (of R, from the middle); flee: how far toward the nettles' side they go when the squid hunt them (of R); drift: how far they wander
@@ -144,14 +144,13 @@ export function createBloom(scene, world, hooks) {
     const m = add(new THREE.Mesh(g, shaftMat)); m.frustumCulled = false; m.rotation.order = 'YXZ'; m.rotation.z = Math.PI + 0.12 * (i - 1); // brightest at the bottom, as the rift's beam
     const a = i * 2.3 + plan.bearing, d = i ? R * 0.45 : 0; m.userData = { x: C.x + Math.sin(a) * d, z: C.z + Math.cos(a) * d, ph: i * 1.7 }; return m; });
 
-  // ---- the moon jellies: the nearest few drawn whole, the rest as the bell and what shows through it, all at once
-  const M = BLOOM.moon, pal = resolve('moonjelly').palette;
-  const farGeo = model.moonFar(pal), farMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, transparent: true, opacity: 0.55, depthWrite: false, emissive: '#e8f4ff', emissiveIntensity: 0.18 }); owned.push(farGeo, farMat);
-  farMat.forceSinglePass = true; // (both faces in one pass: a clear double-sided thing is otherwise drawn twice)
-  const far = add(new THREE.InstancedMesh(farGeo, farMat, plan.bells.length)); far.frustumCulled = false; far.renderOrder = 2; far.castShadow = false;
-  const live = Array.from({ length: M.live }, () => { const a = make('moonjelly'); a.object.scale.multiplyScalar(M.scale); a.object.visible = false; scene.add(a.object); return { a, bell: null }; });
-  let pick = 0;
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), none = new THREE.Vector3();
+  // ---- the moon jellies: every one the whole animal (bell, the four rings through it, arms and fringe), all of them drawn at once as one piece
+  // (jellyCrowd in jelly.js): the stroke of each bell and the sway of its strands are in the shader, from each one's own place in its stroke
+  const M = BLOOM.moon, one = make('moonjelly'), crowd = jellyCrowd(one, plan.bells.length, 'moon', 'pulse'); one.dispose?.();
+  const jellies = add(crowd.mesh); owned.push(crowd);
+  for (const b of plan.bells) { b.q = (b.ph / TAU) % 1; b.sway = b.ph * 3; }
+  const order = plan.bells.map((b, i) => i), dist = new Float32Array(plan.bells.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
   const leanYaw = Math.atan2(-cur.x, -cur.z); // they lie over a little into the current, as the nettles do
 
   // ---- the nettles
@@ -203,9 +202,14 @@ export function createBloom(scene, world, hooks) {
   nestMark();
 
   // ---------------------------------------------------------------- one frame
-  const head = new THREE.Vector3(), jt = [], tmp = new THREE.Vector3();
+  const head = new THREE.Vector3(), jt = [], tmp = new THREE.Vector3(), eye = new THREE.Vector3();
+  // a nettle or a squid is left undrawn (and unrigged) only where it cannot be seen: wholly in the fog from the camera, by `pad` metres more than its size.
+  // (It was 60 m from the fish, which from a camera pulled back left them to blink in and out at the edge of sight.) No camera: 60 m from the fish
+  let sight = null;
+  const unseen = (p, pad) => sight ? Math.hypot(p.x + off.x - eye.x, p.y - eye.y, p.z + off.z - eye.z) > sight + pad : Math.hypot(p.x - head.x, p.z - head.z) > 60;
   function update(dt, camera) {
     state.t += dt; const t = state.t;
+    sight = camera && scene.fog ? scene.fog.far : null; if (camera) eye.copy(camera.position);
     off.x = T * Math.round((rig.pos.x - C.x) / T); off.z = T * Math.round((rig.pos.z - C.z) / T);
     head.set(rig.snout.x - off.x, rig.snout.y, rig.snout.z - off.z);
     jt.length = 0; for (const j of rig.joints) jt.push({ x: j.x - off.x, y: j.y, z: j.z - off.z });
@@ -221,18 +225,16 @@ export function createBloom(scene, world, hooks) {
       if (nearBody) for (const p of jt) { const dx = b.x + b.ox - p.x, dy = b.y + b.oy - p.y, dz = b.z + b.oz - p.z, d = Math.hypot(dx, dy, dz); if (d < M.part && d > 1e-3) { const k = ((M.part - d) / M.part) * M.push * dt / d; b.ox += dx * k; b.oy += dy * k * 0.5; b.oz += dz * k; b.touched = t; } }
       const k = Math.exp(-M.back * dt); b.ox *= k; b.oy *= k; b.oz *= k;
     }
-    // which are drawn whole: the nearest to the head, within `near`
-    if ((pick -= dt) <= 0) { pick = 0.4; const order = plan.bells.map((b, i) => [i, Math.hypot(b.x - head.x, b.y - head.y, b.z - head.z)]).filter(([, d]) => d < M.near).sort((a, b) => a[1] - b[1]).slice(0, M.live).map(([i]) => plan.bells[i]);
-      for (const L of live) if (L.bell && !order.includes(L.bell)) { L.bell.live = null; L.bell = null; }
-      for (const b of order) if (!b.live) { const L = live.find((x) => !x.bell); if (L) { L.bell = b; b.live = L; } } }
-    plan.bells.forEach((b, i) => {
-      const x = b.x + b.ox + off.x, y = b.y + b.oy + 0.18 * Math.sin(t * 0.4 + b.ph), z = b.z + b.oz + off.z, beat = Math.max(0, Math.sin(t * TAU * M.beat + b.ph)) ** 2;
-      if (b.live) { const a = b.live.a; a.object.visible = true; a.rig.update(dt, { x, y, z, yaw: leanYaw, tilt: M.lean + 0.1 * Math.sin(t * 0.3 + b.ph), mood: 'pulse', rate: M.beat * (b.touched && t - b.touched < 1.2 ? 1.8 : 1) }); far.setMatrixAt(i, m4.compose(v3.set(x, y, z), q, none)); return; }
-      q.setFromEuler(e.set(M.lean, leanYaw, 0)); s3.set(b.s * (1 + 0.08 * beat), b.s * (1 - 0.16 * beat), b.s * (1 + 0.08 * beat));
-      far.setMatrixAt(i, m4.compose(v3.set(x, y, z), q, s3));
-    });
-    for (const L of live) if (!L.bell) L.a.object.visible = false;
-    far.instanceMatrix.needsUpdate = true;
+    // each bell: where it is, how it lies, where it is in its stroke (a touched one beats quicker for a moment). They are drawn farthest from the camera
+    // first, so that a near one is laid over a far one; every one is the same model in the same piece, whatever the distance
+    plan.bells.forEach((b, i) => { const rate = M.beat * (b.touched && t - b.touched < 1.2 ? 1.8 : 1); b.q = (b.q + dt * rate) % 1; b.sway += dt; b.rate = rate;
+      b.at = b.at || new THREE.Vector3(); b.at.set(b.x + b.ox + off.x, b.y + b.oy + 0.18 * Math.sin(t * 0.4 + b.ph), b.z + b.oz + off.z);
+      dist[i] = camera ? b.at.distanceToSquared(camera.position) : 0; });
+    if (camera) order.sort((i, j) => dist[j] - dist[i]);
+    order.forEach((i, k) => { const b = plan.bells[i];
+      q.setFromEuler(e.set(M.lean + 0.1 * Math.sin(t * 0.3 + b.ph), leanYaw, 0)); s3.setScalar(b.s);
+      crowd.set(k, m4.compose(v3.copy(b.at), q, s3), b.q, b.rate / crowd.stroke.late, b.sway); b.slot = k; });
+    crowd.done();
 
     // the nettles: each holds its place against the current, drifting a little along the edge; it never comes after anything
     for (const n of nettles) {
@@ -240,7 +242,7 @@ export function createBloom(scene, world, hooks) {
       n.pos.set(n.ax, n.y + 0.25 * Math.sin(t * 0.3 + n.ph), n.az);
       if ((n.moodT -= dt) <= 0) { n.mood = n.mood === 'pulse' ? 'drift' : 'pulse'; n.moodT = n.mood === 'pulse' ? 9 + 3 * Math.sin(n.ph + t) : 4; }
       n.A.copy(n.pos).addScaledVector(UP, -0.15 * NT.scale); n.B.copy(n.A).addScaledVector(trainDir, NT.train); // the train, as what it touches: a thick line from under the bell, streaming down-current and sagging
-      const far = Math.hypot(n.pos.x - head.x, n.pos.z - head.z) > 60; n.a.object.visible = !far;
+      const far = unseen(n.pos, 4); n.a.object.visible = !far;
       if (!far) n.a.rig.update(dt, { x: n.pos.x + off.x, y: n.pos.y, z: n.pos.z + off.z, yaw: leanYaw, tilt: 0.9, mood: n.mood, treadmill: true, vx: -cur.x * NT.stream, vy: 0, vz: -cur.z * NT.stream });
     }
     // a sting: any part of the body in a train, and not by the bell. It is counted by how much of the body lies across the train at once, over the
@@ -336,7 +338,7 @@ export function createBloom(scene, world, hooks) {
       else yawTo = Math.atan2(-cur.x, -cur.z); // resting, it heads into the current
       if (mood === 'hover' && moving > 0.6) mood = 'swim';
       s.yaw += clamp(Math.atan2(Math.sin(yawTo - s.yaw), Math.cos(yawTo - s.yaw)), -3 * dt, 3 * dt); s.mood = mood;
-      const far = Math.hypot(s.pos.x - head.x, s.pos.z - head.z) > 60; s.a.object.visible = !far;
+      const far = unseen(s.pos, 2); s.a.object.visible = !far;
       if (!far) s.a.rig.update(dt, { x: s.pos.x + off.x, y: s.pos.y, z: s.pos.z + off.z, yaw: s.yaw, pitch: mood === 'hover' ? 0.25 : mood === 'bluff' ? -0.25 : 0, mood, rate: 1.2 });
     }
     settling(dt);
@@ -391,13 +393,12 @@ export function createBloom(scene, world, hooks) {
   }
   function dispose() {
     for (const o of owned) { if (o.isObject3D) { scene.remove(o); if (o.isInstancedMesh) o.dispose(); } else o.dispose?.(); }
-    for (const L of live) { scene.remove(L.a.object); L.a.dispose(); }
     for (const n of nettles) { scene.remove(n.a.object); n.a.dispose(); }
     for (const s of squid) { scene.remove(s.a.object); s.a.dispose(); }
     for (const k of inks) scene.remove(k.m);
     if (mark) world.react?.nest?.group.remove(mark);
   }
   // for the checks and the pictures
-  const debug = { off, shoal, tryNow, inks, live, scatter: (s = squid[0]) => inkAndScatter(s), settle: () => { tryNow.on = true; tryNow.t = tryNow.t || 1; tryNow.hold = ST.hold; settling(0); }, get mark() { return mark; } };
+  const debug = { off, shoal, tryNow, inks, crowd, jellies, scatter: (s = squid[0]) => inkAndScatter(s), settle: () => { tryNow.on = true; tryNow.t = tryNow.t || 1; tryNow.hold = ST.hold; settling(0); }, get mark() { return mark; } };
   return { update, cast, dispose, plan, nettles, squid, state, debug, at: (p) => ({ x: p.x + off.x, y: p.y, z: p.z + off.z }) };
 }
