@@ -508,14 +508,24 @@ button:disabled { opacity: 0.4; cursor: default; }
 // if three.js never arrives (offline, blocked CDN), say so instead of showing empty water
 setTimeout(() => { if (!window.__ready) document.getElementById('error').style.display = 'grid'; }, 12000);
 </script>
+<!-- the front page (game/title.js): the plate, come alive, before the first dive. Decided here, before anything is drawn, so the page
+     opens on paper. It stands aside for a link that names a place (#library…), for a dive the viewer brings back, and for a page a
+     test drives (navigator.webdriver, as the idle show does); ?title=1 or ?title=0 forces it on or off. -->
+<script>
+(function () { var q = new URLSearchParams(location.search).get('title');
+  window.__frontWanted = q === '1' || (q !== '0' && !navigator.webdriver && !location.hash);
+  if (window.__frontWanted) document.documentElement.classList.add('front'); })();
+</script>
+<style>html.front, html.front body { background: #f3eedb; } html.front:not(.front-up) #stage { visibility: hidden; }</style>
 <script type="module">
-import { start } from './game/main.js';
-
 const fail = (e) => { document.getElementById('error').style.display = 'grid'; console.error(e); };
-const boot = (saved) => start(saved || {}).then(() => { window.__ready = true; document.getElementById('error').style.display = 'none'; }).catch(fail);
+const boot = (saved) => import('./game/main.js').then(({ start }) => start(saved || {})).then(() => { window.__ready = true; document.getElementById('error').style.display = 'none'; }).catch(fail);
+const front = () => import('./game/title.js').then(({ openFront }) => openFront({ boot: () => boot({}) })).catch((e) => { console.error(e); document.documentElement.classList.remove('front'); document.getElementById('front')?.remove(); window.__front = undefined; boot({}); }); // no front page: the dive, as before
+const has = (saved) => saved && Number.isFinite(saved.seed);
 // inside the viewer, pick up where the previous version of the page left the dive
 const hot = window.claude?.hot;
-if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
+if (hot?.ready) hot.ready((saved) => { if (window.__frontWanted && !has(saved)) return front(); document.documentElement.classList.remove('front'); boot(saved); });
+else if (window.__frontWanted && !has(hot?.data)) front(); else { document.documentElement.classList.remove('front'); boot(hot?.data ?? {}); }
 </script>
 </body>
 </html>
