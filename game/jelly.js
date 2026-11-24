@@ -197,3 +197,76 @@ export function jellyRig(a, pal, kind, { halo = null } = {}) {
   a.object = group; a.rig = { update, show, strands, pose: p, triangles, kind, skin, see: us.uSee };
   return a.rig;
 }
+
+// ---------------------------------------------------------------- a crowd of one kind, drawn all at once (the bloom water's moon jellies, bloom.js)
+// Every animal in the crowd is the whole animal, the same at every distance: the body, the skin of its bell and every strand, made into ONE piece in ONE
+// material and drawn as an InstancedMesh, so seventy of them are one draw call. The strands are set in the shape they hold in still water (taken from
+// the rig itself, so they look as they do on the stand), and from there everything that moves is in the shader, from what each animal is handed:
+//   iBeat: x where it is in its stroke (0 to 1, going round), y how far its rim lags behind (in strokes), z a clock for the sway of its strands, w unused
+// The bell squeezes as jelly.js squeezes it (`flex`, the same stroke: the squeeze, the filling, the rest), what hangs from the rim goes with the rim,
+// and each strand sways along its length, more toward its tip. Nothing is chosen by distance. a: one animal of this kind as npc.js makes it, already
+// rigged by jellyRig (it is only read: its owner disposes of it). n: how many. Returns { mesh, geometry, material, triangles, set(i, matrix, q, lag, clock) }.
+const SWAY = { a: { amp: 0.022, rate: 0.8, waves: 1.1 }, f: { amp: 0.01, rate: 1.4, waves: 0.8 }, t: { amp: 0.03, rate: 0.6, waves: 1 } };
+export function jellyCrowd(a, n, kind = 'moon', mood = 'pulse') {
+  const K = KINDS[kind], def = K.def, rig = a.rig, group = a.object, pal = a.look.palette, squeeze = model.squeezeOf(def), M = { ...K.base, ...(K.moods[mood] || {}) };
+  // the strands in still water: let the rig settle into the mood with the bell at rest, then set every strand on its shape at once
+  rig.update(6, { x: 0, y: 0, z: 0, yaw: 0, tilt: 0, mood, rate: 0 });
+  for (const s of rig.strands) s.st.fresh = true;
+  rig.update(0, { x: 0, y: 0, z: 0, yaw: 0, tilt: 0, mood, rate: 0 });
+  group.position.set(0, 0, 0); group.rotation.set(0, 0, 0); group.scale.setScalar(1); group.updateMatrixWorld(true);
+  const parts = []; // [geometry, what each corner is: flex, veil, drift], in the order they are drawn: strands, then the body, then the skin over it
+  const bundles = group.children.filter((c) => c.isSkinnedMesh), kinds = [...new Set(def.strands.map((d) => d.kind))], v = new THREE.Vector3();
+  kinds.forEach((L, b) => { const mesh = bundles[b], g = mesh.geometry, defs = def.strands.filter((d) => d.kind === L), pos = new Float32Array(g.attributes.position.count * 3), flex = [], drift = [];
+    let at = 0;
+    defs.forEach((d, j) => { const piece = K.piece(pal, d), count = piece.attributes.position.count, root = squeeze(...d.root), ph = j * 2.399 + b * 1.3; piece.dispose();
+      for (let i = at; i < at + count; i++) { mesh.getVertexPosition(i, v); pos.set([v.x, v.y, v.z], i * 3); flex.push(...root); drift.push(clamp(g.attributes.position.getZ(i) / d.long, 0, 1), ph, SWAY[L].amp, SWAY[L].waves); }
+      at += count; });
+    const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('color', g.attributes.color.clone());
+    parts.push([out, flex, null, drift, SWAY[L].rate]); });
+  const solid = a.body.geometry, skin = rig.skin.geometry;
+  parts.push([solid, null, null, null, 0], [skin, null, skin.attributes.veil, null, 0]);
+  // one piece: position, colour, flex, veil (how much of the skin is there; 1 for what is solid), drift (along the strand, its phase, how far it sways, its waves) and its rate
+  const total = parts.reduce((t, [g]) => t + g.attributes.position.count, 0), P = new Float32Array(total * 3), C = new Float32Array(total * 4), F = new Float32Array(total * 4), V = new Float32Array(total), D = new Float32Array(total * 4), R = new Float32Array(total);
+  let o = 0;
+  for (const [g, flex, veil, drift, rate] of parts) { const c = g.attributes.position.count, col = g.attributes.color;
+    P.set(g.attributes.position.array, o * 3);
+    for (let i = 0; i < c; i++) { C[(o + i) * 4] = col.getX(i); C[(o + i) * 4 + 1] = col.getY(i); C[(o + i) * 4 + 2] = col.getZ(i); C[(o + i) * 4 + 3] = col.itemSize > 3 ? col.getW(i) : 1;
+      if (flex) F.set(flex.slice(i * 4, i * 4 + 4), (o + i) * 4); else F.set([g.attributes.flex.getX(i), g.attributes.flex.getY(i), g.attributes.flex.getZ(i), g.attributes.flex.getW(i)], (o + i) * 4);
+      V[o + i] = veil ? veil.getX(i) : 1; if (drift) D.set(drift.slice(i * 4, i * 4 + 4), (o + i) * 4); R[o + i] = rate; }
+    o += c; if (g !== solid && g !== skin) g.dispose(); }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geometry.setAttribute('color', new THREE.Float32BufferAttribute(C, 4));
+  geometry.setAttribute('flex', new THREE.Float32BufferAttribute(F, 4)); geometry.setAttribute('veil', new THREE.Float32BufferAttribute(V, 1));
+  geometry.setAttribute('drift', new THREE.Float32BufferAttribute(D, 4)); geometry.setAttribute('driftRate', new THREE.Float32BufferAttribute(R, 1));
+  geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+  const beat = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4); beat.setUsage(THREE.DynamicDrawUsage); geometry.setAttribute('iBeat', beat);
+  // one material: the body's and the skin's in one. It is drawn part clear, writes no depth, both faces in one pass; what is solid has all of its colour
+  const body = a.body.material, T = K.stroke;
+  const material = alive(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, transparent: true, depthWrite: false, emissive: body.emissive, emissiveIntensity: body.emissiveIntensity }), { glow: K.glow });
+  material.forceSinglePass = true;
+  const u = { uStroke: { value: new THREE.Vector4(T.squeeze, T.fill, M.depth, M.rest) }, uSee: { value: K.see } }, before = material.onBeforeCompile;
+  material.onBeforeCompile = (sh, renderer) => {
+    before?.(sh, renderer); Object.assign(sh.uniforms, u);
+    sh.vertexShader = `attribute vec4 flex;\nattribute float veil;\nattribute vec4 drift;\nattribute float driftRate;\nattribute vec4 iBeat;\nuniform vec4 uStroke;\nvarying float vVeil;
+float strokeAt(float q) { q = fract(q); if (q < uStroke.x) { float e = q / uStroke.x; return mix(uStroke.w, uStroke.z, e * e * (3.0 - 2.0 * e)); }
+  if (q < uStroke.x + uStroke.y) { float e = (q - uStroke.x) / uStroke.y; return mix(uStroke.z, uStroke.w, e * e * (3.0 - 2.0 * e)); } return uStroke.w; }
+${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  transformed += flex.xyz * mix(strokeAt(iBeat.x), strokeAt(iBeat.x - iBeat.y), flex.w);
+  if (drift.z > 0.0) { float s = drift.x, w = iBeat.z * driftRate * 6.2832 + drift.y - s * drift.w * 6.2832, k = drift.z * pow(s, 1.3);
+    vec2 out2 = normalize(position.xz + vec2(1e-4, 0.0)), side = vec2(out2.y, -out2.x);
+    transformed.xz += (out2 * sin(w) + side * 0.7 * cos(w * 0.8 + 1.3)) * k; transformed.y += 0.35 * k * sin(w * 1.1 + 0.5); }
+  vVeil = veil;`)}`;
+    sh.fragmentShader = `uniform float uSee;\nvarying float vVeil;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.a = clamp(vVeil * uSee, 0.0, 1.0);')}`;
+  };
+  material.customProgramCacheKey = () => `alive0|crowd-${kind}`;
+  const mesh = new THREE.InstancedMesh(geometry, material, n); mesh.frustumCulled = false; mesh.renderOrder = 2; mesh.castShadow = false; mesh.name = `crowd-${kind}`;
+  // its shadow: every animal casts the same soft round shadow of its bell on the bed, as the whole animal did, from a plain disc the size of the bell held
+  // where the bell is. That disc is drawn into the sun's shadow map and nowhere else (no instances outside the shadow pass, as the world's shadow-only
+  // meshes do), so the shadow of seventy bells costs a few hundred faces and not seventy whole animals more. (It is of the bell at rest: it does not
+  // squeeze, and the arms cast none. A ring, letting the light through the clear middle, was tried: from the plain camera it read as a field of hoops.)
+  const shadeGeo = new THREE.CircleGeometry(def.wide * 0.5, 12).rotateX(-Math.PI / 2).translate(0, (def.top + def.rim) * 0.5, 0), shadeMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const shade = new THREE.InstancedMesh(shadeGeo, shadeMat, n); shade.instanceMatrix = mesh.instanceMatrix; shade.count = 0; shade.frustumCulled = false; shade.castShadow = true; shade.receiveShadow = false; shade.name = `crowd-${kind}-shadow`; shade.userData.shadowOnly = true;
+  shade.onBeforeShadow = () => { shade.count = n; }; shade.onAfterShadow = () => { shade.count = 0; }; mesh.add(shade);
+  function set(i, matrix, q, lag, clock) { mesh.setMatrixAt(i, matrix); beat.setXYZW(i, q, lag, clock, 0); }
+  return { mesh, shade, geometry, material, triangles: total / 3, stroke: T, set, done() { mesh.instanceMatrix.needsUpdate = true; beat.needsUpdate = true; }, dispose() { geometry.dispose(); material.dispose(); mesh.dispose(); shadeGeo.dispose(); shadeMat.dispose(); } };
+}

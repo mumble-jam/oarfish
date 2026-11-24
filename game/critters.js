@@ -595,7 +595,7 @@ const moonMid = (r) => 0.057 * (1 - (r / 0.2) ** 2) - 0.004; // the height of th
 export function moon(pal) {
   const m = mesher(), { gonad, gonadPale, canal, arm } = pal;
   // the four horseshoes, between the arms: a ribbon most of the way round a ring, the gap toward the middle
-  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.09, 0), R = 0.043, w = 0.013, N = 8, at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad; return [x, moonMid(Math.hypot(x, z)), z]; };
+  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.09, 0), R = 0.043, w = 0.013, N = 6, at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad; return [x, moonMid(Math.hypot(x, z)), z]; };
     for (let i = 0; i < N; i++) m.quad(at(i / N, R - w), at(i / N, R + w), at((i + 1) / N, R + w), at((i + 1) / N, R - w), [gonadPale, gonad, gonad], true); }
   // the canals, sixteen, from the stomach out to the rim; and the stomach, a small cross over the mouth
   for (let k = 0; k < 16; k++) { const phi = k * TAU / 16, t = phi + TAU / 4, r0 = k % 2 ? 0.14 : 0.125, w = 0.0045, a = around(phi, r0, moonMid(r0)), b = around(phi, 0.192, moonMid(0.192) + 0.004); m.tri([a[0] + Math.sin(t) * w, a[1], a[2] + Math.cos(t) * w], [a[0] - Math.sin(t) * w, a[1], a[2] - Math.cos(t) * w], b, canal); }
@@ -612,20 +612,10 @@ export function moonBell(pal) {
 }
 export function moonPiece(pal, def) {
   const m = mesher(), { arm, frill, fringe } = pal;
-  if (def.kind === 'a') return frilled(m, def, (s) => 0.026 * (1 - 0.5 * s) * Math.min(1, (1 - s) / 0.25) + 0.002, (s) => 0.0045 * (1 - 0.5 * s), arm, frill).geometry();
-  // a length of fringe: three fine threads side by side, each of its own length
-  for (const [x, l] of [[-0.75, 0.82], [0, 1], [0.7, 0.7]]) { const X = x * def.span, mid = def.cuts[1] * l, end = def.long * l, w = 0.0034; m.quad([X - w, 0, 0], [X + w, 0, 0], [X + w * 0.7, 0, mid], [X - w * 0.7, 0, mid], fringe).tri([X - w * 0.7, 0, mid], [X + w * 0.7, 0, mid], [X, 0, end], fringe); }
-  return m.geometry();
-}
-
-// The moon jelly from a little way off, for a bloom of them (bloom.js draws dozens at once): the saucer in eight sides and the four horseshoes
-// laid on top of it, about sixty faces where the whole animal has 550. No strands, nothing that squeezes: what moves it is how it is drawn.
-export function moonFar(pal) {
-  const m = mesher(), { bell, rim, gonad, gonadPale } = pal, rings = [[0.068, 0.07], [0.04, 0.14], [0.006, 0.19], [-0.014, 0.2]].map(([y, r]) => ringY(y, r, 8, { turn: TAU / 16 }));
-  m.cap(rings[0], [0, 1, 0], bell, 0.008);
-  sheet(m, rings, (i) => (i < 2 ? bell : [bell, rim]), [0, -0.05, 0]);
-  for (let q = 0; q < 4; q++) { const phi = TAU / 8 + q * TAU / 4, c = around(phi, 0.085, 0), at = (t, rad) => { const a = phi + Math.PI + 0.85 + t * (TAU - 1.7), x = c[0] + Math.sin(a) * rad, z = c[2] + Math.cos(a) * rad, r = Math.hypot(x, z); return [x, 0.071 - 0.29 * r * r + 0.009, z]; };
-    for (let i = 0; i < 3; i++) m.quad(at(i / 3, 0.022), at(i / 3, 0.06), at((i + 1) / 3, 0.06), at((i + 1) / 3, 0.022), [gonad, gonad, gonadPale]); } // a little bigger and bolder than the whole animal's, so that they still read from across the bloom
+  // (one section to a joint: the bloom draws seventy of these at once, every one whole, so the arms' pleats are as fine as their bends and no finer)
+  if (def.kind === 'a') return frilled(m, def, (s) => 0.026 * (1 - 0.5 * s) * Math.min(1, (1 - s) / 0.25) + 0.002, (s) => 0.0045 * (1 - 0.5 * s), arm, frill, 1).geometry();
+  // a length of fringe: three fine threads side by side, each of its own length, each one long thin face
+  for (const [x, l] of [[-0.75, 0.82], [0, 1], [0.7, 0.7]]) { const X = x * def.span, end = def.long * l, w = 0.0034; m.tri([X - w, 0, 0], [X + w, 0, 0], [X, 0, end], fringe); }
   return m.geometry();
 }
 
