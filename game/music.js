@@ -327,6 +327,7 @@ export function createMusic({ context = null } = {}) {
     squid: { voice: 'pluck', slot: 3, low: 64, len: 0.4, land: (nx) => 72 + nx.root },
     moonjelly: { voice: 'celesta', slot: 1, low: 80, len: 1.6, land: bell },
     nettle: { voice: 'cello', slot: 2, low: 30, len: 1.4, land: (nx) => bassPitch(nx.root + nx.q.tones[1], 40) },
+    boxjelly: { voice: 'vibes', slot: 2, low: 72, len: 0.9, land: (nx) => 72 + nx.root + nx.q.scale[6] }, // the kelp forest's box jelly (kelpwood.js): its glassy pair starts on the seventh of the scale
   };
   const inScale = (ch, m) => ch.q.scale.includes((((m - ch.root) % 12) + 12) % 12);
   const stepFrom = (ch, m, k) => { let x = m; for (let i = 0; i < Math.abs(k);) { x += Math.sign(k); if (inScale(ch, x)) i++; } return x; }; // k steps of the chord's scale from m (down for k < 0)
