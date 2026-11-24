@@ -33,6 +33,7 @@
 import * as THREE from 'three';
 import { make, geometry, resolve } from './npc.js';
 import { jellyCrowd } from './jelly.js';
+import { createInk } from './ink.js';
 import { rng, clamp, lerp, damp, glowTexture, beamTexture } from './geo.js';
 
 // ---------------------------------------------------------------- every number, in one place
@@ -68,7 +69,26 @@ export const BLOOM = {
     fright: { see: 10, calm: 0.9, gain: 0.55, crowd: 0.9, close: 1.7, cool: 0.22, still: 0.5, bluff: 0.3, flee: 0.65, ink: 1, dash: 6 },
     raid: { reach: 46, wake: 50, rest: 20, meal: 6, every: 2.6, aim: 0.7, ring: 1.7 },
     scatter: { far: 12, regroup: 14 } },
-  ink: { hold: 2.6, fade: 2.4, swell: 1.8, colour: '#2a1c30' }, // the copy it leaves: holds its shape, then thins and spreads
+  // the ink it leaves (ink.js draws it). The rule: a dash through it within `hold` + `fade` seconds of its being left bursts it (as it always was).
+  // The picture: a heap of soft see-through puffs laid along the squid as it was posed, which swells, curls, sags and drifts and is gone at `life`
+  // seconds, before the shoal gathers again (scatter.regroup). colour: the ink at its thickest; thin: at its thinnest and torn.
+  //   slices, slab: where the mantle is cut into puffs (model units, head +z) and how thick a cut; headZ: the head's puff. dense: how see-through a
+  //   puff of the copy is at first (never `most`); edge: how fast every puff thins toward its rim; open: how fast the copy opens from its middle (m/s).
+  //   hold, round: the copy keeps its outline for `hold` seconds and has lost it by `round`; grow, growT: how much and how soon a puff swells; thin:
+  //   how see-through it gets as it swells (alpha falls as size to this power); fadeFrom: when the whole starts to thin away, to nothing at `life`.
+  //   wake: how soon the water starts to move it; swirl, curl: how fast the curling water goes and how big its curls are (per metre); billow, billowT:
+  //   how fast it spreads out from its middle at first, and how soon that dies away; sag, drift:
+  //   how fast it sinks and goes with the current. veil, veilR, veilA, veilGrow: the faint outer layer. leaders, lead, leadLife, leadCurl, wait,
+  //   crumbStep, wisp [across, along], wispA, wispLife, wispGrow, crumbs: the wisps. body2, drag, part, follow: how the body pushes it and how soon
+  //   it goes back to the water's way; streamAt, streams, stream, streamA, streamLife, streamKeep: the streamers a quick part drags out of it.
+  //   burstR, burstPush, burstFade: a dash through it. stain: how dark its mark on the bed is at most. clouds: how many can be in the water at once.
+  ink: { hold: 2.6, fade: 2.4, life: 13.4, colour: '#382650', thin: '#9789b8',
+    slices: [0.14, 0.02, -0.12, -0.26, -0.4, -0.54, -0.68, -0.81, -0.93], slab: 0.07, headZ: 0.22, dense: 0.62, most: 0.72, edge: 2.6, open: 0.1,
+    round: 4.5, grow: 2.4, growT: 2.4, thin: 1.35, fadeFrom: 6.5, wake: 1.4, swirl: 0.3, curl: 0.7, billow: 0.3, billowT: 6, sag: 0.13, drift: 0.12,
+    veil: 3, veilR: 0.55, veilA: 0.16, veilGrow: 3.2, leaders: 7, lead: [0.35, 0.65], leadLife: [4.5, 8], leadCurl: 1.6, wait: 0.35,
+    crumbStep: 0.1, wisp: [0.13, 0.2], wispA: 0.2, wispLife: 3.6, wispGrow: 1.6, crumbs: 80,
+    body2: 0.4, drag: 0.7, part: 0.45, follow: 1.2, streamAt: 1.4, streams: 6, stream: [0.1, 0.18], streamA: 0.3, streamLife: 2.6, streamKeep: 0.3,
+    burstR: 3, burstPush: 2.4, burstFade: 3, stain: 0.3, clouds: 2, body: 40 },
   // The mini-game: settling the shoal. see: how near the head has to come for a try to start; near: how close to a squid it has to hang;
   // hold: seconds it has to stay there with the shoal calm (every squid's fright under `calm`) and the fish slower than `slow`; limit: seconds a try
   // may take before the shoal goes off hunting. grades: under each of these many seconds is a step up (1, 2, 3); 4 is the third done without a bluff
@@ -168,14 +188,13 @@ export function createBloom(scene, world, hooks) {
   const shoal = { mode: 'rest', t: BLOOM.squid.raid.rest * 0.5, target: null, eaten: 0, turn: 0, next: 0, raids: 0, scatterT: 0 };
   const lead = () => squid[0];
 
-  // ---- ink: a copy of the squid in ink, which holds its shape, then thins and spreads; a dash through it bursts it
-  const INK = BLOOM.ink, inkMat = () => { const m = new THREE.MeshBasicMaterial({ color: INK.colour, transparent: true, opacity: 0.88, depthWrite: false }); owned.push(m); return m; };
+  // ---- ink: a copy of the squid in ink, which holds its outline for a beat and then billows, curls, sags and thins away (ink.js); a dash through it bursts it
+  const INK = BLOOM.ink, ink = createInk(scene, INK, (x, z) => world.drawn(x, z), cur); owned.push(ink);
   const inks = [];
   function leaveInk(sq) {
-    const m = add(new THREE.Mesh(geometry('squid'), inkMat())); m.quaternion.copy(sq.a.object.quaternion); m.position.copy(sq.a.object.position); m.scale.copy(sq.a.object.scale).multiplyScalar(1.15); m.renderOrder = 3;
-    const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: INK.colour, transparent: true, opacity: 0.6, depthWrite: false })); owned.push(cloud.material); cloud.scale.setScalar(2.2); m.add(cloud); cloud.position.set(0, 0, -0.4);
-    inks.push({ m, cloud, t: 0, at: sq.pos.clone(), burst: false, s: m.scale.x });
-  }
+    const o = sq.a.object; if (Math.hypot(o.position.x - sq.pos.x - off.x, o.position.y - sq.pos.y, o.position.z - sq.pos.z - off.z) > 0.5) { // not drawn lately (out of sight): pose it where it is, so the copy is laid along it
+      o.visible = true; for (let i = 0; i < 3; i++) sq.a.rig.update(1 / 30, { x: sq.pos.x + off.x, y: sq.pos.y, z: sq.pos.z + off.z, yaw: sq.yaw, pitch: 0, mood: sq.mood, rate: 1.2 }); }
+    const c = ink.leave(sq.a, off); c.from = sq; inks.push({ c, t: 0, at: sq.pos.clone(), burst: false }); }
 
   // a fish nearest a point taken from a swarm (the world's own: world.nibble), with a small pale spark where it was
   const sparks = Array.from({ length: 6 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: '#ffffff', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); owned.push(s.material); s.scale.setScalar(0.9); add(s); return { s, t: 9 }; });
@@ -272,12 +291,11 @@ export function createBloom(scene, world, hooks) {
     { const fry = world.schools.find((sc) => sc.bloom); if (fry && fry.left < fry.n && fishFar > R + 10 && (fry.back = (fry.back || 0) + dt) > BLOOM.fry.back) { fry.back = 0; world.revive(fry); } }
     plan.hunted = Math.max(0, plan.hunted - dt * 0.5);
 
-    // ink
-    for (let i = inks.length - 1; i >= 0; i--) { const k = inks[i]; k.t += dt; const fade = clamp((k.t - (k.burst ? 0 : INK.hold)) / (k.burst ? 0.6 : INK.fade), 0, 1);
-      if (!k.burst && rig.dashT > 0 && Math.hypot(head.x - k.at.x, head.y - k.at.y, head.z - k.at.z) < 1.8) { k.burst = true; k.t = 0; plan.inkBurst = (plan.inkBurst || 0) + 1; hooks.moment('burst'); }
-      k.m.scale.setScalar(k.s * lerp(1, k.burst ? 2.6 : INK.swell, fade)); k.m.material.opacity = 0.88 * (1 - fade); k.cloud.material.opacity = 0.6 * (1 - fade * 0.8) * (k.burst ? 1.5 : 1);
-      k.m.position.set(k.at.x + off.x, k.at.y + 0.2 * fade, k.at.z + off.z);
-      if (fade >= 1) { scene.remove(k.m); inks.splice(i, 1); } }
+    // ink: the rule (a dash through it, while it is fresh, bursts it), and then the picture
+    for (let i = inks.length - 1; i >= 0; i--) { const k = inks[i]; k.t += dt;
+      if (!k.burst && k.t < INK.hold + INK.fade && rig.dashT > 0 && Math.hypot(head.x - k.at.x, head.y - k.at.y, head.z - k.at.z) < 1.8) { k.burst = true; plan.inkBurst = (plan.inkBurst || 0) + 1; hooks.moment('burst'); ink.burst(k.c, head, tmp.copy(rig.forward)); }
+      if (!ink.clouds.includes(k.c)) inks.splice(i, 1); }
+    ink.update(dt, off, fishFar < R + 30 ? jt : []);
     for (const sp of sparks) { sp.t += dt; sp.s.material.opacity = Math.max(0, 0.9 * (1 - sp.t / 0.5)); sp.s.visible = sp.t < 0.5; }
   }
 
@@ -395,10 +413,9 @@ export function createBloom(scene, world, hooks) {
     for (const o of owned) { if (o.isObject3D) { scene.remove(o); if (o.isInstancedMesh) o.dispose(); } else o.dispose?.(); }
     for (const n of nettles) { scene.remove(n.a.object); n.a.dispose(); }
     for (const s of squid) { scene.remove(s.a.object); s.a.dispose(); }
-    for (const k of inks) scene.remove(k.m);
     if (mark) world.react?.nest?.group.remove(mark);
   }
   // for the checks and the pictures
-  const debug = { off, shoal, tryNow, inks, crowd, jellies, scatter: (s = squid[0]) => inkAndScatter(s), settle: () => { tryNow.on = true; tryNow.t = tryNow.t || 1; tryNow.hold = ST.hold; settling(0); }, get mark() { return mark; } };
+  const debug = { off, shoal, tryNow, inks, ink, crowd, jellies, scatter: (s = squid[0]) => inkAndScatter(s), settle: () => { tryNow.on = true; tryNow.t = tryNow.t || 1; tryNow.hold = ST.hold; settling(0); }, get mark() { return mark; } };
   return { update, cast, dispose, plan, nettles, squid, state, debug, at: (p) => ({ x: p.x + off.x, y: p.y, z: p.z + off.z }) };
 }
