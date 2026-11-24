@@ -58,7 +58,7 @@ export function bodyIn(snout, joints, cx, cz, r, out) { let n = 0, inn = 0; if (
 export function bodyMarks() {
   const most = 48, pos = new Float32Array(most * 3), geo = new THREE.BufferGeometry(), map = glowTexture();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setDrawRange(0, 0);
-  const mat = new THREE.PointsMaterial({ color: '#ffae5c', size: 0.7, map, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: true });
+  const mat = new THREE.PointsMaterial({ color: '#ff9a40', size: 1.0, map, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: true });
   const points = new THREE.Points(geo, mat); points.frustumCulled = false; points.visible = false; points.renderOrder = 3;
   return { points, set(list) { const n = Math.min(most, list.length); for (let i = 0; i < n; i++) { pos[i * 3] = list[i].x; pos[i * 3 + 1] = list[i].y + 0.25; pos[i * 3 + 2] = list[i].z; }
     geo.attributes.position.needsUpdate = true; geo.setDrawRange(0, n); points.visible = n > 0; }, dispose() { geo.dispose(); mat.dispose(); map.dispose(); } }; }
@@ -1217,7 +1217,7 @@ float seaLight(vec2 p, float t) {
   const ringGeo = new THREE.BufferGeometry().setFromPoints(circle);
   owned.push({ dispose: () => ringGeo.dispose() });
   const line = (color, opacity) => mat(new THREE.LineBasicMaterial({ color, transparent: true, opacity, fog: false }));
-  const ringYes = line('#f2faf7', 0.32), ringNo = line('#ff7f96', 0.5), arcYes = line('#ffffff', 0.95), arcNo = line('#ff7f96', 0.9);
+  const ringYes = line('#f2faf7', 0.32), ringNo = line('#ff7f96', 0.5), arcYes = line('#ffffff', 0.95), arcNo = line('#ff7f96', 0.9), insideYes = line('#ffe9b8', 0.95); // (insideYes: how much of the body is in a cleaning station's ring)
   for (const sc of schools) {
     sc.ring = add(new THREE.Line(ringGeo, ringYes)); sc.arc = add(new THREE.Line(ringGeo.clone(), arcYes));
     owned.push({ dispose: () => sc.arc.geometry.dispose() });
@@ -1431,6 +1431,7 @@ float seaLight(vec2 p, float t) {
     g.rotation.y = st.yaw; st.mesh = g; single.push(st);
     st.ring = add(new THREE.Line(ringGeo.clone(), ringYes)); st.arc = add(new THREE.Line(ringGeo.clone(), arcYes)); owned.push({ dispose: () => { st.arc.geometry.dispose(); st.ring.geometry.dispose(); } });
     st.marks = bodyMarks(); add(st.marks.points); owned.push(st.marks); st.share = 0; st.reach = CLEAN.reach;
+    st.inside = add(new THREE.Line(ringGeo.clone(), insideYes)); st.inside.frustumCulled = false; st.inside.visible = false; owned.push({ dispose: () => st.inside.geometry.dispose() });
     for (const o of [st.ring, st.arc]) { o.frustumCulled = false; o.visible = false; } }
   // a jar breaks: what stands there afterwards is its foot, and it no longer stops anyone
   const breakUrn = (u) => { if (u.broken) return false; u.broken = true; u.col.off = true; u.mesh.geometry = G.jarBroken; return true; };
@@ -1632,9 +1633,9 @@ float seaLight(vec2 p, float t) {
       if (st.k >= 1) { st.k = 0; st.live = false; st.on = false; st.uses--; st.rest = CLEAN.rest; cleanNews.push({ what: 'done', x: cx, y: st.top, z: cz, left: st.uses }); }
       if (cleanNews.length > 16) cleanNews.shift();
       // the ring over it: there while the station has something to give and the fish is about. It is drawn as far round as the share of the body inside
-      // it (whole when all of it is), the parts still outside are marked warm, and the bright arc inside it fills as the work goes
-      const show = st.near; st.ring.visible = show; st.arc.visible = show && st.k > 0.01; st.marks.set(show && st.share > 0 && st.share < 1 ? outside : []);
-      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(R); st.ring.geometry.setDrawRange(0, Math.max(2, Math.round(Math.max(0.04, st.share) * 48) + 1));
+      // it (a bright arc over the faint whole ring; all round when all of it is), the parts still outside are marked warm, and the white arc just inside it fills as the work goes
+      const show = st.near; st.ring.visible = show; st.inside.visible = show && st.share > 0; st.arc.visible = show && st.k > 0.01; st.marks.set(show && st.share > 0 && st.share < 1 ? outside : []);
+      if (show) { st.ring.position.set(cx, st.top + 0.5, cz); st.ring.scale.setScalar(R); st.inside.position.set(cx, st.top + 0.505, cz); st.inside.scale.setScalar(R); st.inside.geometry.setDrawRange(0, Math.max(2, Math.round(st.share * 48) + 1));
         st.arc.position.set(cx, st.top + 0.51, cz); st.arc.scale.setScalar(R * 0.9); st.arc.geometry.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
       // its cleaners: turning over the coral head; along the body while they work; gone into the coral while the station rests or is spent
       st.away += ((open ? 0 : 1) - st.away) * (1 - Math.exp(-2.5 * dt));

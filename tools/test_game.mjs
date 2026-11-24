@@ -1095,8 +1095,8 @@ check('the reef head has a cleaning station that mends and does not feed: a whol
 // only as far round as the share of the body in it, with the parts outside marked; curled up inside, a starting body is mended, and so is the longest body there can be
 s = await ev(() => { const g = window.__game, T = window.T, C = g.CLEAN, out = {}, still = { ...T.none(), amount: 0 };
   const at = (band) => { g.startRun(4242); if (band) g.enterFloor(band, false); g.run.safe = 1e9; for (const b of g.foes.biters) b.alive = false; g.sim(0.2, T.none());
-    if (band) { const st = g.world.react.stations[0]; return { st, x: st.x, z: st.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => st.ring, marks: () => st.marks.points, uses: () => st.uses }; }
-    const r = g.reef, st = r.debug.st, o = r.debug.off; return { st, x: st.x + o.x, z: st.z + o.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => r.debug.ring, marks: () => r.debug.marks.points, uses: () => st.uses }; };
+    if (band) { const st = g.world.react.stations[0]; return { st, x: st.x, z: st.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => st.inside, marks: () => st.marks.points, uses: () => st.uses }; }
+    const r = g.reef, st = r.debug.st, o = r.debug.off; return { st, x: st.x + o.x, z: st.z + o.z, top: st.top, k: () => st.k, share: () => st.share, R: () => st.reach, ring: () => r.debug.inside, marks: () => r.debug.marks.points, uses: () => st.uses }; };
   const size = (segs) => { g.run.longest = Math.max(segs + 2, g.run.longest); g.run.segs = segs; g.buildFish(segs); g.sim(0.1, T.none()); };
   const curl = (S) => { const L = g.rig.length, v = Math.min(2.8, Math.max(1.45, 1.45 + 0.25 * (L - 3))); T.aroundPoint(S.x, S.top + 1.2, S.z, 0); T.coil((L + 0.8) / v); };
   for (const [name, band] of [['reef', 0], ['deep', 2]]) { const o = out[name] = {};

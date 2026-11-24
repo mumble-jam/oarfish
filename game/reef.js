@@ -90,8 +90,9 @@ export function createReef(scene, world, hooks) {
     part('sponge', tube[0], 0.95, -0.05, 0.5, 0.8); part('sponge', tube[2 % tube.length], 0.7, -0.05, -0.95, 0.6);
     g.position.set(C.x, st.y, C.z); g.rotation.y = plan.facing; st.mesh = g; }
   const ringGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 49 }, (_, i) => new THREE.Vector3(Math.sin((i / 48) * TAU), 0, Math.cos((i / 48) * TAU)))), arcGeo = ringGeo.clone(); owned.push(ringGeo, arcGeo);
-  const ringMat = new THREE.LineBasicMaterial({ color: '#dffcff', transparent: true, opacity: 0.45, depthWrite: false }), arcMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, depthWrite: false }); owned.push(ringMat, arcMat);
-  const ring = add(new THREE.Line(ringGeo, ringMat)), arc = add(new THREE.Line(arcGeo, arcMat)), marks = bodyMarks(), outside = []; add(marks.points); owned.push(marks); ring.visible = arc.visible = false; ring.frustumCulled = arc.frustumCulled = false;
+  const ringMat = new THREE.LineBasicMaterial({ color: '#dffcff', transparent: true, opacity: 0.3, depthWrite: false }), arcMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, depthWrite: false }); owned.push(ringMat, arcMat);
+  const ring = add(new THREE.Line(ringGeo, ringMat)), arc = add(new THREE.Line(arcGeo, arcMat)), marks = bodyMarks(), outside = []; add(marks.points); owned.push(marks);
+  const insideGeo = ringGeo.clone(), insideMat = new THREE.LineBasicMaterial({ color: '#ffe9b8', transparent: true, opacity: 0.95, depthWrite: false }), inside = add(new THREE.Line(insideGeo, insideMat)); owned.push(insideGeo, insideMat); inside.visible = false; inside.frustumCulled = false; ring.visible = arc.visible = false; ring.frustumCulled = arc.frustumCulled = false;
   const cleanKit = swarmKit('cleaner', { glow: 0.2 }), cleanMat = cleanKit.material; owned.push({ dispose: () => cleanKit.dispose() });
   const cleaners = add(new THREE.InstancedMesh(cleanKit.geometry, cleanMat, S.fish)); cleaners.frustumCulled = false; cleaners.castShadow = true;
   const cfish = Array.from({ length: S.fish }, (_, i) => ({ p: new THREE.Vector3(C.x, st.top + 0.5, C.z), v: new THREE.Vector3(), ph: i * 1.9, slot: 0.08 + 0.84 * ((i * 0.618) % 1), side: i % 2 ? 1 : -1, yaw: i, pitch: 0 }));
@@ -108,8 +109,8 @@ export function createReef(scene, world, hooks) {
     else { st.k = Math.max(0, st.k - dt / (over ? 3.5 : 1.2)); if (st.live && st.k <= 0) { st.live = false; hooks.moment('flit'); } } // a head that stirs loses ground slowly; one that leaves, fast
     const step = (k) => Math.floor(k * 6); if (still && step(st.k) > step(was) && st.k < 1) hooks.gulp(step(st.k), 7, 0.6);
     if (st.k >= 1) { st.k = 0; st.live = false; st.uses--; st.rest = S.rest; state.mended++; hooks.mend(); }
-    ring.visible = st.near; arc.visible = st.near && st.k > 0.01; marks.set(st.near && st.share > 0 && st.share < 1 ? outside : []); // as far round as the body is in; what is out marked warm
-    if (st.near) { ring.position.set(cx, st.top + 0.5, cz); ring.scale.setScalar(R); ringGeo.setDrawRange(0, Math.max(2, Math.round(Math.max(0.04, st.share) * 48) + 1));
+    ring.visible = st.near; inside.visible = st.near && st.share > 0; arc.visible = st.near && st.k > 0.01; marks.set(st.near && st.share > 0 && st.share < 1 ? outside : []); // as far round as the body is in; what is out marked warm
+    if (st.near) { ring.position.set(cx, st.top + 0.5, cz); ring.scale.setScalar(R); inside.position.set(cx, st.top + 0.505, cz); inside.scale.setScalar(R); insideGeo.setDrawRange(0, Math.max(2, Math.round(st.share * 48) + 1));
       arc.position.set(cx, st.top + 0.51, cz); arc.scale.setScalar(R * 0.9); arcGeo.setDrawRange(0, Math.max(2, Math.round(st.k * 48) + 1)); }
     st.mesh.position.set(cx, st.y, cz);
     // the cleaners: turning over the coral; along the body while they work; down in the coral while the station rests or is spent
@@ -222,6 +223,6 @@ export function createReef(scene, world, hooks) {
     corals(head, t);
   }
   // for the checks and the pictures
-  const debug = { st, ring, arc, marks, cleaners, meshes, pieces, grow, flash, off, grownBy: (p) => grownBy(p, state.t) };
+  const debug = { st, ring, inside, arc, marks, cleaners, meshes, pieces, grow, flash, off, grownBy: (p) => grownBy(p, state.t) };
   return { update, dispose, plan, state, fish, debug, get rider() { return state.rider; } };
 }
