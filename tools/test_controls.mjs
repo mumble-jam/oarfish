@@ -29,6 +29,7 @@ await page.addInitScript(() => { window.__noNursery = true;
   const sense = { vendorId: 0x054c, productId: 0x0ce6, opened: false, collections: [{ outputReports: [{ reportId: 2 }] }], async open() { sense.opened = true; }, async sendReport(id, data) { window.hidSent.push([id, Array.from(data)]); }, async receiveFeatureReport() { return fw; } };
   Object.defineProperty(Navigator.prototype, 'hid', { configurable: true, get: () => ({ getDevices: async () => [], requestDevice: async () => (window.hidPick ? [sense] : []), addEventListener() {} }) });
 });
+await page.addInitScript(() => { try { const f = JSON.parse(localStorage.getItem('oarfish.feel') || '{}'); if (!f.mode) localStorage.setItem('oarfish.feel', JSON.stringify({ ...f, mode: 'point' })); } catch {} }); // made on the plate camera, the default when this was written: ask for it, unless a camera was chosen in this page
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.evaluate(() => { window.__hold = true; });
@@ -363,6 +364,15 @@ await page.click('#note-back'); await frame(page);
 const after = await ev(() => ({ on: document.getElementById('pause').classList.contains('on'), end: document.getElementById('end').classList.contains('on'), state: window.__game.run.state }));
 check('the same sheet opens over the end of a dive, with what was written still in it, and Back returns to the end', s.noting && s.over && /the crab is great/.test(s.kept) && /died there/.test(s.facts) && !after.on && after.end && after.state === 'dead', JSON.stringify({ ...s, after }));
 await ev(() => { try { localStorage.clear(); } catch {} });
+// a first visit opens on the adventure camera; a camera chosen is kept, the plate too. (A page of its own, without the plate this suite asks for.)
+{ const p2 = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage(); await p2.addInitScript(() => { window.__noNursery = true; });
+  await p2.goto(url, { waitUntil: 'domcontentloaded' }); await p2.waitForFunction('window.__ready === true', null, { timeout: 90000 });
+  const fresh = await p2.evaluate(() => ({ mode: window.__game.feel.mode, pressed: document.getElementById('mode-look').getAttribute('aria-pressed') }));
+  await p2.evaluate(() => document.getElementById('mode-point').click());
+  await p2.reload({ waitUntil: 'domcontentloaded' }); await p2.waitForFunction('window.__ready === true', null, { timeout: 90000 });
+  const kept = await p2.evaluate(() => ({ mode: window.__game.feel.mode, saved: JSON.parse(localStorage.getItem('oarfish.feel') || '{}').mode }));
+  check('a first visit starts on the adventure camera, and a player who chose the plate camera finds it again on the next visit', fresh.mode === 'look' && fresh.pressed === 'true' && kept.mode === 'point' && kept.saved === 'point', JSON.stringify({ fresh, kept }));
+  await p2.evaluate(() => { try { localStorage.clear(); } catch {} }); await p2.context().close(); }
 await browser.close(); server.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall control checks passed');
 process.exit(failures ? 1 : 0);

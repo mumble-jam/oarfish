@@ -94,7 +94,7 @@ body { background: var(--abyss); color: var(--foam); font: 400 15px/1.35 var(--f
 .scale.low #len { color: var(--alarm); }
 @keyframes throb { to { opacity: 0.45; } }
 
-/* the title card for each band, the marker to the way down */
+/* the title card for each band, and the marker to the way down (a testing tool only: no player sees it) */
 #card { position: absolute; z-index: 2; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.9s; text-shadow: 0 2px 18px color-mix(in srgb, var(--ink) 70%, transparent); padding: 0 24px; }
 #card.on { opacity: 1; }
 #card b { display: block; font: italic 400 clamp(30px, 5vw, 52px)/1.05 var(--font-display); text-wrap: balance; }
@@ -283,7 +283,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 #pause button:focus, #end button:focus { outline: 2px solid var(--foam); outline-offset: 2px; }
 .keys.menu { position: static; max-width: none; pointer-events: auto; display: flex; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--foam) 20%, transparent); }
 .keys.menu li.key { display: flex; }
-/* The game as it is meant to be seen: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
+/* The game as it is meant to be seen: the plate, the scale bar, the key prompts, the messages, and a way to pause.
    H (or the pause menu) turns on the full view, which adds the key list, the tuning drawer and the model tools. */
 #stage:not(.full) > .keys, #stage:not(.full) > .tools, #stage.cine > .keys, #stage.cine > .tools, #stage.cine > .top, #stage.cine #toast { display: none; }
 #stage:not(.full):not(.paused) > .top > #btn-fs, #stage:not(.full):not(.paused) > .top > #music-tab { display: none; }
@@ -361,7 +361,7 @@ button:disabled { opacity: 0.4; cursor: default; }
   <div id="prompt"></div>
   <div id="toast" role="status" aria-live="polite"><i class="mark"></i><div class="txt"><em id="toast-kick"></em><b id="toast-title"></b><span id="hint"></span></div><i class="time"></i></div>
   <svg id="stamina" viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="13"/><circle class="fg" id="stamina-arc" cx="18" cy="18" r="13" pathLength="100"/></svg>
-  <div id="goal"><div class="in"><i id="goal-arrow"></i><span id="goal-label">the rift</span></div></div>
+  <div id="goal" hidden><div class="in"><i id="goal-arrow"></i><span id="goal-label">the rift</span></div></div>
 
   <div class="lettering foot">
     <h1 class="caption"><b>Le Gymnètre Épée.</b><i>(Gymnetrus gladius)</i></h1>
@@ -454,7 +454,7 @@ button:disabled { opacity: 0.4; cursor: default; }
       <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
       <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button><button type="button" id="dev-bloom">Go to the bloom water</button></div>
       <div class="row"><button type="button" id="dev-sandflat">Go to the sand flat</button><button type="button" id="dev-reef">Go to the reef head</button><button type="button" id="dev-kelpwood">Go to the kelp forest</button></div>
-      <div class="row"><button type="button" id="dev-shapes" aria-pressed="false">Show hit shapes</button></div>
+      <div class="row"><button type="button" id="dev-shapes" aria-pressed="false">Show hit shapes</button><button type="button" id="dev-marker" aria-pressed="false">Show the marker to the rift</button><button type="button" id="dev-seal">Closed rift: glass</button></div>
       <span class="cap" id="bring-cap">Bring one to look at (not in the dive yet)</span>
       <div class="row wrap" id="dev-bring" role="group" aria-labelledby="bring-cap"></div>
       <div class="row"><button type="button" id="dev-unlock">Unlock every shell</button><button type="button" id="dev-forget">Empty the nest</button></div>

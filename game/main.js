@@ -17,6 +17,7 @@ import { clamp, damp, lerp, glowTexture } from './geo.js';
 import { SAND_PETS, bringSand } from './sandpets.js';
 import { createBloom, BLOOM } from './bloom.js';
 import { createShapeView } from './shapes.js';
+import { SEAL } from './seal.js';
 
 // Balance, all in one place. A segment is one spine bone, about 0.31 m of body.
 const START_SEGS = 10, MIN_SEGS = 4, MAX_SEGS = 26, SHED_COST = 3;
@@ -54,7 +55,7 @@ const MUSIC_KEYS = ['dream', 'energy', 'menace', 'react', 'swing', 'band'];
 const SHIPPED_MUSIC = { all: { dream: 60, energy: 50, menace: 50, react: 70, swing: 60, band: 50 }, zones: {} };
 // Every dive is built from one number, its seed, drawn afresh each time. Players never see it; the checks start a dive
 // from a known one (`startRun(4242)`) so that they stand in the same world every run.
-const SHIPPED_FEEL = { assist: 60, mode: 'point', look: 50, rumble: 70 }; // help with wrapping a swarm; which controls a new player gets; look speed
+const SHIPPED_FEEL = { assist: 60, mode: 'look', look: 50, rumble: 70 }; // help with wrapping a swarm; which controls a new player gets (George: the adventure camera, by default; a camera chosen is kept in localStorage['oarfish.feel'].mode); look speed
 // The two views. 'point' is the plate: high, far and flat, and the mouse says where to swim. 'look' is the
 // adventure camera: nearer and wider, free to drop below the fish, and the mouse (or the right stick) turns it.
 const VIEW = { point: { fov: 30, k: 1, low: 0.16 }, look: { fov: 40, k: 0.66, low: -0.3 } };
@@ -123,6 +124,7 @@ export async function start(saved = {}) {
   const crest = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: '#ffd27a', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, fog: false })); // the charge a full-grown fish eats into its crest: seen on the fish, not on the plate
   crest.renderOrder = 5; scene.add(crest);
   const hitView = createShapeView(scene); // the testing tool 'Show hit shapes' (shapes.js)
+  const devSee = { marker: false, seal: SEAL.looks[0] }; // testing tools: the old marker to the rift (no player sees it), and which look a closed rift has (seal.js)
   scene.add(hemi, sun, sun.target, lamp);
   const camera = new THREE.PerspectiveCamera(30, 1, 0.3, 260);
 
@@ -332,7 +334,7 @@ export async function start(saved = {}) {
     $('btn-skip').hidden = !tut.on;
     guard?.dispose(); guard = null;
     if (world.hall) sum = createSum(scene, world, { seed: run.seed }, sumGame); // the palace: its wall is the Sum
-    else guard = createGuard(scene, world, { seed: run.seed, floor: index }, guardGame); // every rift has its keeper
+    else guard = createGuard(scene, world, { seed: run.seed, floor: index, seal: devSee.seal }, guardGame); // every rift has its keeper
     arena = { height: world.height, ceiling: world.ceiling, pushOut(p, r) { world.pushOut(p, r); sum?.pushOut(p, r); guard?.pushOut(p, r); }, bend(items, r) { guard?.bend?.(items, r); } }; // (bend: the Keeper turns the whole body aside, not only the head) // the Sum is solid, and so is the veil over a kept rift
     Object.assign(end, { kind: null, swap: 0, quake: 0, vista: 0, burst: -9 }); cam.shake = 0;
     goalEl.style.display = ''; fade(false);
@@ -520,7 +522,7 @@ export async function start(saved = {}) {
       if (up) say('crest', 'Your crest stands taller. You are long enough now for a bigger kind of swarm.', 8);
     }
     if (grew && growCost(run.segs, 1) >= LENGTH.cost[0] + 3) say('cost', 'The longer you are, the more each new segment costs. A long body needs the bigger swarms.', 8);
-    if (run.segs >= 12 && run.floor === 0) say('well', 'Follow the marker to the rift and dive down into it when you are ready.', 9);
+    if (run.segs >= 12 && run.floor === 0) say('well', 'You are long enough now to go down. Somewhere the seabed is cracked open: dive into the rift when you find it.', 9);
   }
   function lose(n, kind) {
     const N = rig.spine.length;
@@ -735,7 +737,7 @@ export async function start(saved = {}) {
     if (on && !teach.on) { teach.done = false; teach.learned = {}; } // asked for again: from the beginning
     teach.on = on; saveTeach();
     $('f-teach').checked = on;
-    if (!on && tut.on) { tut.on = false; if (!quiet) tell('No more teaching. The rift is where the marker points. You can turn it back on in the pause menu.', 7); }
+    if (!on && tut.on) { tut.on = false; if (!quiet) tell('No more teaching. You can turn it back on in the pause menu.', 7); }
     $('btn-skip').hidden = !tut.on;
   }
   function lessons(dt) {
@@ -743,7 +745,7 @@ export async function start(saved = {}) {
     tut.stall += dt;
     const L = LESSONS[tut.step], head = rig.snout, t = world.time.value;
     const next = () => { tut.step++; tut.stall = 0; tut.told = false; tut.was = 0; music.hit('catch', 0.8); buzz(0, 0.5, 120); pulse('grow');
-      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('Follow the marker to the rift. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
+      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('The paved way goes on to the rift. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
     if (L === 'hoop') {
       const h = N.hoops[tut.step], dx = wrapD(head.x - h.x), dz = wrapD(head.z - h.z), along = dx * h.ux + dz * h.uz, off = Math.hypot(dx - along * h.ux, dz - along * h.uz, head.y - h.y);
       h.mesh.material.emissiveIntensity = 0.3 + 0.25 * Math.sin(t * 3.2);
@@ -863,12 +865,16 @@ export async function start(saved = {}) {
     sc.classList.toggle('low', run.segs <= MIN_SEGS + 2);
     $('len').textContent = `${bodyMetres().toFixed(1)} m`;
     $('btn-shed').disabled = run.segs - SHED_COST < MIN_SEGS;
-    // marker to the rift or the palace, or to whatever the nursery is teaching
-    const lesson = tutTarget(), g = lesson || world.goal;
+    // marker to the rift or the palace, or to whatever the nursery is teaching. No player sees it (George: 'the player should explore everything on their
+    // own'): it is a testing tool, 'Show the marker to the rift', for the people building the game
     prompt();
+    goalEl.hidden = !devSee.marker;
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (devSee.marker) {
+    const lesson = tutTarget(), g = lesson || world.goal;
     const dx = wrapD(g.x - rig.pos.x), dz = wrapD(g.z - rig.pos.z), dist = Math.hypot(dx, dz);
     proj.set(rig.pos.x + dx, g.y + 1.5, rig.pos.z + dz).project(camera);
-    const w = stage.clientWidth, h = stage.clientHeight, behind = proj.z > 1;
+    const behind = proj.z > 1;
     let sx = (proj.x * 0.5 + 0.5) * w, sy = (-proj.y * 0.5 + 0.5) * h;
     if (behind) { sx = w - sx; sy = h - sy; }
     clearT -= dt;
@@ -886,6 +892,7 @@ export async function start(saved = {}) {
     goalArrow.style.transform = `rotate(${ang.toFixed(1)}deg)`;
     goalEl.classList.toggle('here', inside);
     goalLabel.textContent = `${lesson ? lesson.label : g.kind === 'palace' ? 'the palace' : 'the rift'} · ${Math.round(dist)} m`;
+    }
     // stamina: a ring by the head, there only while it matters
     const showRing = run.state === 'play' && (run.stamina < 0.995 || run.hunted > 0);
     staminaEl.classList.toggle('on', showRing); staminaEl.classList.toggle('low', run.winded);
@@ -1116,7 +1123,7 @@ export async function start(saved = {}) {
     fsMine = false;
   });
   function closeDrawer() { $('drawer').classList.remove('open'); $('music-tab').setAttribute('aria-expanded', 'false'); }
-  // Two views. The plain one is the game: the plate, the scale bar, the marker, the key prompts, the messages, and a way to pause.
+  // Two views. The plain one is the game: the plate, the scale bar, the key prompts, the messages, and a way to pause.
   // The full one adds what is for looking things up and for tuning: the key list, the tuning drawer, the model tools.
   function setFull(on, quiet) {
     ui.full = !!on; delete ui.bare; store.set('oarfish.ui', ui); // `bare` was this setting the other way round, when the full view was the usual one
@@ -1431,6 +1438,8 @@ export async function start(saved = {}) {
     showDev(on ? (many ? `${LIVES[id].n} ${name === 'moon jelly' ? 'moon jellies' : `${name}s`} are in the water just ahead of you. They are only to look at.` : `A ${name} is in the water just ahead of you. It is only to look at.`) : many ? 'They are gone.' : `The ${name} is gone.`); });
   $('dev-shapes').addEventListener('click', () => { hitView.on = !hitView.on; $('dev-shapes').setAttribute('aria-pressed', String(hitView.on)); if (hitView.on && guard?.shapes) hitView.draw(guard.shapes(sctx)); stir(); showDev(hitView.on ? 'Hit shapes on: blue is your body, white what is solid, green a leg that can be hurt now (grey: not now), amber a blow on its way, red where it lands.' : 'Hit shapes off.'); });
   $('dev-keeper').addEventListener('click', () => { if (guard && !guard.done) { guard.debug.fall(); showDev(`The ${guard.kind} is beaten: the rift is open.`); } });
+  $('dev-marker').addEventListener('click', () => { devSee.marker = !devSee.marker; $('dev-marker').setAttribute('aria-pressed', String(devSee.marker)); stir(); showDev(devSee.marker ? 'The old marker is back, for you only: it points to the rift (or to the nursery’s lesson) with how far it is.' : 'Marker off, as a player has it.'); });
+  $('dev-seal').addEventListener('click', () => { devSee.seal = SEAL.looks[(SEAL.looks.indexOf(devSee.seal) + 1) % SEAL.looks.length]; $('dev-seal').textContent = `Closed rift: ${devSee.seal}`; guard?.reseal(devSee.seal); stir(); showDev(devSee.seal === 'glass' ? 'A closed rift is sealed by a sheet like a second surface.' : 'A closed rift is filled by a shoal of small silver fish.'); });
   {
     const ls = $('f-look');
     ls.value = Number.isFinite(fp.look) ? fp.look : SHIPPED_FEEL.look;
@@ -2019,7 +2028,7 @@ export async function start(saved = {}) {
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
     get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
-    get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx,
+    get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx, devSee, tutTarget,
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
     sim(seconds, forced) { for (let t = 0; t < seconds; t += 1 / 60) { if (forced) step(1 / 60, forced); else tick(1 / 60); } }, // with no forced input, the real devices are read

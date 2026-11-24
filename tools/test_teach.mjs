@@ -23,6 +23,7 @@ const page = await (await browser.newContext({ viewport: { width: 1440, height: 
 page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
 await page.addInitScript(() => { window.__hold = true; }); // held from before the page starts: on a busy machine the dive ran by itself for seconds between being ready and being held, and the fish drifted through the first hoops before any check had looked
+await page.addInitScript(() => { try { const f = JSON.parse(localStorage.getItem('oarfish.feel') || '{}'); if (!f.mode) localStorage.setItem('oarfish.feel', JSON.stringify({ ...f, mode: 'point' })); } catch {} }); // made on the plate camera, the default when this was written: ask for it, unless a camera was chosen in this page
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 await page.evaluate(() => { window.__hold = true; });
@@ -37,17 +38,25 @@ await ev(() => {
     to(p, seconds = 20) { const step0 = g.tut.step; for (let t = 0; t < seconds && g.tut.step === step0 && g.tut.on; t += 0.1) { const h = g.rig.snout, dx = p.x - h.x, dz = p.z - h.z, d = Math.hypot(dx, dz) || 1; g.sim(0.1, { ...none, dir: { x: dx / d, y: 0, z: dz / d }, vertical: Math.max(-1, Math.min(1, (p.y - h.y) * 1.5)) }); } return g.tut.step - step0; },
     chip() { const el = document.getElementById('prompt'); return el.classList.contains('on') ? el.textContent : ''; },
     toast() { const el = document.getElementById('toast'); return el.classList.contains('on') ? `${el.className}|${document.getElementById('toast-title').textContent}|${document.getElementById('hint').textContent}` : ''; },
-    label() { return document.getElementById('goal-label').textContent; },
+    label() { const t = g.tutTarget(); return t ? t.label : 'the rift'; }, // what the lesson is about, read from the dive and not from the screen (no player sees a marker)
+    marker() { const el = document.getElementById('goal'); return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; },
   };
 });
 
 // ---- a first dive opens in the nursery
 let s = await ev(() => { const g = window.__game, n = g.world.nursery; g.sim(3.6, window.N.none); const h = n.hoops[0], f = g.rig.forward; // once the band's title card has gone
-  return { on: g.tut.on, hoops: n.hoops.length, ahead: f.x * h.ux + f.z * h.uz, label: window.N.label(), chip: window.N.chip(), skip: !document.getElementById('btn-skip').hidden, shells: g.field.items.filter((i) => !i.taken).length, kept: [0, 1, 2, 5].map((i) => g.world.schools[i].tier).join('') }; });
-check('a first dive opens in the nursery, facing the first hoop, with the marker on it and the swim keys shown', s.on && s.hoops === 3 && s.ahead > 0.95 && /the hoop/.test(s.label) && /W.*swim/.test(s.chip) && s.skip && s.shells === 2 && s.kept === 'sssm', JSON.stringify(s));
+  return { on: g.tut.on, hoops: n.hoops.length, ahead: f.x * h.ux + f.z * h.uz, label: window.N.label(), marker: window.N.marker(), chip: window.N.chip(), skip: !document.getElementById('btn-skip').hidden, shells: g.field.items.filter((i) => !i.taken).length, kept: [0, 1, 2, 5].map((i) => g.world.schools[i].tier).join('') }; });
+check('a first dive opens in the nursery, facing the first hoop, with no marker on screen and the swim keys shown', s.on && s.hoops === 3 && s.ahead > 0.95 && /the hoop/.test(s.label) && !s.marker && /W.*swim/.test(s.chip) && s.skip && s.shells === 2 && s.kept === 'sssm', JSON.stringify(s));
 s = await ev(() => { const shown = (q) => { const el = document.querySelector(q); return !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
   return { full: document.getElementById('stage').classList.contains('full'), chip: shown('#prompt .in'), skip: shown('#btn-skip'), pause: shown('#btn-pause'), marker: shown('#goal-label'), keys: shown('#keys'), tools: shown('.tools'), tuning: shown('#music-tab') }; });
-check('all of it shows in the plain view a dive opens on: the prompt, the marker, Skip tutorial and pause, with no key list or tools', !s.full && s.chip && s.skip && s.pause && s.marker && !s.keys && !s.tools && !s.tuning, JSON.stringify(s));
+check('all of it shows in the plain view a dive opens on: the prompt, Skip tutorial and pause, with no marker, no key list and no tools', !s.full && s.chip && s.skip && s.pause && !s.marker && !s.keys && !s.tools && !s.tuning, JSON.stringify(s));
+// with no marker, the place itself leads on: the paved way runs from the start past every lesson to the jar, and on from the jar to the rift, never more than a few metres unpaved
+s = await ev(() => { const g = window.__game, w = g.world, n = w.nursery, flags = w.pieces().filter((p) => p.name === 'flag'), wr = w.wrap;
+  const gap = (ax, az, bx, bz) => { const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, on = flags.map((f) => { const dx = wr(f.x - ax), dz = wr(f.z - az), t = dx * ux + dz * uz; return Math.abs(dx * uz - dz * ux) < 2 && t > -1 && t < L + 1 ? t : null; }).filter((t) => t !== null).sort((a, b) => a - b);
+    let most = on.length ? on[0] : L; for (let i = 1; i < on.length; i++) most = Math.max(most, on[i] - on[i - 1]); return { most: +Math.max(most, L - (on[on.length - 1] ?? 0)).toFixed(1), n: on.length, L: +L.toFixed(1) }; };
+  const s0 = w.spawn, j = n.jar, G = w.goal, d = Math.hypot(G.x - j.x, G.z - j.z), ux = (G.x - j.x) / d, uz = (G.z - j.z) / d;
+  return { toJar: gap(s0.x, s0.z, j.x - Math.sin(n.dir) * 2, j.z - Math.cos(n.dir) * 2), onward: gap(j.x + ux * 2, j.z + uz * 2, G.x - ux * 20, G.z - uz * 20), lessons: [...n.hoops, j].every((o) => Math.hypot(o.x - s0.x, o.z - s0.z) < 60) }; });
+check('with no marker the nursery leads by the place: a paved way from the start past the hoops and pens to the jar, and on from the jar to the rift\'s edge, no stretch of it more than a few metres bare', s.toJar.most < 4 && s.toJar.n > 20 && s.onward.most < 5 && s.onward.n > 20 && s.lessons, JSON.stringify(s));
 await snap('t-start');
 s = await ev(() => { const g = window.__game, n = g.world.nursery, got = []; for (let i = 0; i < 3; i++) { const moved = window.N.to(n.hoops[i]); got.push(moved); if (i === 0) { g.sim(1.2, window.N.none); got.push(window.N.chip()); } } g.sim(0.2, window.N.none); return { got, step: g.tut.step, label: window.N.label(), learned: Object.keys(g.teach.learned).join() }; });
 check('swimming through each hoop in turn moves the lesson on, and the second hoop asks for the rise key', s.got[0] === 1 && /Space.*rise/.test(s.got[1]) && s.got[2] === 1 && s.got[3] === 1 && s.step === 3 && /the pen/.test(s.label) && /move.*rise.*dive/.test(s.learned), JSON.stringify(s));
