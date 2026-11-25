@@ -603,47 +603,48 @@ s = await ev(() => { const g = window.__game, P = () => ({ ...g.music.params }),
 check('the turnaround’s sliders are saved, go into a preset code and come back out of one; a code from before them gives the shipped turnaround',
   s.slid.size === 0 && s.slid.saved === 0 && /turnsize=0/.test(s.slid.code) && s.p1.join() === '0.99,0.33,0.8,1' && /turn=99,turnsize=33,turnheight=80,turnall=100/.test(s.code1) && s.s1.join() === '99,33,80,100' && s.ui1 === '99,33,80,100'
   && s.p2.join() === '0.66,0.66,0.2,0' && s.ui2 === '66,66,20,0', JSON.stringify(s));
-// ---- the Keeper's strike (comeBack, strike in music.js): its fill's last note waits for the claw and sounds on it, the drums mark it, and the oom-pah
-// comes back on one or three after it, led in by a pickup. Driven as the game drives it (flourish at the wind-up, strike 0.95 s later), offline, read from st.log
+// ---- the Keeper's strike (comeBack in music.js): the fill's phrase is as it always was (the run, and the long note on the tick after it), the claw
+// has the drums' burst and nothing more, and the oom-pah stays out while the long note rings and comes back on one or three after it, led in by a
+// pickup, with a kick under it. Driven as the game drives it (flourish at the wind-up, the burst 0.95 s later on the claw), offline, read from st.log
 const strike = await ev(async () => {
-  const M = await import('/game/music.js'), SR = 22050, STEP = 0.005, out = {};
+  const M = await import('/game/music.js'), SR = 22050, STEP = 0.005, out = {}, CASTV = { keeper: 'tuba', lamplighter: 'celesta', warden: 'cello', shearer: 'sax' };
   const seed = (k) => { let a = k >>> 0; Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-  const run = async ({ id = 'keeper', pos = 0, blow = true, solo = false, secs = 15 } = {}) => {
-    seed(11); const m = M.createMusic({ context: new OfflineAudioContext(2, secs * SR, SR) }); m.set('farcarry', 0); m.state.log = []; const beats = new Map(); let plan = null, wound = null, hitAt = null, res = null;
+  const run = async ({ id = 'keeper', pos = 0, solo = false, secs = 15 } = {}) => {
+    seed(11); const m = M.createMusic({ context: new OfflineAudioContext(2, secs * SR, SR) }); m.set('farcarry', 0); m.state.log = []; const beats = new Map(); let plan = null, wound = null, clawAt = null;
     await m.render(secs - 1, (t) => {
       for (const b of m.state.beats) beats.set(b.index, b);
-      if (!plan && t >= 7) { const G = m.state.beats[m.state.beats.length - 1]; let k = Math.ceil((t + 2.2 - G.at) / G.dur) + G.index; k += (4 - (k % 4)) % 4; const target = G.at + (k - G.index) * G.dur + pos * G.dur; plan = { blowAt: Math.floor((target - 0.012) / STEP) * STEP, beat: G.dur }; plan.windAt = plan.blowAt - 0.95; }
+      if (!plan && t >= 7) { const G = m.state.beats[m.state.beats.length - 1]; let k = Math.ceil((t + 2.2 - G.at) / G.dur) + G.index; k += (4 - (k % 4)) % 4; const target = G.at + (k - G.index) * G.dur + pos * G.dur; plan = { blowAt: Math.floor((target - 0.012) / STEP) * STEP }; plan.windAt = plan.blowAt - 0.95; }
       if (plan && !wound && t >= plan.windAt - 1e-9) wound = solo ? m.flourish(id, 'solo') : m.flourish(id, 'fill');
-      if (plan && blow && hitAt === null && t >= plan.blowAt - 1e-9) { hitAt = t + 0.012; res = m.strike(id); }
-      return { cast: { [id]: 1 }, speed: 0.35, danger: 0.6, activity: 0.6 };
+      const s = { cast: { [id]: 1 }, speed: 0.35, danger: 0.6, activity: 0.6 };
+      if (plan && !solo && clawAt === null && t >= plan.blowAt - 1e-9) { clawAt = t + 0.012; s.hits = [['burst']]; }
+      return s;
     }, STEP);
-    const log = m.state.log, B = res || m.state.lastBack, beatOf = (time) => { let best = null; for (const [k, b] of beats) if (b.at <= time + 1e-6 && (best === null || k > best)) best = k; return best; };
-    const hit = log.find((e) => e.tag === 'hit' && e.voice !== 'drum:kick') || [...log].reverse().find((e) => e.show), back = log.filter((e) => e.tag === 'back' && !e.voice.startsWith('drum')), own = log.filter((e) => !e.show && !e.tag && !e.voice.startsWith('drum'));
-    const k = beatOf(B.T), beat = beats.get(k).dur, atR = back.filter((e) => e.at[0] === B.R[0] && e.at[1] === B.R[1]), Rat = atR.length ? atR[0].t : B.at;
-    return { wound, struck: !!res, hitAt, T: B.T, late: hitAt === null ? null : +(B.T - hitAt).toFixed(4), onBeat: B.onBeat, nearBeat: Math.min(...[...beats.values()].map((b) => Math.abs(b.at - B.T))) < 1e-6,
-      hit: hit && { m: hit.m, v: hit.v, t: hit.t, beats: +(hit.dur / beat).toFixed(2) }, R: B.R, gap: +((Rat - B.T) / beat).toFixed(2), size: B.size,
-      quiet: own.filter((e) => e.voice === CASTV[id] && e.t > B.T + 1e-4 && e.t < Rat - 1e-4).length, // the line's own notes between the hit and its return: none
+    const log = m.state.log, B = m.state.lastBack, beatOf = (time) => { let best = null; for (const [k, b] of beats) if (b.at <= time + 1e-6 && (best === null || k > best)) best = k; return best; };
+    const shows = log.filter((e) => e.show), long = shows[shows.length - 1], beat = beats.get(beatOf(B.T)).dur;
+    const back = log.filter((e) => e.tag === 'back' && !e.voice.startsWith('drum')), atR = back.filter((e) => e.at[0] === B.R[0] && e.at[1] === B.R[1]), Rat = atR.length ? atR[0].t : B.at;
+    const tickNo = (e) => e.at[0] * 12 + e.at[1];
+    return { wound, T: B.T, R: B.R, gap: +((Rat - B.T) / beat).toFixed(2), size: B.size, longAt: long && +(long.t - B.T).toFixed(4), long: long && { m: long.m, v: long.v, beats: +(long.dur / beat).toFixed(2) },
+      run: solo ? null : shows.slice(-5).map(tickNo).every((g, i, a) => i === 0 || g === a[i - 1] + 1), // the run and the long note on five ticks in a row
+      fromClaw: clawAt === null ? null : +(B.T - clawAt).toFixed(3),
+      quiet: log.filter((e) => e.voice === CASTV[id] && !e.show && !e.tag && e.t > B.T + 1e-4 && e.t < Rat - 1e-4).length,
       pick: back.filter((e) => e.t < Rat - 1e-4).map((e) => [e.at[0], e.at[1], e.m]), entry: atR.map((e) => [e.at[0], e.at[1], e.m, +(e.dur / beat).toFixed(2)]),
       firstPickAfter: back.length ? +((back[0].t - B.T) / beat).toFixed(2) : null,
-      drums: log.filter((e) => e.voice.startsWith('drum') && !e.cut && e.t > B.T + 1e-4 && e.t < (B.onBeat ? B.T + beat : beats.get(k + 1).at) - 0.007).map((e) => `${e.voice}@${(e.t - B.T).toFixed(4)}:${e.at}:${e.tag}`), cut: log.filter((e) => e.cut).length,
-      kicks: log.filter((e) => e.voice === 'drum:kick' && e.tag).map((e) => +((e.t - B.T) / beat).toFixed(2)), lineAfter: log.filter((e) => e.voice === CASTV[id] && !e.show && !e.tag && e.t > Rat + 1e-4 && e.t < Rat + 4 * beat).map((e) => e.at[1]) };
+      kicks: log.filter((e) => e.voice === 'drum:kick' && e.tag).map((e) => [e.tag, +((e.t - B.T) / beat).toFixed(2)]), others: log.filter((e) => e.voice.startsWith('drum') && e.tag && e.tag !== 'back').length,
+      lineAfter: log.filter((e) => e.voice === CASTV[id] && !e.show && !e.tag && e.t > Rat + 1e-4 && e.t < Rat + 4 * beat).map((e) => e.at[1]) };
   };
-  const CASTV = { keeper: 'tuba', lamplighter: 'celesta', warden: 'cello', shearer: 'sax' }; window.CASTV = CASTV;
   for (const [name, pos] of [['on1', -0.03], ['after2', 1.12], ['off3', 2.64], ['late4', 3.8]]) out[name] = await run({ pos });
-  out.alone = await run({ pos: 3.5, blow: false }); // its blow never comes: the fill lands on its own
-  out.solo = await run({ solo: true, blow: false, secs: 20 });
-  out.lamp = await run({ id: 'lamplighter', blow: false });
-  out.warden = await run({ id: 'warden', blow: false, pos: 1 });
+  out.solo = await run({ solo: true, secs: 20 });
+  out.lamp = await run({ id: 'lamplighter' });
+  out.warden = await run({ id: 'warden', pos: 1 });
   return out;
 }).catch((e) => ({ error: String(e) }));
-const okStrike = (r) => r && r.struck && r.late >= -1e-6 && r.late <= 0.035 + 1e-6 && r.hit && r.hit.v === 1.2 && r.quiet === 0 && r.R && (r.R[1] === 0 || r.R[1] === 6) && r.gap >= 4 / 3 - 0.01 && r.gap <= 4.1 && r.firstPickAfter >= Math.min(r.hit.beats, 1.7) - 0.03 && Math.abs(r.hit.beats - 1.62) < 0.03 && r.pick.length === r.size && r.entry.length === 1 && r.drums.length === 0 && r.kicks.length === 2 && Math.abs(r.kicks[1] - r.gap) < 0.01;
-check('the Keeper’s strike: its fill’s last note sounds on the claw (never before it, and on a beat only if one is a hair away), the drums kick under it and lay out for the rest of that beat, and the oom-pah stays out until one or three after the long note has rung its whole length, never more than about a bar, and comes back on it, led in by a pickup, wherever in the bar the claw lands',
-  ['on1', 'after2', 'off3', 'late4'].every((k) => okStrike(strike[k])) && strike.on1.onBeat && strike.on1.nearBeat && !strike.after2.onBeat, JSON.stringify(strike));
+const okBack = (r, len) => r && r.wound && r.quiet === 0 && r.R && (r.R[1] === 0 || r.R[1] === 6) && r.gap >= 4 / 3 - 0.01 && r.gap <= 4.6 && r.firstPickAfter >= Math.min(len, 1.7) - 0.03 && r.pick.length === r.size && r.entry.length === 1 && r.kicks.length === 1 && r.kicks[0][0] === 'back' && Math.abs(r.kicks[0][1] - r.gap) < 0.01 && r.others === 0;
+check('the Keeper’s strike: its fill is one phrase as it always was (the run, and the long note on the tick after it, before the claw), the claw adds nothing but the drums’ burst, and the oom-pah stays out while the long note rings, never more than about a bar, and comes back on one or three, led in by a pickup with a kick under it, wherever in the bar the claw lands',
+  ['on1', 'after2', 'off3', 'late4'].every((k) => { const r = strike[k]; return okBack(r, 1.62) && r.run && r.longAt === 0 && r.long.v === 1.2 && Math.abs(r.long.beats - 1.62) < 0.03 && r.fromClaw < 0; }), JSON.stringify(strike));
 check('the oom-pah comes back on its own note: the root on one, the fifth on three, as long as ever, the pickup a step at a time up to it; and then goes on as before',
   ['on1', 'after2', 'off3', 'late4'].every((k) => { const r = strike[k], [bar, tick, m, len] = r.entry[0], last = r.pick[r.pick.length - 1][2]; return len === 1.25 && m - last > 0 && m - last <= 2 && r.lineAfter.some((x) => x === 0 || x === 6); }), JSON.stringify(strike));
-check('with no blow, the Keeper’s fill lands on its own on a beat and its line comes back the same way; a solo ends on one or three and comes back so; so do the Lamplighter’s and the Warden’s, in their own voices',
-  !strike.alone.struck && strike.alone.nearBeat && strike.alone.quiet === 0 && strike.alone.entry.length === 1 && strike.solo.wound && strike.solo.nearBeat && strike.solo.R && strike.solo.quiet === 0 && strike.solo.entry.length === 1
-  && strike.lamp.nearBeat && strike.lamp.quiet === 0 && strike.lamp.entry.length === 1 && strike.warden.nearBeat && strike.warden.quiet === 0 && strike.warden.entry.length === 1, JSON.stringify(strike));
+check('a solo ends on one or three and its line comes back so; so do the Lamplighter’s and the Warden’s fills, in their own voices',
+  okBack(strike.solo, 2.16) && okBack(strike.lamp, 2.16) && okBack(strike.warden, 2.88), JSON.stringify(strike));
 // ---- the keeper heard from afar (FAR in music.js): how loud and to which side, the far line outside the three that sit in, and the switch
 const far = await ev(async () => {
   const M = await import('/game/music.js'), F = M.FAR, m = M.createMusic({ context: new OfflineAudioContext(2, 22050, 22050) }), h = (d, side, ahead) => m.hearing({ id: 'keeper', d, side, ahead });

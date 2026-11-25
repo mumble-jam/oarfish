@@ -66,7 +66,7 @@ export const FAR = {
 
 export function createMusic({ context = null } = {}) {
   const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5, turn: 0.66, turnsize: 0.66, turnheight: 0.2, turnall: 0, farcarry: 1 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], turnBy: null, barAt: 0, showEnd: -1, back: null, rest: null, drumV: [], far: null, ear: null, log: null, where: null, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], turnBy: null, barAt: 0, showEnd: -1, back: null, far: null, ear: null, log: null, where: null, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -180,7 +180,7 @@ export function createMusic({ context = null } = {}) {
     if (lp) filt('lowpass', lp);
     const g = ctx.createGain();
     env(g.gain, t, attack, gain, decay);
-    node.connect(g); g.connect(out); if (out === n.drums) keepDrum(t, g);
+    node.connect(g); g.connect(out);
     src.start(t, Math.random() * 1.5); src.stop(t + attack + decay + 0.05);
   }
   function tone(t, { type = 'sine', f0, f1 = 0, glide = 0.08, attack = 0.003, decay, gain, out = n.drums }) {
@@ -188,11 +188,9 @@ export function createMusic({ context = null } = {}) {
     o.type = type; o.frequency.setValueAtTime(f0, t);
     if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + glide);
     env(g.gain, t, attack, gain, decay);
-    o.connect(g); g.connect(out); if (out === n.drums) keepDrum(t, g);
+    o.connect(g); g.connect(out);
     o.start(t); o.stop(t + attack + decay + 0.05);
   }
-  // the band's own drum strokes of the last moment, so that a keeper's strike can take back the ones already asked for in the rest of its beat
-  function keepDrum(t, g) { if (!st.inTick) return; st.drumV.push({ t, g, e: st.kitEntry }); while (st.drumV.length > 64 || (st.drumV.length && st.drumV[0].t < now() - 1)) st.drumV.shift(); }
   const kit = {
     ride(t, v, bell) { const soft = 1 - 0.35 * params.dream; noise(t, { hp: 3600, bp: 6200, q: 0.5, decay: 0.3 + 0.35 * v, gain: 0.62 * v * soft }); tone(t, { type: 'triangle', f0: bell ? 2640 : 3520, decay: bell ? 0.5 : 0.16, gain: (bell ? 0.16 : 0.09) * v * soft }); if (bell) tone(t, { f0: 3962, decay: 0.4, gain: 0.09 * v * soft }); },
     hat(t, v) { noise(t, { hp: 5500, decay: 0.05, gain: 0.42 * v }); },
@@ -205,8 +203,8 @@ export function createMusic({ context = null } = {}) {
     splash(t, v) { noise(t, { hp: 4200, decay: 0.32, gain: 0.6 * v }); },
     swell(t, v, len = 1.4) { noise(t, { hp: 2600, attack: len, decay: 0.5, gain: 0.55 * v }); },
   };
-  // the drums are written down too (st.log), as `drum:<what>`, for the tools and checks that read a strike without hearing it
-  for (const k of Object.keys(kit)) { const f = kit[k]; kit[k] = (t, ...r) => { let e = null; if (st.log) st.log.push(e = { voice: 'drum:' + k, at: st.where, t, v: r[0], tag: st.tag || null }); st.kitEntry = e; const x = f(t, ...r); st.kitEntry = null; return x; }; }
+  // the drums are written down too (st.log), as `drum:<what>`, for the tools and checks that read the band without hearing it
+  for (const k of Object.keys(kit)) { const f = kit[k]; kit[k] = (t, ...r) => { if (st.log) st.log.push({ voice: 'drum:' + k, at: st.where, t, v: r[0], tag: st.tag || null }); return f(t, ...r); }; }
   function bassNote(t, midi, dur, v) {
     const f = mtof(midi), filt = ctx.createBiquadFilter(), g = ctx.createGain();
     filt.type = 'lowpass'; filt.Q.value = 1.2;
@@ -487,10 +485,7 @@ export function createMusic({ context = null } = {}) {
     if (tick === 0) { planBar(bar, t); st.barAt = t; st.turnBy = [...st.sitting, ...(farLine() ? [st.far.id] : [])].find((id) => turnBar(id, bar)) ?? null; } // who may turn round in this bar
     st.where = [bar, tick];
     const human = () => (rnd() - 0.5) * 0.012;
-    // --- drummer (who lays out for the rest of a beat a keeper has struck in: st.rest, comeBack)
-    const resting = st.rest && t > st.rest.from + 1e-4 && bar * 12 + tick < st.rest.g; // (by the tick, not the clock: the tempo moves a little each beat)
-    st.inTick = true;
-    if (!resting) {
+    // --- drummer
     const fillNow = plan.fill && tick >= 6;
     if (I < 0.24) { // brushes and almost nothing else
       if (sub === 0) kit.brush(t, 0.6 + 0.4 * (beat % 2));
@@ -520,8 +515,6 @@ export function createMusic({ context = null } = {}) {
       kit.snare(t, v);
       if (st.tension > 0.6) kit.snare(t + st.tickLen * 0.5, v * 0.85);
     }
-    }
-    st.inTick = false;
     // --- bass
     for (const [at, midi, beats] of plan.bass) if (at === tick) bassNote(t + human() * 0.5, midi, beats * st.beatDur, lerp(0.55, 1, I));
     // --- piano
@@ -567,27 +560,23 @@ export function createMusic({ context = null } = {}) {
     warden: { voice: 'cello', base: 45, fill: [0, 4, 7], low: 0, high: 9, len: 1.6 },
     sum: { voice: 'tuba', base: 40, fill: [0, 4, 0], low: 0, high: 7, len: 1 },
   };
-  SHOW.keeper.blow = true; // the Keeper's fill lands on its blow (main.js tells the band of it: game.event('slam') -> strike)
 
   // ---------------------------------------------------------------- a keeper's hit, and its line coming back after it
   // George, of the Keeper's tuba: 'I like the sound when it strikes, but it seems to interrupt the main rhythm in a weird manner. Or should I
   // rather say that the rhythm comes back as if it was ignoring the strike sound happened.' It did: the fill's long note landed when its run
-  // ran out, a third of a second before the claw came down, and the oom-pah came back on its very next one or three, as if nothing had been
-  // played (sometimes a swung eighth after the long note, on top of it). Now the long note is the strike: it waits for the blow and sounds
-  // on it (a hair later if a beat is that near: never earlier). And whatever a keeper ends a show on (that hit; a fill that lands on its own;
-  // a solo's last note, now on one or three) rings its whole length, untouched, and its line stays out until a strong beat (one or three)
-  // after it, at least `after` beats on and with room for a pickup once the hit has rung (`alone` beats of it at most: a longer one, the
-  // Warden's bow, is let ring under it), so never more than about a bar; and comes back ON that beat, led in by a pickup like a
-  // turnaround's (TURN), as long as the room allows: the notes a step at a time up the scale into the note the line plays there (ENTRY).
-  // On a strike the drums mark it with a kick, lay out for the rest of that beat (what they had already been asked to play in it is taken
-  // back) and kick the line back in. The sounds are as they were.
+  // ran out, and the oom-pah came back on its very next one or three, as if nothing had been played (sometimes a swung eighth after the long
+  // note, on top of it). The phrase itself, the run and the long note as one, is as it always was (George, hearing a version that held the
+  // long note for the claw: it sounded cut, its end 'replaced with a drum plate'); the claw keeps the drums' burst (main.js) and nothing more.
+  // What changed is the joining: whatever a keeper ends a show on (a fill's long note, a solo's last note, which now waits for one or three)
+  // rings its whole length, untouched, and its line stays out until a strong beat (one or three) after it, at least `after` beats on and
+  // with room for a pickup once the hit has rung (`alone` beats of it at most: a longer one, the Warden's bow, is let ring under it), so never
+  // more than about a bar; and comes back ON that beat, led in by a pickup like a turnaround's (TURN), as long as the room allows: the notes a
+  // step at a time up the scale into the note the line plays there (ENTRY), with a kick under it. The sounds are as they were.
   const BACK = {
-    nudge: 0.035, // s: a strike this near before a beat is put on the beat. The ear forgives sound this much behind the picture; never ahead
-    wait: 1.4, // s from the wind-up: how long a fill's last note waits for the blow (the great claw takes 0.95 s, lame 1.28, its dig longer)
     after: 4 / 3, // beats: the line comes back on the first strong beat at least this far after the hit
     alone: 1.7, // beats: the most of the hit that has to have rung before its pickup may start (the Keeper's is 1.62: all of it)
     on: [0, 6], // the strong beats: one and three (ticks)
-    kick: [0.55, 0.45], // the drums: the kick under a strike, and the one that brings the line back in
+    kick: 0.45, // the drums: the kick that brings the line back in
   };
   // the pickup into the line's return: [ticks before it, length in beats, loudness against the line's]; the biggest that fits is played
   const PICKUP = { 1: [[-1, 0.3, 0.9]], 2: [[-3, 0.55, 0.95], [-1, 0.3, 0.9]], 3: [[-4, 0.3, 0.8], [-3, 0.55, 0.95], [-1, 0.3, 0.9]] };
@@ -603,26 +592,18 @@ export function createMusic({ context = null } = {}) {
   };
   const swingLate = () => lerp(0.5, 0.74, params.swing);
   // `id` ends a show on `hit` ({ m, dur, v }) at time T, in the beat G ({ at, index, dur }: a beat's start, its number, bar * 4 + beat, and
-  // its length; T need not be in it); `strike`: it is the blow. Plays the hit, sets up the line's return (st.back) and says where it is.
-  function comeBack(id, T, G, hit, strike = false) {
+  // its length). Plays the hit, sets up the line's return (st.back) and says where it is.
+  function comeBack(id, T, G, hit) {
     const D = G.dur, beatT = (k) => G.at + (k - G.index) * D, tickT = (g) => beatT(Math.floor(g / 3)) + [0, 1 / 3, swingLate()][((g % 3) + 3) % 3] * D;
-    let k = G.index + Math.ceil((T - G.at) / D - 1e-6), onBeat = false; // the first beat at or after T
-    if (beatT(k) - T <= BACK.nudge + 1e-9) { T = Math.max(T, beatT(k)); onBeat = true; }
     const rung = Math.min(hit.dur, BACK.alone * D), lead = (1 - swingLate()) * D; // the hit's own time, and the shortest pickup's
     let r = G.index + Math.ceil((T + Math.max(BACK.after * D, rung + lead) - G.at) / D - 1e-6); if (r % 2) r++; // the line's return: one or three
     const R = r * 3;
     let size = 3; while (size > 1 && tickT(R + PICKUP[size][0][0]) < T + rung - 1e-6) size--;
     const dur = hit.dur, S = SHOW[id];
-    const kt = G.index + Math.floor((T - G.at) / D + 1e-6), was = st.where; st.where = [Math.floor(kt / 4), (kt % 4) * 3];
-    st.showing = true; st.tag = strike ? 'hit' : null; voices[S.voice](T, hit.m, dur, Math.min(1.25, hit.v)); st.showing = false; st.tag = null; st.where = was;
+    st.showing = true; voices[S.voice](T, hit.m, dur, Math.min(1.25, hit.v)); st.showing = false; // as say() in playShow played it
     st.licks++; st.showEnd = Math.max(st.showEnd, T + dur); st.show = null;
-    if (strike) { // the drums: a kick under it, and nothing more for the rest of its beat
-      const to = beatT(onBeat ? k + 1 : k);
-      for (const x of st.drumV) if (x.t > T + 1e-4 && x.t < to - 1e-4) { x.g.disconnect(); if (x.e) x.e.cut = true; }
-      st.tag = 'hit'; kit.kick(T, BACK.kick[0]); st.tag = null; st.rest = { from: T, to, g: (onBeat ? k + 1 : k) * 3 };
-    }
-    st.back = { id, R, size, pickup: PICKUP[size].map(([dt, beats, loud]) => ({ g: R + dt, beats, loud })), kick: strike };
-    st.lastBack = { id, T, R: [Math.floor(r / 4), (r % 4) * 3], at: tickT(R), size, dur, onBeat, strike };
+    st.back = { id, R, size, pickup: PICKUP[size].map(([dt, beats, loud]) => ({ g: R + dt, beats, loud })) };
+    st.lastBack = { id, T, R: [Math.floor(r / 4), (r % 4) * 3], at: tickT(R), size, dur };
     return st.lastBack;
   }
   // a line's tick: its own part, or, while it is coming back (st.back), its pickup and then the note it comes back on
@@ -638,7 +619,7 @@ export function createMusic({ context = null } = {}) {
       if (i >= 0) { const x = B.pickup[i], ch = chordAt(bar); let m = stepFrom(ch, land, -(B.size - i)); if (m < T.low) m += 12; sound(T.voice, t, m, x.beats * beat * (T.len || 1), v * x.loud); }
     } else { // on the beat
       if (id === 'sum') voices.organ(t, [land, ...voicing(rCh, 55)], len, v); else voices[T.voice](t, land, len, v, to || 0);
-      if (B.kick) { st.inTick = true; kit.kick(t, BACK.kick[1]); st.inTick = false; }
+      kit.kick(t, BACK.kick);
       st.back = null;
     }
     st.tag = null;
@@ -653,9 +634,7 @@ export function createMusic({ context = null } = {}) {
     if (sh.kind === 'fill') {
       const i = sh.i, n = S.fill.length, v = 0.75 + 0.5 * (i / n); // swelling as it goes
       if (i < n - 1) { sh.i++; say(S.fill[i], st.tickLen * 1.1 * S.len, v); return; }
-      // its last, long note: a keeper whose blow the band is told of (S.blow; api.strike) holds it for the blow, BACK.wait from the wind-up
-      // at most; otherwise, or if no blow comes, it lands on the next beat, and its line comes back after it (comeBack)
-      if (tick % 3 !== 0 || (S.blow && t < sh.at + BACK.wait)) return;
+      // its last, long note, on the tick after the run as it always was; its line comes back after it (comeBack)
       comeBack(sh.id, t, here(), { m: deg(S.fill[n - 1]), dur: beat * 1.8 * S.len, v: 1.2 });
       return;
     }
@@ -725,17 +704,6 @@ export function createMusic({ context = null } = {}) {
       if (!SHOW[id] || !st.started || !n) return false;
       const at = now(); if (kind === 'fill' && (st.show || at - (st.shownAt ?? -99) < gap)) return false;
       st.shownAt = at; st.show = { id, kind, i: 0, wait: kind === 'solo' ? 1 : 0, left: 30, rest: 0, deg: 4, at }; if (st.back?.id === id) st.back = null; return true;
-    },
-    // A keeper's blow has landed (main.js, game.event('slam'): the Keeper's great claw, its weight dropped, its rising from the sand). If its
-    // fill is playing or holding its last note for it, that note is the strike, now (comeBack: on a beat if one is a hair away, never
-    // earlier), the drums mark it, and its line comes back after it. Otherwise nothing: a blow with no fill to it is the drums' alone, as
-    // before (main.js still plays its 'burst'). Returns where it put things (st.lastBack), or false.
-    strike(id) {
-      const sh = st.show; if (!st.started || !n || !sh || sh.id !== id || sh.kind !== 'fill' || !SHOW[id]) return false;
-      const S = SHOW[id], G = st.beats[st.beats.length - 1]; if (!G) return false;
-      const T = now() + 0.012, k = G.index + Math.floor((T - G.at) / G.dur), ch = chordAt(Math.floor(k / 4)), d = S.fill[S.fill.length - 1];
-      let out = null; as(id, () => { out = comeBack(id, T, G, { m: S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), dur: G.dur * 1.8 * S.len, v: 1.2 }, true); });
-      return out;
     },
     // what FAR makes of a keeper `f` metres off ({ id, d, side, ahead }); for the checks and the tools
     hearing: (f) => ear(f), FAR,

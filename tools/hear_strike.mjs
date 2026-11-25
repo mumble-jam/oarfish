@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const REF = arg('--ref', 'HEAD'), OUT = path.resolve(arg('--out', path.join(ROOT, 'out/sound'))), WAV = path.resolve(arg('--wav', OUT)), TABLE = arg('--table', path.join(OUT, 'keeper-strike.md'));
+const SUFFIX = arg('--suffix', null), REF = arg('--ref', 'HEAD'), OUT = path.resolve(arg('--out', path.join(ROOT, 'out/sound'))), WAV = path.resolve(arg('--wav', OUT)), TABLE = arg('--table', path.join(OUT, 'keeper-strike.md'));
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(WAV, { recursive: true });
 // the old file, with only what lets it be read: its drums written down as the new one writes them, and a render step finer than 0.05 s
 let old = execFileSync('git', ['show', `${REF}:game/music.js`], { cwd: ROOT, encoding: 'utf8' });
@@ -38,7 +38,7 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 page.on('console', (m) => { if (m.type() === 'error') console.log('[console]', m.text()); });
 await page.goto(`http://localhost:${server.address().port}/`);
 
-const result = await page.evaluate(async () => {
+const result = await page.evaluate(async ({ SUFFIX }) => {
   const seed = (n) => { let a = n >>> 0; Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
   const NEW = await import('/game/music.js'), OLD = await import('/__old/music.js'), SR = 44100, STEP = 0.005;
   const pack = (buf, from, to) => { const out = []; const a = Math.max(0, Math.round(from * SR)), b = Math.min(buf.length, Math.round(to * SR)); for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c).subarray(a, b), i16 = new Int16Array(d.length); for (let i = 0; i < d.length; i++) i16[i] = Math.max(-32768, Math.min(32767, Math.round(d[i] * 32767))); let s = ''; const u8 = new Uint8Array(i16.buffer); for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); out.push(btoa(s)); } return out; };
@@ -70,7 +70,8 @@ const result = await page.evaluate(async () => {
       const k = barOf(e.t), b = beats.get(k), into = (e.t - b.at) / b.dur;
       return { t: +(e.t - struck.at).toFixed(3), bar: Math.floor(k / 4) - plan.bar + 2, beat: (k % 4) + 1 + into, voice: e.voice, m: e.m ?? null, beats: e.dur ? +(e.dur / b.dur).toFixed(2) : null, v: +(+e.v).toFixed(2), tag: e.cut ? 'cut' : e.tag || (e.show ? 'show' : '') };
     });
-    return { buf, notes, plan: { ...plan, beat: +plan.beat.toFixed(4) }, wound, struck, back: isNew ? m.state.lastBack : null };
+    const phrase = m.state.log.filter((e) => e.show && e.voice === 'tuba').map((e) => ({ t: e.t, m: e.m, dur: e.dur, v: e.v })); // the fill, as scheduled
+    return { buf, notes, phrase, plan: { ...plan, beat: +plan.beat.toFixed(4) }, wound, struck, back: isNew ? m.state.lastBack : null };
   }
   const out = { places: {}, wav: {} };
   for (const place of Object.keys(PLACES)) {
@@ -79,11 +80,12 @@ const result = await page.evaluate(async () => {
     const noise = Math.max(first(b.buf, b2.buf), first(a.buf, a2.buf)), tol = Math.max(noise * 10, 2e-3);
     let part = -1; { const p = a.buf.getChannelData(0), q = b.buf.getChannelData(0), p1 = a.buf.getChannelData(1), q1 = b.buf.getChannelData(1); for (let i = 0; i < p.length; i++) if (Math.abs(p[i] - q[i]) > tol || Math.abs(p1[i] - q1[i]) > tol) { part = i / SR; break; } }
     const landToday = a.notes.find((x) => x.tag === 'show' && x.beats > 1);
-    out.places[place] = { today: a.notes, after: b.notes, plan: a.plan, wound: [a.wound, b.wound], struck: [a.struck, b.struck], back: b.back, noise, tol, part: part < 0 ? null : +(part - a.struck.at).toFixed(3), landToday: landToday ? landToday.t : null,
+    const same = a.phrase.length === b.phrase.length && a.phrase.every((x, i) => ['t', 'm', 'dur', 'v'].every((k) => Math.abs(x[k] - b.phrase[i][k]) < 1e-9));
+    out.places[place] = { same, phraseLen: a.phrase.length, today: a.notes, after: b.notes, plan: a.plan, wound: [a.wound, b.wound], struck: [a.struck, b.struck], back: b.back, noise, tol, part: part < 0 ? null : +(part - a.struck.at).toFixed(3), landToday: landToday ? landToday.t : null,
       rms: { today: rms(a.buf, 0, 0, 19), after: rms(b.buf, 0, 0, 19) }, stereo: { today: rms(a.buf, 0, 0, 19) > 0 && rms(a.buf, 1, 0, 19) > 0, after: rms(b.buf, 1, 0, 19) > 0 } };
-    if (place === 'on1' || place === 'late4') { const name = place === 'on1' ? 'early' : 'late', c = a.struck.at; out.wav[`keeper-strike-${name}-today`] = { pcm: pack(a.buf, c - 5, c + 5), rmsL: rms(a.buf, 0, c - 5, c + 5), rmsR: rms(a.buf, 1, c - 5, c + 5), hitAt: 5 }; out.wav[`keeper-strike-${name}-after`] = { pcm: pack(b.buf, c - 5, c + 5), rmsL: rms(b.buf, 0, c - 5, c + 5), rmsR: rms(b.buf, 1, c - 5, c + 5), hitAt: 5, part: part < 0 ? null : part - (c - 5) }; }
+    if (place === 'on1' || place === 'late4') { const name = place === 'on1' ? 'early' : 'late', c = a.struck.at; if (!SUFFIX) out.wav[`keeper-strike-${name}-today`] = { pcm: pack(a.buf, c - 5, c + 5), rmsL: rms(a.buf, 0, c - 5, c + 5), rmsR: rms(a.buf, 1, c - 5, c + 5), hitAt: 5 }; out.wav[`keeper-strike-${name}-${SUFFIX || 'after'}`] = { pcm: pack(b.buf, c - 5, c + 5), rmsL: rms(b.buf, 0, c - 5, c + 5), rmsR: rms(b.buf, 1, c - 5, c + 5), hitAt: 5, part: part < 0 ? null : part - (c - 5) }; }
   }
-  if (!NEW.FAR) return out; // (a music.js from before the far-carrying keeper: the strike only)
+  if (!NEW.FAR || SUFFIX) return out; // (a music.js from before the far-carrying keeper, or only the strike asked for)
   // ---- 3. the approach: a weaving curve from 120 m to beside the Keeper, the camera looking the way the fish swims, so that the Keeper is
   // now on one side and now on the other; then the same with no keeper at all, from the same seeded start, so that the difference between
   // the two is the Keeper's tuba (and its reverb) alone, to measure which side it is on
@@ -108,7 +110,7 @@ const result = await page.evaluate(async () => {
     out.loud = { rows, today, FAR: m.FAR };
   }
   return out;
-});
+}, { SUFFIX });
 await browser.close(); server.close();
 
 const wav = ([l, r], file) => {
@@ -127,6 +129,7 @@ if (result.approach) { const file = path.join(WAV, 'keeper-approach.wav'), A = r
   const agree = A.lone.filter((x) => x.pan !== null && Math.abs(x.pan) > 0.3 && side[x.t] !== null).every((x) => Math.sign(side[x.t]) === Math.sign(x.pan));
   lines.push(`${A.rmsL > 0.002 && A.rmsR > 0.002 && Math.abs(A.rmsL - A.rmsR) > 1e-4 ? 'PASS' : 'FAIL'}  keeper-approach.wav: 21.0 s, stereo, rms L ${A.rmsL.toFixed(4)} R ${A.rmsR.toFixed(4)}`);
   lines.push(`${agree ? 'PASS' : 'FAIL'}  the Keeper's own sound in it (the render less the same with no keeper), right minus left over right plus left, second by second: ${side.join(' ')}; where it is placed: ${A.lone.map((x) => x.pan).join(' ')}; its level, dB, second by second: ${A.lone.map((x) => (x.L + x.R > 0 ? (20 * Math.log10(Math.hypot(x.L, x.R))).toFixed(0) : '-')).join(' ')}`); }
+for (const [place, r] of Object.entries(result.places)) lines.push(`${r.same ? 'PASS' : 'FAIL'}  ${place}: the fill's phrase (${r.phraseLen} tuba notes, from the first quick note to the long note) is scheduled exactly as today: time, pitch, length, loudness`);
 for (const [place, r] of Object.entries(result.places)) lines.push(`${r.part === null || r.part >= Math.min(0, r.landToday ?? 0) - 0.02 ? 'PASS' : 'FAIL'}  ${place}: today and after first part ${r.part === null ? 'nowhere' : `${r.part.toFixed(3)} s from the blow`} (today's fill lands its long note at ${r.landToday === null ? '-' : r.landToday.toFixed(3) + ' s'}); tolerance ${r.tol.toExponential(1)} (same code rendered twice differs by ${r.noise.toExponential(1)})`);
 for (const l of lines) console.log(l);
 

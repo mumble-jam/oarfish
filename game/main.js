@@ -634,7 +634,7 @@ export async function start(saved = {}) {
       else if (kind === 'windup') music.flourish(guard?.kind, 'fill'); // the wind-up of its biggest blow: its instrument plays a fill (seldom: music.js sees to that)
       else if (kind === 'laststand') music.flourish(guard?.kind, 'solo');
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
-      else if (kind === 'slam') { music.strike(guard?.kind); if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed (its fill's last note, if one is playing, is the strike: music.js)
+      else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
       else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7, 'teach', { while: lasts((S) => S.leg.includes(1)) });
       else if (kind === 'crack') { moment('ram'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.25); }
       else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6, 'teach', { while: lasts((S) => S.stun > 0 || S.open) }); }
