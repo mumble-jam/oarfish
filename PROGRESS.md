@@ -16,8 +16,10 @@ Brief: the reviewer's ranked visual faults (/home/claude/review-findings.md), it
 - [x] First suite round: boss, teach, library, controls passed; game failed 4 Keeper checks + crashed in my new block (world read before startRun). Measured the walk/claw scenario at 2ff5016 and now (lean 0.05/0.02, wary 0.65/0.59, big claw 0.81/1.65): thresholds moved with the numbers in the check; column-spot count >= 3.
 - [x] Merged squid-play (frame gauge) into review-polish: 55b6965 (test_game.mjs conflict: both blocks kept).
 
+- [x] Merged squid-play again (DualSense buttons): 156ab26. Boss, teach, library, controls passed on the merged tree (final2-*.log). Game suite: two crashes in my own checks fixed (a name not passed; a // comment cutting a line).
+
 ## To do
-- [ ] five suites on the merged tree (queued under the lock)
+- [ ] game suite on 932c7bc+ (final4-game.log)
 - [ ] fast-forward squid-play; pub-copy; hand back
 
 ## Decisions (and why)
