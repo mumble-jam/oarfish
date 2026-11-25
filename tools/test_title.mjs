@@ -105,7 +105,7 @@ const items = await ev(() => window.__front.menu.map((b) => b.dataset.go));
 { const seen = []; for (let i = 0; i < items.length; i++) { seen.push(await ev(() => window.__front.cur)); await page.keyboard.press('ArrowRight'); }
   const wrap = await ev(() => window.__front.cur);
   check('the arrow keys reach every item, in order, and come round', seen.join() === items.join() && wrap === items[0], seen.join() + ' / ' + wrap); }
-const screenOf = () => ev(() => { const st = document.getElementById('stage'), p = document.getElementById('pause'); return { lib: st.classList.contains('lib'), pause: p.classList.contains('on'), noting: p.classList.contains('noting'), drawer: document.getElementById('drawer').classList.contains('open'), over: window.__front.over, holds: window.__front.holds, time: window.__game.run.time, frame: window.__game.renderer.info.render.frame, z: getComputedStyle(p).zIndex, resume: document.getElementById('btn-resume').textContent }; });
+const screenOf = () => ev(() => { const st = document.getElementById('stage'), p = document.getElementById('pause'); return { lib: st.classList.contains('lib'), pause: p.classList.contains('on'), noting: p.classList.contains('noting'), drawer: document.getElementById('drawer').classList.contains('open'), over: window.__front.over, holds: window.__front.holds, time: window.__game.run.time, frame: window.__game.renderer.info.render.frame, z: getComputedStyle(p).zIndex, resume: document.getElementById('btn-resume').textContent, frontVis: getComputedStyle(document.getElementById('front')).visibility, letters: [...document.querySelectorAll('#front .ink, #front .menu button')].filter((e) => getComputedStyle(e).visibility !== 'hidden' && e.getClientRects().length).map((e) => e.className || e.tagName) }; });
 const want = { library: (s) => s.lib, band: (s) => s.pause && s.drawer, settings: (s) => s.pause && !s.noting && !s.drawer, feedback: (s) => s.noting };
 for (const go of ['library', 'band', 'settings', 'feedback']) {
   for (let n = 0; n < 6 && (await ev(() => window.__front.cur)) !== go; n++) await page.keyboard.press('ArrowRight');
@@ -116,6 +116,7 @@ for (const go of ['library', 'band', 'settings', 'feedback']) {
   if (go === 'library') await sleep(300);
   const back = await screenOf();
   const after = await ev(() => ({ cur: window.__front.cur, state: window.__front.state, cls: document.documentElement.classList.contains('front-over') }));
+  check(`over "${go}", nothing of the page's lettering shows (George saw its head line through the library's header)${go === 'library' ? ', and the page has stepped aside from the library altogether' : ''}; back on the page, it shows again`, !s.letters.length && (go !== 'library' || s.frontVis === 'hidden') && back.letters.length > 5 && back.frontVis === 'visible', JSON.stringify({ letters: s.letters, front: s.frontVis, back: back.letters.length }));
   check(`by keyboard, "${go}" opens its own screen over the page, the dive held under it, and Esc comes back to the page`, want[go](s) && s.over === go && s.holds && s.time === before.time && !back.lib && !back.pause && !back.over && after.cur === go && after.state === 'menu' && !after.cls && back.time === before.time, JSON.stringify({ s, back, after }));
 }
 { const s = await ev(() => ({ band: window.__game.music.running, playing: window.__front.music.playing })); check('none of it started the band behind the page, and the page\'s music plays on', !s.band && s.playing, JSON.stringify(s)); }
@@ -279,6 +280,33 @@ await ctx.close();
   }
   await ctx.close(); }
 
+// ---- 9d. the library opened from the page draws its specimens (at about George's laptop pane, in a page of its own: choosing a
+// specimen can start the band silently, which the hand-over checks above must not inherit) (George: it showed the front page in its middle, the paper, the fish, the
+// caption, on any specimen). Two specimens: at the middle of the library's stage what is on top is the library's own surface, nothing of
+// the page; the pixels there are not the paper's colour, and differ between the two; and the page's fish is not stepped meanwhile.
+{ const { page, ctx, ev } = await open('?title=1', { size: [1274, 476] });
+  await page.waitForFunction('window.__ready === true && window.__front?.ready === true', null, { timeout: 180000 });
+  await page.keyboard.press('KeyQ'); await sleep(1800);
+  for (let n = 0; n < 6 && (await ev(() => window.__front.cur)) !== 'library'; n++) await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter'); await sleep(900);
+  const look = async (name) => {
+    await page.click(`#lib-list button:has-text("${name}")`); await sleep(1400);
+    const r = await ev(() => { const b = document.getElementById('lib-stage').getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2, top = document.elementFromPoint(x, y);
+      return { x, y, top: top ? (top.id || top.className || top.tagName) : null, inFront: !!top?.closest('#front'), frames: window.__front.frames }; });
+    const png = (await page.screenshot({ clip: { x: r.x - 80, y: r.y - 80, width: 160, height: 160 } })).toString('base64');
+    const px = await ev(async (png) => { const img = new Image(); img.src = 'data:image/png;base64,' + png; await img.decode(); const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d'); g.drawImage(img, 0, 0, 16, 16); return [...g.getImageData(0, 0, 16, 16).data]; }, png);
+    return { ...r, px };
+  };
+  const paper = await ev(() => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = window.__front.FRONT.colours.paper; c.fillRect(0, 0, 1, 1); return [...c.getImageData(0, 0, 1, 1).data]; });
+  const a = await look('Sprat'), b = await look('Pilot fish');
+  const near = (p) => { let n = 0; for (let i = 0; i < p.length; i += 4) if (Math.abs(p[i] - paper[0]) + Math.abs(p[i + 1] - paper[1]) + Math.abs(p[i + 2] - paper[2]) < 30) n++; return n / (p.length / 4); };
+  let diff = 0; for (let i = 0; i < a.px.length; i += 4) diff += Math.abs(a.px[i] - b.px[i]) + Math.abs(a.px[i + 1] - b.px[i + 1]) + Math.abs(a.px[i + 2] - b.px[i + 2]); diff /= a.px.length / 4;
+  check('the library opened from the page draws each specimen in its middle: the library\'s surface on top there, not the paper, and two specimens look different', a.top === 'lib-stage' && b.top === 'lib-stage' && !a.inFront && !b.inFront && near(a.px) < 0.2 && near(b.px) < 0.2 && diff > 8 && b.frames === a.frames, JSON.stringify({ a: a.top, b: b.top, paperA: near(a.px).toFixed(2), paperB: near(b.px).toFixed(2), diff: diff.toFixed(1), frames: [a.frames, b.frames] }));
+  await page.mouse.move(1270, 470); // off the menu's column (a mouse resting over an item marks it, by design)
+  await page.keyboard.press('Escape'); await sleep(800);
+  const back = await ev(() => ({ state: window.__front.state, cur: window.__front.cur, vis: getComputedStyle(document.getElementById('front')).visibility }));
+  check('and closing it comes back to the page, the library still marked', back.state === 'menu' && back.cur === 'library' && back.vis === 'visible', JSON.stringify(back));
+  await ctx.close(); }
 // ---- 10. as a player opens it: the page shows; a link that names a place goes straight in; ?title=0 turns it off
 { const { page, ctx, ev } = await open('', { notDriven: true });
   await page.waitForFunction('window.__front?.ready === true', null, { timeout: 120000 });

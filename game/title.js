@@ -141,6 +141,12 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
   #front .caption b { font-size: 12px; } #front .caption i { font-size: 13px; }
 }
 /* the game's own screens, opened from this page, are laid over it */
+/* the library draws its specimen on the game's own canvas, which lies under this page (the library's panels are over it, its middle is
+   clear): while it is open the page steps aside entirely. Under the other screens (translucent, as over a dive) the paper and the fish stay,
+   still, and the lettering goes, so nothing of it reads through a screen */
+html.front-under #front { visibility: hidden; }
+html.front-over #front .sheet, html.front-over #front .alt { visibility: hidden; }
+html.front-over #front .menu, html.front-over #front .menu button { visibility: hidden; transition: none; }
 html.front-over #pause { z-index: 8; }
 html.front-over #drawer { z-index: 9; }
 @media (prefers-reduced-motion: reduce) { #front .menu button, #front .invite, #front .menu button::after { transition: none; } }
@@ -455,7 +461,7 @@ export async function openFront({ boot }) {
   let last = performance.now(), touchedAt = last, drawn = 0, raf = 0, still = reduced();
   const wake = () => { touchedAt = performance.now(); if (!raf && !root.hidden) raf = requestAnimationFrame(loop); };
   function loop(now) {
-    raf = 0; if (root.hidden) return;
+    raf = 0; if (root.hidden || F.over) return; // nothing steps under a screen opened over the page (overDone wakes it)
     const busy = F.state === 'diving' || F.state === 'leaving';
     const awake = busy || (!still && now - touchedAt < FRONT.idle * 1000);
     if (now - drawn >= 1000 / (busy ? 60 : FRONT.fps) - 2) {
@@ -584,7 +590,7 @@ export async function openFront({ boot }) {
   let overFrom = 0, resumeText = '';
   function overGame(go) {
     const g = game; if (!g) return;
-    F.over = go; F.menus = false; html.classList.add('front-over'); overFrom = cur;
+    F.over = go; F.menus = false; html.classList.add('front-over'); html.classList.toggle('front-under', go === 'library'); overFrom = cur;
     g.look.ever = false; // so that leaving the pause menu does not take the mouse
     const resume = document.getElementById('btn-resume'); resumeText = resume.textContent; resume.textContent = 'Back to the front page';
     if (go === 'library') g.openLibrary();
@@ -594,7 +600,7 @@ export async function openFront({ boot }) {
   }
   function overDone() {
     if (!F.over) return;
-    F.over = false; F.menus = false; html.classList.remove('front-over');
+    F.over = false; F.menus = false; html.classList.remove('front-over', 'front-under');
     pad.held = new Set(['ok', 'start', 'up', 'down', 'left', 'right']); // what closed the game's screen is not also a press here
     const resume = document.getElementById('btn-resume'); if (resumeText) resume.textContent = resumeText;
     F.music.duck(1); F.music.level(); game.music.duck(0); // the band may have been started by the library's Hear it: it stays silent here
@@ -677,7 +683,7 @@ export async function openFront({ boot }) {
   }
   function gone() {
     F.state = 'gone'; root.hidden = true; root.style.transition = ''; root.style.opacity = '';
-    html.classList.remove('front', 'front-over');
+    html.classList.remove('front', 'front-over', 'front-under');
     // (the page's music is not stopped here: its hand-over rings on under the band, a skip or not, and lets itself go)
     cancelAnimationFrame(raf); raf = 0;
     document.getElementById('stage')?.focus?.();
