@@ -8,7 +8,8 @@
 // menace (which harmony is used, low brass, toms), react (how hard the game pushes the band around),
 // swing (straight to hard swing), band (drummer forward to harmony forward). And three for the turnaround (TURN, below):
 // turn (how often: off, every 8, 4 or 2 bars), turnsize (one passing note up to a run of four), turnheight (how far below its
-// landing note a walk-up starts), and turnall (0: only the keepers turn round; 1: the other creatures too).
+// landing note a walk-up starts), and turnall (0: only the keepers turn round; 1: the other creatures too). And one switch:
+// farcarry (1: this band's keeper is heard from afar, and from the side it is on, FAR below; 0: only near, in the middle, as before).
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -45,9 +46,27 @@ export const CAST = {
   keeper: { name: 'tuba', lead: true }, shearer: { name: 'tenor saxophone', lead: true }, lamplighter: { name: 'celesta', lead: true }, warden: { name: 'bowed cello', lead: true }, sum: { name: 'organ', lead: true },
 };
 
+// This band's keeper heard from afar (George took the marker to the rift away so that players explore, and asked for this in its place:
+// swimming toward the keeper is rewarded by ear). Inside `join` it sits in with the band as it always has, as loud as it always was; from
+// there out to `reach` it carries on, outside the three that sit in (so it takes nobody's place), at the loudness it joins with and
+// fainter by `floor` decibels at `reach`, steadily in decibels between. The first band is 204 m across and repeats at its edges: the far
+// side of it from the Keeper is 144 m off, round the edge; main.js measures the nearest copy. Wherever it is heard it is placed to the
+// side it is on against the way the camera looks (`pan`, by distance: wide far off, narrow when it is round you), and from behind it is
+// a little quieter and darker (`behind`), since two ears cannot tell ahead from behind by side alone. All of it goes with the switch.
+export const FAR = {
+  join: 26.4, // m: where it sits in today (main.js: 30 m reach, sitting in above 0.12 of it). From here in, nothing changes
+  reach: 150, // m: past this, nothing
+  floor: -27, // dB at `reach`, against its loudness at `join`
+  p: 0.12, // how near its line plays while it is far: as it is where it joins, so the hand-over is seamless
+  pan: [[0, 0.15], [5, 0.4], [15, 0.6], [40, 0.7]], // [m, how far to one side at most (1: all the way)], straight between
+  behind: { db: -4, hz: 450 }, // straight behind: this much quieter, through a lowpass this low; to the side, none of it
+  open: 16000, // Hz: the lowpass ahead and to the side
+  smooth: 0.12, // s: how quickly the level, the side and the dark follow the fish and the camera
+};
+
 export function createMusic({ context = null } = {}) {
-  const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5, turn: 0.66, turnsize: 0.66, turnheight: 0.2, turnall: 0 };
-  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], turnBy: null, barAt: 0, showEnd: -1, log: null, where: null, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
+  const params = { volume: 0.7, dream: 0.6, energy: 0.5, menace: 0.5, react: 0.7, swing: 0.6, band: 0.5, turn: 0.66, turnsize: 0.66, turnheight: 0.2, turnall: 0, farcarry: 1 };
+  const st = { intensity: 0.3, pulse: 0, tension: 0, life: 0, harmony: 0, beats: [], chain: 0, heat: 0, solo: { deg: 7, rest: 0, left: 0 }, show: null, licks: 0, cast: {}, sitting: [], turnBy: null, barAt: 0, showEnd: -1, back: null, rest: null, drumV: [], far: null, ear: null, log: null, where: null, speed: 0, coil: 0, danger: 0, low: false, alive: true, floor: 0, floors: 5, mood: 1, bar: 0, tick: 0, beatStart: 0, started: false, muted: false, duck: 1 };
   let ctx = context, virtual = context ? 0 : null, timer = null;
   let n = null; // audio nodes
   let noiseBuf = null, pad = [], plan = null, lastBass = 40;
@@ -100,6 +119,36 @@ export function createMusic({ context = null } = {}) {
     const depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0;
     return Math.exp(lerp(Math.log(16000), Math.log(2200), clamp(params.dream * 0.5 + depth * 0.3, 0, 1))) * (st.alive ? 1 : 0.15);
   }
+  // This band's keeper's own way into the cast (FAR, below): how loud from where it is, darker from behind, and to which side. Made the
+  // first time it is wanted, so that a band with no keeper heard asks Web Audio for nothing more than before. A mono line through an
+  // equal-power panner comes out 3 dB down in the middle, so it is given that back: dead ahead it is as loud as it was.
+  function leadBus() {
+    if (n.lead) return n.lead;
+    const g = (v) => { const x = ctx.createGain(); x.gain.value = v; return x; };
+    n.lead = g(1); n.leadDark = ctx.createBiquadFilter(); n.leadDark.type = 'lowpass'; n.leadDark.frequency.value = Math.min(FAR.open, ctx.sampleRate * 0.45); n.leadDark.Q.value = 0.5;
+    n.leadPan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; n.leadOut = g(n.leadPan ? Math.SQRT2 : 1);
+    n.lead.connect(n.leadDark); n.leadDark.connect(n.leadPan || n.leadOut); if (n.leadPan) n.leadPan.connect(n.leadOut); n.leadOut.connect(n.cast);
+    hearFar(0.01);
+    return n.lead;
+  }
+  // What FAR makes of where the keeper is (`f`: its id, `d` metres off, and `side`, `ahead`: where it is against the way the camera looks,
+  // in any length): its level in dB against the line as it joins, its place from -1 (left) to 1 (right), the lowpass, how much behind.
+  function ear(f) {
+    if (!f || !(f.d >= 0)) return null;
+    const lerpT = (tab, x) => { if (x <= tab[0][0]) return tab[0][1]; for (let i = 1; i < tab.length; i++) if (x <= tab[i][0]) return lerp(tab[i - 1][1], tab[i][1], (x - tab[i - 1][0]) / (tab[i][0] - tab[i - 1][0])); return tab[tab.length - 1][1]; };
+    const a = Math.atan2(f.side || 0, f.ahead || 0), behind = Math.max(0, -Math.cos(a));
+    const dist = f.d <= FAR.join ? 0 : FAR.floor * Math.min(1, (f.d - FAR.join) / (FAR.reach - FAR.join)), db = dist + FAR.behind.db * behind;
+    return { d: f.d, db, gain: f.d > FAR.reach ? 0 : Math.pow(10, db / 20), pan: Math.sin(a) * lerpT(FAR.pan, f.d), hz: Math.exp(lerp(Math.log(FAR.open), Math.log(FAR.behind.hz), behind)), behind, angle: a };
+  }
+  const carries = () => params.farcarry >= 0.5;
+  // the keeper's way in follows where it is (only once it has been made)
+  function hearFar(tc = FAR.smooth) {
+    if (!n || !n.lead || !st.ear) return;
+    const t = now(), e = st.ear;
+    n.lead.gain.setTargetAtTime(e.gain, t, tc); n.leadDark.frequency.setTargetAtTime(Math.min(e.hz, ctx.sampleRate * 0.45), t, tc); if (n.leadPan) n.leadPan.pan.setTargetAtTime(clamp(e.pan, -1, 1), t, tc);
+  }
+  // play what `fn` plays as `id`: through the keeper's own way in if it is this band's keeper and the switch is on, else as before
+  function as(id, fn) { const was = castTo; castTo = carries() && st.far && st.far.id === id && n ? leadBus() : null; fn(); castTo = was; }
   function applyParams(tc = 0.25) {
     if (!n) return;
     const t = now(), depth = st.floors > 1 ? st.floor / (st.floors - 1) : 0, P = params;
@@ -131,7 +180,7 @@ export function createMusic({ context = null } = {}) {
     if (lp) filt('lowpass', lp);
     const g = ctx.createGain();
     env(g.gain, t, attack, gain, decay);
-    node.connect(g); g.connect(out);
+    node.connect(g); g.connect(out); if (out === n.drums) keepDrum(t, g);
     src.start(t, Math.random() * 1.5); src.stop(t + attack + decay + 0.05);
   }
   function tone(t, { type = 'sine', f0, f1 = 0, glide = 0.08, attack = 0.003, decay, gain, out = n.drums }) {
@@ -139,9 +188,11 @@ export function createMusic({ context = null } = {}) {
     o.type = type; o.frequency.setValueAtTime(f0, t);
     if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + glide);
     env(g.gain, t, attack, gain, decay);
-    o.connect(g); g.connect(out);
+    o.connect(g); g.connect(out); if (out === n.drums) keepDrum(t, g);
     o.start(t); o.stop(t + attack + decay + 0.05);
   }
+  // the band's own drum strokes of the last moment, so that a keeper's strike can take back the ones already asked for in the rest of its beat
+  function keepDrum(t, g) { if (!st.inTick) return; st.drumV.push({ t, g, e: st.kitEntry }); while (st.drumV.length > 64 || (st.drumV.length && st.drumV[0].t < now() - 1)) st.drumV.shift(); }
   const kit = {
     ride(t, v, bell) { const soft = 1 - 0.35 * params.dream; noise(t, { hp: 3600, bp: 6200, q: 0.5, decay: 0.3 + 0.35 * v, gain: 0.62 * v * soft }); tone(t, { type: 'triangle', f0: bell ? 2640 : 3520, decay: bell ? 0.5 : 0.16, gain: (bell ? 0.16 : 0.09) * v * soft }); if (bell) tone(t, { f0: 3962, decay: 0.4, gain: 0.09 * v * soft }); },
     hat(t, v) { noise(t, { hp: 5500, decay: 0.05, gain: 0.42 * v }); },
@@ -154,6 +205,8 @@ export function createMusic({ context = null } = {}) {
     splash(t, v) { noise(t, { hp: 4200, decay: 0.32, gain: 0.6 * v }); },
     swell(t, v, len = 1.4) { noise(t, { hp: 2600, attack: len, decay: 0.5, gain: 0.55 * v }); },
   };
+  // the drums are written down too (st.log), as `drum:<what>`, for the tools and checks that read a strike without hearing it
+  for (const k of Object.keys(kit)) { const f = kit[k]; kit[k] = (t, ...r) => { let e = null; if (st.log) st.log.push(e = { voice: 'drum:' + k, at: st.where, t, v: r[0], tag: st.tag || null }); st.kitEntry = e; const x = f(t, ...r); st.kitEntry = null; return x; }; }
   function bassNote(t, midi, dur, v) {
     const f = mtof(midi), filt = ctx.createBiquadFilter(), g = ctx.createGain();
     filt.type = 'lowpass'; filt.Q.value = 1.2;
@@ -219,25 +272,27 @@ export function createMusic({ context = null } = {}) {
   // ---------------------------------------------------------------- the cast's instruments
   const osc = (type, f, t, stop) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stop); return o; };
   const lowpass = (f, q = 0.8) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; b.Q.value = q; return b; };
-  const held = (t, attack, level, dur) => { const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(level, 0.0002), t + attack); g.gain.setValueAtTime(Math.max(level, 0.0002), t + Math.max(dur, attack + 0.01)); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01) + 0.14); g.connect(n.cast); return g; };
+  // where a cast voice goes: the cast's bus, or, for this band's keeper while it is heard by FAR, its own way in (as(), below)
+  let castTo = null; const C = () => castTo || n.cast;
+  const held = (t, attack, level, dur) => { const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(level, 0.0002), t + attack); g.gain.setValueAtTime(Math.max(level, 0.0002), t + Math.max(dur, attack + 0.01)); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01) + 0.14); g.connect(C()); return g; };
   const voices = {
     trumpet(t, m, dur, v) { // muted: a saw through a narrow nose
       const o = osc('sawtooth', mtof(m) * 0.985, t, t + dur + 0.2), f = ctx.createBiquadFilter(), g = ctx.createGain();
       o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.03);
       f.type = 'bandpass'; f.Q.value = 5; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(1900, t + 0.04); f.frequency.exponentialRampToValueAtTime(1200, t + dur + 0.05);
-      env(g.gain, t, 0.012, 0.6 * v, dur + 0.06); o.connect(f); f.connect(g); g.connect(n.cast);
+      env(g.gain, t, 0.012, 0.6 * v, dur + 0.06); o.connect(f); f.connect(g); g.connect(C());
     },
     vibes(t, m, dur, v) { // a metal bar struck soft, with the motor turning
       const g = ctx.createGain(), trem = ctx.createGain(), lfo = osc('sine', 5.2, t, t + dur + 0.3), lg = ctx.createGain();
       for (const [k, level] of [[1, 0.5], [4, 0.14], [10, 0.03]]) { const og = ctx.createGain(); og.gain.value = level; osc('sine', mtof(m) * k, t, t + dur + 0.3).connect(og); og.connect(g); }
-      env(g.gain, t, 0.004, 0.5 * v, dur); lg.gain.value = 0.35; trem.gain.value = 0.65; lfo.connect(lg); lg.connect(trem.gain); g.connect(trem); trem.connect(n.cast);
+      env(g.gain, t, 0.004, 0.5 * v, dur); lg.gain.value = 0.35; trem.gain.value = 0.65; lfo.connect(lg); lg.connect(trem.gain); g.connect(trem); trem.connect(C());
     },
     pluck(t, m, dur, v) { // a string pulled and let go
       const len = Math.max(dur, 0.35), o = osc('sawtooth', mtof(m) * 1.03, t, t + len + 0.2), f = lowpass(3200, 2), g = ctx.createGain();
       o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.05); f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(500, t + 0.25);
-      env(g.gain, t, 0.002, 0.55 * v, len); o.connect(f); f.connect(g); g.connect(n.cast);
+      env(g.gain, t, 0.002, 0.55 * v, len); o.connect(f); f.connect(g); g.connect(C());
     },
-    block(t, m, dur, v) { tone(t, { f0: mtof(m), decay: 0.05, gain: 0.4 * v, out: n.cast }); tone(t, { type: 'triangle', f0: mtof(m) * 2.76, decay: 0.03, gain: 0.14 * v, out: n.cast }); }, // wood, struck
+    block(t, m, dur, v) { tone(t, { f0: mtof(m), decay: 0.05, gain: 0.4 * v, out: C() }); tone(t, { type: 'triangle', f0: mtof(m) * 2.76, decay: 0.03, gain: 0.14 * v, out: C() }); }, // wood, struck
     clarinet(t, m, dur, v, to = 0) { // hollow and low, sliding to its next note
       const o = osc('square', mtof(m), t, t + dur + 0.3), f = lowpass(700 + 700 * v);
       if (to) o.frequency.exponentialRampToValueAtTime(mtof(to), t + dur * 0.85);
@@ -252,10 +307,10 @@ export function createMusic({ context = null } = {}) {
     sax(t, m, dur, v) { // reedy, with a shake in it and breath on the front
       const o = osc('sawtooth', mtof(m) * 0.97, t, t + dur + 0.3), f = lowpass(1500 + 1400 * v, 2.5), vib = osc('sine', 5.6, t, t + dur + 0.3), vg = ctx.createGain();
       o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.04); vg.gain.value = mtof(m) * 0.008; vib.connect(vg); vg.connect(o.frequency);
-      o.connect(f); f.connect(held(t, 0.03, 0.26 * v, dur)); noise(t, { bp: 2200, q: 0.9, attack: 0.01, decay: 0.07, gain: 0.1 * v, out: n.cast });
+      o.connect(f); f.connect(held(t, 0.03, 0.26 * v, dur)); noise(t, { bp: 2200, q: 0.9, attack: 0.01, decay: 0.07, gain: 0.1 * v, out: C() });
     },
     celesta(t, m, dur, v) { // small bells, very high, a long time dying
-      const g = ctx.createGain(); env(g.gain, t, 0.003, 0.34 * v, dur); g.connect(n.cast);
+      const g = ctx.createGain(); env(g.gain, t, 0.003, 0.34 * v, dur); g.connect(C());
       for (const [k, level, cents] of [[1, 0.6, 0], [1, 0.3, 9], [3, 0.1, 0], [5.4, 0.04, 0]]) { const og = ctx.createGain(); og.gain.value = level; const o = osc('sine', mtof(m) * k, t, t + dur + 0.2); o.detune.value = cents; o.connect(og); og.connect(g); }
     },
     cello(t, m, dur, v, to = 0) { // bowed: it leans into the note and slides off it
@@ -270,7 +325,7 @@ export function createMusic({ context = null } = {}) {
   };
   // every note the cast and the keepers' shows play can be written down (st.log, an array, or null for not), with the bar and tick it
   // was asked for in (and `show` if a keeper's show played it): how the checks and tools/hear_turn.mjs read a line without hearing it
-  for (const k of Object.keys(voices)) { const f = voices[k]; voices[k] = (t, m, dur, v, ...r) => { if (st.log) st.log.push({ voice: k, at: st.where, t, m, dur, v, show: !!st.showing }); return f(t, m, dur, v, ...r); }; }
+  for (const k of Object.keys(voices)) { const f = voices[k]; voices[k] = (t, m, dur, v, ...r) => { if (st.log) st.log.push({ voice: k, at: st.where, t, m, dur, v, show: !!st.showing, tag: st.tag || null }); return f(t, m, dur, v, ...r); }; }
 
   // ---------------------------------------------------------------- harmony
   const tonic = () => KEYS[Math.min(st.floor, KEYS.length - 1)];
@@ -429,10 +484,13 @@ export function createMusic({ context = null } = {}) {
   }
   function playTick(bar, tick, t) {
     const I = st.intensity, P = params, rnd = Math.random, beat = Math.floor(tick / 3), sub = tick % 3;
-    if (tick === 0) { planBar(bar, t); st.barAt = t; st.turnBy = st.sitting.find((id) => turnBar(id, bar)) ?? null; } // who may turn round in this bar
+    if (tick === 0) { planBar(bar, t); st.barAt = t; st.turnBy = [...st.sitting, ...(farLine() ? [st.far.id] : [])].find((id) => turnBar(id, bar)) ?? null; } // who may turn round in this bar
     st.where = [bar, tick];
     const human = () => (rnd() - 0.5) * 0.012;
-    // --- drummer
+    // --- drummer (who lays out for the rest of a beat a keeper has struck in: st.rest, comeBack)
+    const resting = st.rest && t > st.rest.from + 1e-4 && bar * 12 + tick < st.rest.g; // (by the tick, not the clock: the tempo moves a little each beat)
+    st.inTick = true;
+    if (!resting) {
     const fillNow = plan.fill && tick >= 6;
     if (I < 0.24) { // brushes and almost nothing else
       if (sub === 0) kit.brush(t, 0.6 + 0.4 * (beat % 2));
@@ -462,6 +520,8 @@ export function createMusic({ context = null } = {}) {
       kit.snare(t, v);
       if (st.tension > 0.6) kit.snare(t + st.tickLen * 0.5, v * 0.85);
     }
+    }
+    st.inTick = false;
     // --- bass
     for (const [at, midi, beats] of plan.bass) if (at === tick) bassNote(t + human() * 0.5, midi, beats * st.beatDur, lerp(0.55, 1, I));
     // --- piano
@@ -472,8 +532,12 @@ export function createMusic({ context = null } = {}) {
       if (P.menace > 0.6 && I > 0.75 && rnd() < 0.35) brass(t, [bassPitch(ch.root, 40) + 12, bassPitch(ch.root + 6, 46) + 12], 0.22, 0.7);
     }
     // --- the cast: whoever is near sits in; and a keeper that has the floor plays its fill or its solo in place of its part
-    for (const id of st.sitting) if (!(st.show && st.show.id === id)) playCast(id, st.cast[id], bar, tick, t);
-    if (st.show) playShow(bar, tick, t);
+    // (this band's keeper, far off, plays too, outside the three: FAR); a line that has given way to its own hit, fill or solo comes back
+    // where comeBack says, and plays nothing of its own till then
+    for (const id of st.sitting) if (!(st.show && st.show.id === id)) as(id, () => lineTick(id, st.cast[id], bar, tick, t));
+    if (farLine() && !(st.show && st.show.id === st.far.id)) as(st.far.id, () => lineTick(st.far.id, FAR.p, bar, tick, t));
+    if (st.back && bar * 12 + tick > st.back.R) st.back = null; // its line was not playing when it should have come back
+    if (st.show) as(st.show.id, () => playShow(bar, tick, t));
     // --- the harmony the fish has rowed up: one held note of the chord for each voice it has, laid again every two beats
     if (st.harmony > 0 && (tick === 0 || tick === 6)) { const ch = chordAt(bar), notes = oarNotes(ch); for (let i = 0; i < st.harmony && i < notes.length; i++) hum(t, notes[i], st.beatDur * 2.4, 0.5 + 0.1 * i); }
     // --- a run of catches: each one in time adds a player, and the third is a solo
@@ -503,18 +567,102 @@ export function createMusic({ context = null } = {}) {
     warden: { voice: 'cello', base: 45, fill: [0, 4, 7], low: 0, high: 9, len: 1.6 },
     sum: { voice: 'tuba', base: 40, fill: [0, 4, 0], low: 0, high: 7, len: 1 },
   };
+  SHOW.keeper.blow = true; // the Keeper's fill lands on its blow (main.js tells the band of it: game.event('slam') -> strike)
+
+  // ---------------------------------------------------------------- a keeper's hit, and its line coming back after it
+  // George, of the Keeper's tuba: 'I like the sound when it strikes, but it seems to interrupt the main rhythm in a weird manner. Or should I
+  // rather say that the rhythm comes back as if it was ignoring the strike sound happened.' It did: the fill's long note landed when its run
+  // ran out, a third of a second before the claw came down, and the oom-pah came back on its very next one or three, as if nothing had been
+  // played (sometimes a swung eighth after the long note, on top of it). Now the long note is the strike: it waits for the blow and sounds
+  // on it (a hair later if a beat is that near: never earlier). And whatever a keeper ends a show on (that hit; a fill that lands on its own;
+  // a solo's last note, now on one or three) rings its whole length, untouched, and its line stays out until a strong beat (one or three)
+  // after it, at least `after` beats on and with room for a pickup once the hit has rung (`alone` beats of it at most: a longer one, the
+  // Warden's bow, is let ring under it), so never more than about a bar; and comes back ON that beat, led in by a pickup like a
+  // turnaround's (TURN), as long as the room allows: the notes a step at a time up the scale into the note the line plays there (ENTRY).
+  // On a strike the drums mark it with a kick, lay out for the rest of that beat (what they had already been asked to play in it is taken
+  // back) and kick the line back in. The sounds are as they were.
+  const BACK = {
+    nudge: 0.035, // s: a strike this near before a beat is put on the beat. The ear forgives sound this much behind the picture; never ahead
+    wait: 1.4, // s from the wind-up: how long a fill's last note waits for the blow (the great claw takes 0.95 s, lame 1.28, its dig longer)
+    after: 4 / 3, // beats: the line comes back on the first strong beat at least this far after the hit
+    alone: 1.7, // beats: the most of the hit that has to have rung before its pickup may start (the Keeper's is 1.62: all of it)
+    on: [0, 6], // the strong beats: one and three (ticks)
+    kick: [0.55, 0.45], // the drums: the kick under a strike, and the one that brings the line back in
+  };
+  // the pickup into the line's return: [ticks before it, length in beats, loudness against the line's]; the biggest that fits is played
+  const PICKUP = { 1: [[-1, 0.3, 0.9]], 2: [[-3, 0.55, 0.95], [-1, 0.3, 0.9]], 3: [[-4, 0.3, 0.8], [-3, 0.55, 0.95], [-1, 0.3, 0.9]] };
+  // the note each keeper's line comes back on, at tick 0 or 6 of `bar`, as its own line plays it there (playCast). A line that has nothing
+  // of its own on beat three (the Shearer's run, the Warden's and the Sum's one note to a bar) comes back there on what it plays on one,
+  // held to the bar's end, or the top of its run. Returns [note, seconds, the note it slides to].
+  const ENTRY = {
+    keeper: (ch, bar, tick, beat) => [bassPitch(ch.root + (tick ? 7 : 0), 36), beat * 1.25],
+    shearer: (ch, bar, tick, beat) => [55 + ch.root + ch.q.scale[tick ? 4 : (bar % 2) * 2], tick ? beat * 0.9 : 0.16],
+    lamplighter: (ch, bar, tick) => [voicing(ch, 79)[3 - tick / 3] + (bar % 2 ? 0 : 12 * (tick === 0)), 1.5],
+    warden: (ch, bar, tick, beat) => { const m = bassPitch(ch.root + ch.q.tones[bar % 2 ? 2 : 0], 45); return [m, beat * (tick ? 1.8 : 3.7), m + (bar % 4 < 2 ? 2 : -1)]; },
+    sum: (ch, bar, tick, beat) => [bassPitch(ch.root, 40), beat * (tick ? 1.8 : 3.8)],
+  };
+  const swingLate = () => lerp(0.5, 0.74, params.swing);
+  // `id` ends a show on `hit` ({ m, dur, v }) at time T, in the beat G ({ at, index, dur }: a beat's start, its number, bar * 4 + beat, and
+  // its length; T need not be in it); `strike`: it is the blow. Plays the hit, sets up the line's return (st.back) and says where it is.
+  function comeBack(id, T, G, hit, strike = false) {
+    const D = G.dur, beatT = (k) => G.at + (k - G.index) * D, tickT = (g) => beatT(Math.floor(g / 3)) + [0, 1 / 3, swingLate()][((g % 3) + 3) % 3] * D;
+    let k = G.index + Math.ceil((T - G.at) / D - 1e-6), onBeat = false; // the first beat at or after T
+    if (beatT(k) - T <= BACK.nudge + 1e-9) { T = Math.max(T, beatT(k)); onBeat = true; }
+    const rung = Math.min(hit.dur, BACK.alone * D), lead = (1 - swingLate()) * D; // the hit's own time, and the shortest pickup's
+    let r = G.index + Math.ceil((T + Math.max(BACK.after * D, rung + lead) - G.at) / D - 1e-6); if (r % 2) r++; // the line's return: one or three
+    const R = r * 3;
+    let size = 3; while (size > 1 && tickT(R + PICKUP[size][0][0]) < T + rung - 1e-6) size--;
+    const dur = hit.dur, S = SHOW[id];
+    const kt = G.index + Math.floor((T - G.at) / D + 1e-6), was = st.where; st.where = [Math.floor(kt / 4), (kt % 4) * 3];
+    st.showing = true; st.tag = strike ? 'hit' : null; voices[S.voice](T, hit.m, dur, Math.min(1.25, hit.v)); st.showing = false; st.tag = null; st.where = was;
+    st.licks++; st.showEnd = Math.max(st.showEnd, T + dur); st.show = null;
+    if (strike) { // the drums: a kick under it, and nothing more for the rest of its beat
+      const to = beatT(onBeat ? k + 1 : k);
+      for (const x of st.drumV) if (x.t > T + 1e-4 && x.t < to - 1e-4) { x.g.disconnect(); if (x.e) x.e.cut = true; }
+      st.tag = 'hit'; kit.kick(T, BACK.kick[0]); st.tag = null; st.rest = { from: T, to, g: (onBeat ? k + 1 : k) * 3 };
+    }
+    st.back = { id, R, size, pickup: PICKUP[size].map(([dt, beats, loud]) => ({ g: R + dt, beats, loud })), kick: strike };
+    st.lastBack = { id, T, R: [Math.floor(r / 4), (r % 4) * 3], at: tickT(R), size, dur, onBeat, strike };
+    return st.lastBack;
+  }
+  // a line's tick: its own part, or, while it is coming back (st.back), its pickup and then the note it comes back on
+  function lineTick(id, p, bar, tick, t) {
+    const B = st.back;
+    if (!B || B.id !== id) return playCast(id, p, bar, tick, t);
+    const g = bar * 12 + tick, v = 0.45 + 0.55 * p, beat = st.beatDur, T = TURN[id], E = ENTRY[id] || ENTRY.keeper;
+    const rBar = Math.floor(B.R / 12), rTick = B.R % 12, rCh = rBar === bar ? chordAt(bar) : rBar % 8 === 0 ? nextChord(rBar - 1) : chordAt(rBar);
+    const [land, len, to] = E(rCh, rBar, rTick, beat);
+    st.tag = 'back';
+    if (g < B.R) { // the pickup: a step at a time up the scale of the bar it is in, into the note it comes back on
+      const i = B.pickup.findIndex((x) => x.g === g);
+      if (i >= 0) { const x = B.pickup[i], ch = chordAt(bar); let m = stepFrom(ch, land, -(B.size - i)); if (m < T.low) m += 12; sound(T.voice, t, m, x.beats * beat * (T.len || 1), v * x.loud); }
+    } else { // on the beat
+      if (id === 'sum') voices.organ(t, [land, ...voicing(rCh, 55)], len, v); else voices[T.voice](t, land, len, v, to || 0);
+      if (B.kick) { st.inTick = true; kit.kick(t, BACK.kick[1]); st.inTick = false; }
+      st.back = null;
+    }
+    st.tag = null;
+  }
+  // this band's keeper is playing from afar: heard (the switch), not sitting in, and still standing (main.js sends no `far` once it has fallen)
+  const farLine = () => carries() && st.far && CAST[st.far.id]?.lead && !st.sitting.includes(st.far.id) && st.ear && st.ear.gain > 0;
   function playShow(bar, tick, t) {
     const sh = st.show, S = SHOW[sh.id], ch = chordAt(bar), beat = st.beatDur, rnd = Math.random;
     const deg = (d) => S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), say = (d, dur, v) => { st.showing = true; voices[S.voice](t, deg(d), dur, Math.min(1.25, v)); st.showing = false; st.licks++; st.showEnd = Math.max(st.showEnd, t + dur); };
     if (sh.wait > 0) { if (tick % 3 === 0) sh.wait--; return; } // it comes in on a beat
+    const here = () => ({ at: t - [0, 1 / 3, swingLate()][tick % 3] * beat, index: bar * 4 + Math.floor(tick / 3), dur: beat }); // the beat this tick is in
     if (sh.kind === 'fill') {
-      const i = sh.i++, n = S.fill.length, v = 0.75 + 0.5 * (i / n); // swelling as it goes
-      if (i < n - 1) say(S.fill[i], st.tickLen * 1.1 * S.len, v); else { say(S.fill[n - 1], beat * 1.8 * S.len, 1.2); st.show = null; }
+      const i = sh.i, n = S.fill.length, v = 0.75 + 0.5 * (i / n); // swelling as it goes
+      if (i < n - 1) { sh.i++; say(S.fill[i], st.tickLen * 1.1 * S.len, v); return; }
+      // its last, long note: a keeper whose blow the band is told of (S.blow; api.strike) holds it for the blow, BACK.wait from the wind-up
+      // at most; otherwise, or if no blow comes, it lands on the next beat, and its line comes back after it (comeBack)
+      if (tick % 3 !== 0 || (S.blow && t < sh.at + BACK.wait)) return;
+      comeBack(sh.id, t, here(), { m: deg(S.fill[n - 1]), dur: beat * 1.8 * S.len, v: 1.2 });
       return;
     }
-    // the solo: swung eighths (the middle of each triplet left alone), a step or a leap at a time between its low and its high, a breath now and then, and home at the end
+    // the solo: swung eighths (the middle of each triplet left alone), a step or a leap at a time between its low and its high, a breath now and then, and home at the end,
+    // on one or three, and its line comes back after it (comeBack)
     sh.left--; const sub = tick % 3;
-    if (sh.left <= 0) { say(sh.id === 'keeper' || sh.id === 'warden' ? 0 : 7, beat * 2.4 * S.len, 1.2); st.show = null; return; }
+    if (sh.left <= 0) { if (BACK.on.includes(tick)) comeBack(sh.id, t, here(), { m: deg(sh.id === 'keeper' || sh.id === 'warden' ? 0 : 7), dur: beat * 2.4 * S.len, v: 1.2 }); return; }
     if (sub === 1 || sh.rest-- > 0) return;
     if (rnd() < 0.12) { sh.rest = 1; return; }
     sh.deg = clamp(sh.deg + (rnd() < 0.2 ? (rnd() < 0.5 ? 3 : -3) : rnd() < 0.55 ? 1 : -1) * (sh.left < 8 ? -Math.sign(sh.deg - 3) || 1 : 1), S.low, S.high);
@@ -576,8 +724,21 @@ export function createMusic({ context = null } = {}) {
     flourish(id, kind = 'fill', gap = 10) {
       if (!SHOW[id] || !st.started || !n) return false;
       const at = now(); if (kind === 'fill' && (st.show || at - (st.shownAt ?? -99) < gap)) return false;
-      st.shownAt = at; st.show = { id, kind, i: 0, wait: kind === 'solo' ? 1 : 0, left: 30, rest: 0, deg: 4 }; return true;
+      st.shownAt = at; st.show = { id, kind, i: 0, wait: kind === 'solo' ? 1 : 0, left: 30, rest: 0, deg: 4, at }; if (st.back?.id === id) st.back = null; return true;
     },
+    // A keeper's blow has landed (main.js, game.event('slam'): the Keeper's great claw, its weight dropped, its rising from the sand). If its
+    // fill is playing or holding its last note for it, that note is the strike, now (comeBack: on a beat if one is a hair away, never
+    // earlier), the drums mark it, and its line comes back after it. Otherwise nothing: a blow with no fill to it is the drums' alone, as
+    // before (main.js still plays its 'burst'). Returns where it put things (st.lastBack), or false.
+    strike(id) {
+      const sh = st.show; if (!st.started || !n || !sh || sh.id !== id || sh.kind !== 'fill' || !SHOW[id]) return false;
+      const S = SHOW[id], G = st.beats[st.beats.length - 1]; if (!G) return false;
+      const T = now() + 0.012, k = G.index + Math.floor((T - G.at) / G.dur), ch = chordAt(Math.floor(k / 4)), d = S.fill[S.fill.length - 1];
+      let out = null; as(id, () => { out = comeBack(id, T, G, { m: S.base + ch.root + ch.q.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), dur: G.dur * 1.8 * S.len, v: 1.2 }, true); });
+      return out;
+    },
+    // what FAR makes of a keeper `f` metres off ({ id, d, side, ahead }); for the checks and the tools
+    hearing: (f) => ear(f), FAR,
     // what the band is doing right now, for the drawer
     describe() { return st.started ? { mood: MOODS[st.mood].name, key: ['D', 'C', 'B flat', 'A', 'G'][Math.min(st.floor, 4)], bpm: Math.round(60 / st.beatDur), intensity: st.intensity, energy: energyNow(), sitting: st.sitting.map((id) => CAST[id].name) } : null; },
     // one creature's instrument on its own, two bars of it, for the library
@@ -632,6 +793,9 @@ export function createMusic({ context = null } = {}) {
       const near = s.cast || {};
       for (const id of Object.keys(CAST)) { const to = clamp(near[id] || 0, 0, 1), was = st.cast[id] || 0; st.cast[id] = was + (to - was) * (1 - Math.exp(-dt * (to > was ? 1.6 : 0.5))); }
       st.sitting = Object.keys(CAST).filter((id) => st.cast[id] > 0.12).sort((a, b) => (st.cast[b] + (CAST[b].lead ? 1 : 0)) - (st.cast[a] + (CAST[a].lead ? 1 : 0))).slice(0, 3);
+      // this band's keeper, wherever it is (main.js: `far`, { id, d, side, ahead }; null once it has fallen, or where there is none; left out
+      // while the dive is paused, which keeps the last): FAR
+      if (s.far !== undefined) { st.far = s.far && CAST[s.far.id]?.lead ? s.far : null; st.ear = ear(st.far); hearFar(); }
       st.pulse *= Math.exp(-dt / 1.6);
       st.harmony = Math.max(0, Math.min(5, s.harmony | 0)); // voices the fish has rowed up (see main.js, OARS)
       st.chain = Math.max(0, Math.min(3, s.chain | 0)); // catches in a row: 1 the vibraphone joins the piano, 2 the horns riff, 3 a solo over all of it
@@ -721,12 +885,12 @@ export function createMusic({ context = null } = {}) {
       else if (kind === 'close') { kit.swell(t, 0.8, 2.2); [0, 7, 12, 16, 19].map((iv) => 48 + tonic() + iv).forEach((m, i) => pianoNote(t + 2.2 + i * 0.22, m, 3.5, 0.7)); kit.ride(t + 2.2, 0.9, true); }
     },
     // for measuring the band without a speaker: render `seconds` of sound against a scripted game
-    async render(seconds, script) {
+    async render(seconds, script, step = 0.05) {
       begin();
-      for (let t = 0; t < seconds; t += 0.05) {
+      for (let t = 0; t < seconds; t += step) {
         virtual = t;
         const s = script(t) || {};
-        api.update(0.05, { speed: 0, coil: 0, danger: 0, low: false, alive: true, ...s });
+        api.update(step, { speed: 0, coil: 0, danger: 0, low: false, alive: true, ...s });
         for (const h of s.hits || []) api.hit(h[0], h[1] ?? 1);
         schedule(t + 0.1);
       }
