@@ -69,11 +69,11 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front[hidden] { display: none; }
 #front canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #front .sheet { --beat: clamp(12px, 1.1vw, 18px); position: absolute; inset: 0; display: grid; padding: clamp(12px, 2.6vh, 30px) clamp(14px, 3.4vw, 54px) clamp(10px, 2vh, 22px);
-  grid-template: "head" auto "." minmax(0, 1fr) "pic" minmax(0, var(--pic-h, 1fr)) "credit" auto "caption" auto "menu" minmax(4.2em, auto) "." minmax(0, 1fr) / minmax(0, 1fr); row-gap: 0; }
+  grid-template: "head" auto "." minmax(0, 1fr) "pic" minmax(0, var(--pic-h, 1fr)) "caption" auto "credit" auto "menu" minmax(4.2em, auto) "." minmax(0, 1fr) / minmax(0, 1fr); row-gap: 0; }
 /* the grid, as on the plate: the running head on one baseline across the top, its two ends on the page's margins; under it one block centred
    on the picture's axis: the picture (its row no taller than the fish needs, --pic-h, so what is left is shared above and below the block),
-   the draughtsman's credit hung small under the picture's lower left corner (--fish-in, from frame()), then the caption and the menu, each a
-   beat (--beat) under the last */
+   the caption a beat (--beat) under it, the draughtsman's credit small and light close under the caption on the same axis (George chose one
+   axis over the plate's credit at the corner, which read as a staircase), and the menu a beat under that */
 #front .head { grid-area: head; display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 12px; margin-bottom: var(--beat); }
 #front .book { display: block; font: 400 clamp(11px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.24em; margin: 0; }
 #front .name { margin: 0; text-align: center; font: 400 clamp(17px, 2.1vw, 30px)/1 "Front Fell SC", serif; letter-spacing: 0.34em; padding-left: 0.34em; white-space: nowrap; }
@@ -82,7 +82,7 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front .class { display: block; margin: 0; justify-self: end; font: italic 400 clamp(13px, 1.4vw, 20px)/1 "Front Fell", serif; white-space: nowrap; }
 #front .class span { font-style: normal; font-size: 0.8em; letter-spacing: 0.06em; margin-left: 3em; }
 #front .pic { grid-area: pic; min-height: 0; }
-#front .credit { grid-area: credit; margin: 0; font: italic 400 clamp(10px, 0.9vw, 13px)/1.2 "Front Fell", serif; opacity: 0.85; padding-left: var(--fish-in, 0px); margin-top: 0.3em; }
+#front .credit { grid-area: credit; margin: calc(var(--beat) * 0.3) 0 0; text-align: center; font: italic 400 clamp(10px, 0.78vw, 12px)/1.2 "Front Fell", serif; letter-spacing: 0.02em; opacity: 0.62; }
 #front .caption { grid-area: caption; margin: var(--beat) 0 0; text-align: center; font-weight: 400; text-wrap: balance; }
 #front .caption b { font: italic 400 clamp(15px, 1.75vw, 25px)/1.15 "Front Fell", serif; letter-spacing: 0.1em; text-transform: uppercase; font-size: clamp(13px, 1.45vw, 21px); }
 #front .caption i { font: italic 400 clamp(14px, 1.6vw, 23px)/1.15 "Front Fell", serif; margin-left: 0.5em; white-space: nowrap; }
@@ -130,7 +130,7 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 }
 /* a phone on its side, or any short window: the menu as a column on the left margin, the fish to its right looking at it, its caption under it */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
-  #front .sheet { --beat: 8px; grid-template: "head head" auto "menu ." minmax(0, 1fr) "menu pic" minmax(0, var(--pic-h, 1fr)) "menu credit" auto "menu caption" auto "menu ." minmax(0, 1fr) / minmax(150px, 22%) minmax(0, 1fr); column-gap: 18px; }
+  #front .sheet { --beat: 8px; grid-template: "head head" auto "menu ." minmax(0, 1fr) "menu pic" minmax(0, var(--pic-h, 1fr)) "menu caption" auto "menu credit" auto "menu ." minmax(0, 1fr) / minmax(150px, 22%) minmax(0, 1fr); column-gap: 18px; }
   #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; padding: 0 12px 0 20px; margin-left: -20px; }
   #front .plate-foot { place-items: start start; align-self: stretch; margin-top: 0; }
   #front .plate-foot > * { margin-top: var(--menu-top, 0px); }
@@ -424,7 +424,6 @@ export async function openFront({ boot }) {
     const s = Math.min(r.width / (bw * 1.04), r.height / (bh * 1.04));
     const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
     const left = cx - (r.left + r.width / 2) / s, top = cy + (r.top + r.height / 2) / s;
-    root.style.setProperty('--fish-in', `${Math.max(0, r.width / 2 - s * bw / 2).toFixed(1)}px`); // the credit hangs under the picture's lower left corner
     const foot = $('.plate-foot'), nav = $('.menu'), dive = menu[0];
     if (SIDE.matches) { // the menu beside the fish: Dive at the height of the fish's head, the menu kept inside its column
       root.style.setProperty('--menu-top', '0px');

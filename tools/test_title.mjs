@@ -243,7 +243,7 @@ await ctx.close();
     check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'on its side' : 'wide'} at ${w}x${h}: the menu clears the caption and the credit${kind === 'up' ? ', is centred on the caption' : ''}, and every item's focus mark is whole`, !bad.length, bad.slice(0, 6).join('; '));
     // ---- 9c. the plate's grid (George: 'pay closer attention to alignments of all the graphic block'; and, of the side-by-side layout, the
     // fish should look at the menu). The running head on one baseline (upright: its two ends, the name standing over them) and its ends on
-    // equal margins; the credit hung under the picture's lower left corner; in the plate and upright layouts the fish (the mean of its ink
+    // equal margins; the credit a small line on the caption's axis, under it and above the menu; in the plate and upright layouts the fish (the mean of its ink
     // over a breath: it waves by several px either way), the caption and the menu on one centre line; side by side, the menu on the left
     // margin, left of the fish, at the height of its head, and nothing overlapping.
     const G = await ev(() => {
@@ -264,8 +264,10 @@ await ctx.close();
       const [bb, nb, cb] = G.base;
       if (Math.abs(bb - cb) > 1 || (kind !== 'up' && Math.abs(bb - nb) > 1)) bad.push(`head line baselines ${[bb, nb, cb].map(f1).join(' / ')}`);
       if (Math.abs(G.book.l - (G.W - G.cls.r)) > 1) bad.push(`margins ${f1(G.book.l)} left, ${f1(G.W - G.cls.r)} right`);
-      if (Math.abs(G.credit.l - G.frame.l) > 1) bad.push(`credit at ${f1(G.credit.l)}, the picture's left edge at ${f1(G.frame.l)}`);
-      if (G.credit.t < G.frame.b - 1) bad.push('the credit is not under the picture');
+      if (Math.abs(c(G.credit) - c(G.caption)) > 2) bad.push(`credit centred at ${f1(c(G.credit))}, the caption at ${f1(c(G.caption))}`);
+      if (G.credit.t < G.capBox.b) bad.push(`the credit (top ${f1(G.credit.t)}) is not under the caption (foot ${f1(G.capBox.b)})`);
+      if (kind !== 'side' && G.credit.b > Math.min(...G.items.map((it) => it.t))) bad.push(`the credit (foot ${f1(G.credit.b)}) runs into the menu`);
+      if (meet(G.credit, G.capBox) || meet(G.credit, G.frame)) bad.push('the credit meets the caption or the picture');
       if (kind !== 'side') {
         const cc = c(G.caption), menuC = kind === 'up' ? c(G.menuBox) : c(G.row);
         if (Math.abs(G.fishMean - cc) > 2 || Math.abs(menuC - cc) > 2 || Math.abs(c(G.frame) - cc) > 2) bad.push(`centres: fish ${f1(G.fishMean)} (framed ${f1(c(G.frame))}), caption ${f1(cc)}, menu ${f1(menuC)}`);
@@ -275,7 +277,7 @@ await ctx.close();
         const dy = (G.dive.t + G.dive.b) / 2; if (dy < G.head.t || dy > G.head.b) bad.push(`Dive at ${f1(dy)}, the head from ${f1(G.head.t)} to ${f1(G.head.b)}`);
         G.items.forEach((it, i) => { for (const [n, o] of [['caption', G.capBox], ['credit', G.credit], ['head line', G.name]]) if (meet(it, o)) bad.push(`item ${i} meets the ${n}`); if (it.b > h) bad.push(`item ${i} runs off the page`); });
       }
-      check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'side by side' : 'plate layout'} at ${w}x${h}: the running head on one baseline and equal margins, the credit under the picture's corner, ${kind === 'side' ? 'the menu on the left margin at the height of the fish\'s head, nothing overlapping' : 'fish, caption and menu on one centre line'}`, !bad.length, bad.join('; '));
+      check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'side by side' : 'plate layout'} at ${w}x${h}: the running head on one baseline and equal margins, the credit on the caption's axis under it, ${kind === 'side' ? 'the menu on the left margin at the height of the fish\'s head, nothing overlapping' : 'fish, caption and menu on one centre line'}`, !bad.length, bad.join('; '));
     }
   }
   await ctx.close(); }
