@@ -1,6 +1,7 @@
 // The run: scene setup, input, camera, the rules of the dive, and the HUD.
 
 import * as THREE from 'three';
+import { aim as aimSight, SEE, SIGHT } from './sight.js'; // (review polish)
 import { buildOarfish, PALETTE, stature } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
 import { createLibrary } from './library.js';
@@ -634,11 +635,11 @@ export async function start(saved = {}) {
       else if (kind === 'laststand') music.flourish(guard?.kind, 'solo');
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
       else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
-      else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7);
+      else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7, 'teach', { while: lasts((S) => S.leg.includes(1)) });
       else if (kind === 'crack') { moment('ram'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.25); }
-      else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6); }
-      else if (kind === 'stomp') { cam.shake = Math.max(cam.shake, 0.45); moment('burst'); say('keeper-stomp', 'Its spike is stuck in the bed. Ram that leg.', 6); }
-      else if (kind === 'held') say('keeper-held', 'You have its leg. Swim away and drag it out from under it.', 6);
+      else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6, 'teach', { while: lasts((S) => S.stun > 0 || S.open) }); }
+      else if (kind === 'stomp') { cam.shake = Math.max(cam.shake, 0.45); moment('burst'); say('keeper-stomp', 'Its spike is stuck in the bed. Ram that leg.', 6, 'teach', { while: lasts((S) => S.stomp && S.stomp.stuck > 0) }); }
+      else if (kind === 'held') say('keeper-held', 'You have its leg. Swim away and drag it out from under it.', 6, 'teach', { while: lasts((S) => S.held) });
       else if (kind === 'topple') { cam.shake = Math.max(cam.shake, 0.7); moment('kill'); }
       else if (kind === 'shed') { moment('burst'); say('keeper-shed', 'It let the leg go. The leg is food.', 6); }
       else if (kind === 'ate') { pulse('grow'); }
@@ -758,7 +759,11 @@ export async function start(saved = {}) {
   const LESSONS = ['hoop', 'hoop', 'hoop', 'pen', 'pens', 'big', 'jar'], COVERED = new Set(['loop', 'grow', 'toobig', 'ram', 'well', 'stamina', 'guard', 'cost', 'charge', 'toll', 'crest', 'oars']); // what the nursery teaches itself, and what can wait until it is over
   const tut = { on: false, step: 0, stall: 0, told: false, was: 0, prize: null };
   // a line of text is the last resort: once ever, never while the nursery is teaching the same thing by other means
-  function say(id, text, hold = 7, kind = 'teach') { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); hintQueue.push({ text, hold, kind }); }
+  // (review polish) o.while: a line about a passing moment is shown at once and only while it lasts, taken down when it ends, and if it ended before its turn came
+  // it is not counted as said; o.first: a line about a place, shown as soon as the place is met and not behind whatever is waiting
+  function say(id, text, hold = 7, kind = 'teach', o = {}) { if (!teach.on || said.has(id) || teach.learned[`say:${id}`] || (tut.on && COVERED.has(id))) return; said.add(id); know(`say:${id}`); const m = { text, hold, kind, id, while: o.while }; if (o.while) { if (showing && hintT > 1.2 && showing.kind !== 'note' && hintQueue.length < 4) hintQueue.unshift({ ...showing, hold: Math.max(3, hintT) }); hintQueue.unshift(m); hintT = 0; } else if (o.first) hintQueue.unshift(m); else hintQueue.push(m); } // (a line about a moment goes up at once, and what it interrupts comes back after it, as tell() does; a line about a place goes next, after what is showing)
+  const unsay = (id) => { said.delete(id); if (teach.learned[`say:${id}`]) { delete teach.learned[`say:${id}`]; saveTeach(); } }; // (review polish)
+  const lasts = (test) => () => { try { return !!guard && !guard.done && !!test(guard.state); } catch { return false; } }; // (review polish) a moment of the keeper's fight
   function setTeach(on, quiet) {
     if (on && !teach.on) { teach.done = false; teach.learned = {}; } // asked for again: from the beginning
     teach.on = on; saveTeach();
@@ -771,7 +776,7 @@ export async function start(saved = {}) {
     tut.stall += dt;
     const L = LESSONS[tut.step], head = rig.snout, t = world.time.value;
     const next = () => { tut.step++; tut.stall = 0; tut.told = false; tut.was = 0; music.hit('catch', 0.8); buzz(0, 0.5, 120); pulse('grow');
-      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('The paved way goes on to the rift. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
+      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('The paved way ends here. The rest of this sea is yours to find.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
     if (L === 'hoop') {
       const h = N.hoops[tut.step], dx = wrapD(head.x - h.x), dz = wrapD(head.z - h.z), along = dx * h.ux + dz * h.uz, off = Math.hypot(dx - along * h.ux, dz - along * h.uz, head.y - h.y);
       h.mesh.material.emissiveIntensity = 0.3 + 0.25 * Math.sin(t * 3.2);
@@ -863,6 +868,16 @@ export async function start(saved = {}) {
     kelp?.cast(most, nearBy);
     return c;
   }
+  // Where this band's keeper is, for the band to carry it from afar and place it left or right (FAR in music.js): its nearest copy across
+  // the band's repeating edge, from the fish, against the way the camera looks on the level (the fish's heading if it looks straight down).
+  const earDir = new THREE.Vector3();
+  function keeperAt() {
+    if (!guard || guard.done) return null;
+    const dx = wrapD(guard.pos.x - rig.pos.x), dz = wrapD(guard.pos.z - rig.pos.z);
+    camera.getWorldDirection(earDir); let fx = earDir.x, fz = earDir.z; const l = Math.hypot(fx, fz);
+    if (l < 0.05) { fx = Math.sin(rig.yaw); fz = Math.cos(rig.yaw); } else { fx /= l; fz /= l; }
+    return { id: guard.kind, d: Math.hypot(dx, dz), side: -dx * fz + dz * fx, ahead: dx * fx + dz * fz };
+  }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
     nowT -= dt;
     if (nowT > 0 || !$('drawer').classList.contains('open')) return;
@@ -871,9 +886,17 @@ export async function start(saved = {}) {
     $('music-now').textContent = music.muted ? 'Sound is off.' : d ? `Now: ${d.mood}, in ${d.key}. ${d.bpm} bpm, energy ${Math.round(d.energy * 100)}%, intensity ${Math.round(d.intensity * 100)}%.${d.sitting.length ? ` Sitting in: ${d.sitting.join(', ')}.` : ''}` : 'Press any key or click to start the sound.';
     $('energy-live').style.width = `${Math.round(music.energy * 100)}%`;
   }
+  let titleAside = false; // (review polish)
   function hud(dt) {
+    { // (review polish) the band's title steps aside while a keeper is being fought, so its beads (drawn over its back) never sit on the words
+      const k = guard && !guard.done && world.wrap ? Math.hypot(world.wrap(rig.pos.x - guard.pos.x), world.wrap(rig.pos.z - guard.pos.z)) : 1e9;
+      titleAside = k < (titleAside ? 30 : 26); // a little wider to come back than to go, so it does not blink at the edge
+      const el = document.querySelector('.lettering.where'); if (el && el.classList.contains('aside') !== titleAside) el.classList.toggle('aside', titleAside);
+    }
     // hints, one at a time
     hintT -= dt;
+    if (showing?.while && !showing.while()) hintT = Math.min(hintT, 0); // (review polish) its moment is over: take it down
+    while (hintT <= 0 && hintQueue[0]?.while && !hintQueue[0].while()) unsay(hintQueue.shift().id); // (review polish) its moment ended before its turn: not said
     if (hintT <= 0) {
       const next = hintQueue.shift();
       const el = $('toast');
@@ -1531,7 +1554,9 @@ export async function start(saved = {}) {
   // The turnaround's three sliders and its switch (TURN in music.js) are music sliders like the rest, as shipped here: every 4 bars (66 of
   // off/8/4/2), a walk-up of three (66 of one passing note/2/3/4), stepwise (20), keepers only (0). A code from before them gives these.
   const TURN_SHIPPED = { turn: 66, turnsize: 66, turnheight: 20, turnall: 0 };
-  for (const [k, v] of Object.entries(TURN_SHIPPED)) { if (!MUSIC_KEYS.includes(k)) MUSIC_KEYS.push(k); SHIPPED_MUSIC.all[k] ??= v; }
+  // The keeper heard from afar (FAR in music.js) is a switch in the same way: on as shipped (100); a code from before it gives it on.
+  const FAR_SHIPPED = { farcarry: 100 };
+  for (const [k, v] of Object.entries({ ...TURN_SHIPPED, ...FAR_SHIPPED })) { if (!MUSIC_KEYS.includes(k)) MUSIC_KEYS.push(k); SHIPPED_MUSIC.all[k] ??= v; }
   const prefs = store.get('oarfish.music', {});
   if (!prefs.all) { prefs.all = {}; for (const k of MUSIC_KEYS) if (Number.isFinite(prefs[k])) prefs.all[k] = prefs[k]; } // settings saved by the first version
   prefs.zones ||= {};
@@ -1558,6 +1583,7 @@ export async function start(saved = {}) {
     }
     if (!Object.keys(got).length) return 'That code has no settings in it.';
     if (!Object.keys(TURN_SHIPPED).some((k) => k in got)) Object.assign(got, TURN_SHIPPED); // a code from before the turnaround: its shipped setting
+    if (!('farcarry' in got)) Object.assign(got, FAR_SHIPPED); // and from before the keeper carried far
     if (zone === null) Object.assign(prefs.all, got); else prefs.zones[zone] = { ...preset(zone), ...got };
     savePrefs(); showPreset();
     if (zone !== null) return `Applied to ${zoneName(zone)} only.`;
@@ -1778,11 +1804,59 @@ export async function start(saved = {}) {
     }
     sun.position.copy(focus).add(SUN_OFFSET);
     sun.target.position.copy(focus);
-    world.dress?.(focus); // (the last hall is a world of its own kind, with no dressing) what casts is whatever stands in the sun's box where it now is: this catches a cut, which moves it all at once
+    world.dress?.(focus, dressView()); // (review polish: small things by what the camera can show, sight.js block) (the last hall is a world of its own kind, with no dressing) what casts is whatever stands in the sun's box where it now is: this catches a cut, which moves it all at once
     lamp.position.set(rig.pos.x + sy * 2.4, rig.pos.y + 3, rig.pos.z + cy * 2.4); // above and on the viewer's side, so the flank is lit
     { const c = run.charge, full = c >= 1, beat = full ? 0.5 + 0.5 * Math.sin(world.time.value * 7) : 0; // the crest: a glow over the head that grows as it fills, and beats when it is full
       crest.position.copy(rig.joints[0]).y += 0.3; crest.scale.setScalar(c > 0 ? 0.5 + 0.9 * c + 0.3 * beat : 0.01); crest.material.opacity = damp(crest.material.opacity, c > 0 ? 0.2 + 0.4 * c + 0.2 * beat : 0, 6, dt); }
+
+    seeFish(); // (review polish) the window round the fish, where the camera now is
+    ringsStep(dt); // (review polish) rings fade in
   }
+  // ---- review polish: the window round the fish (sight.js). Whatever stands between the camera and the fish is stippled away round it,
+  // and whatever is right in front of the lens; world.js hands its standing materials to it. Off in the testing tools' `devSee.window`.
+  const seeSize = new THREE.Vector2();
+  function seeFish() {
+    camera.updateMatrixWorld(); renderer.getDrawingBufferSize(seeSize);
+    aimSight(camera, rig.joints, seeSize.x, seeSize.y, devSee.window !== false);
+  }
+  // small dressing is drawn by what the camera can show (world.js, VIEW_REACH): where it is, which way it looks across the bed, how far the fog lets it see
+  const dressAt = { x: 0, z: 0, fx: 0, fz: 1, far: 60 }, dressDir = new THREE.Vector3();
+  function dressView() { camera.getWorldDirection(dressDir); const l = Math.hypot(dressDir.x, dressDir.z);
+    if (l > 0.05) { dressAt.fx = dressDir.x / l; dressAt.fz = dressDir.z / l; } dressAt.x = camera.position.x; dressAt.z = camera.position.z; dressAt.far = scene.fog ? scene.fog.far : 60; return dressAt; }
+  // Rings fade in (review polish). Every ring in the game is a one-pixel line that its owner (world.js, reef.js, foes.js, boss.js, guards.js) shows
+  // or hides at once, which popped it on at a fixed distance. Here, without touching any owner: each line's own share of light, `k`, comes up
+  // from nothing over `RINGS.fade` seconds of the dive from the moment it is shown; while it is drawn, its material is swapped for a copy with
+  // that share in it and put back straight after (so an owner never sees the copy); and two more copies of it, a pixel to the side and a pixel
+  // up, are drawn with it at `RINGS.halo` of its light, so that it reads as a line two pixels wide from either camera without being heavy.
+  // Hiding is as it was (at once): the checks read `.visible`, and it stays the owner's.
+  const RINGS = { fade: 0.6, halo: 0.55, every: 0.5 };
+  const ringState = new Map(), ringNudge = { x: { value: new THREE.Vector2() }, y: { value: new THREE.Vector2() } }, ringHalo = new THREE.Group();
+  let ringScan = 0;
+  const ringLike = (o) => o.isLine && o.material && o.material.isLineBasicMaterial && !o.material.vertexColors && o.material.depthTest !== false;
+  function ringsStep(dt) {
+    if ((ringScan -= dt || 0) <= 0 || !dt) { ringScan = RINGS.every; const seen = new Set();
+      scene.traverse((o) => { if (ringLike(o)) { seen.add(o); if (!ringState.has(o)) ringState.set(o, { k: 0, was: false, copies: new Map() }); } });
+      for (const o of ringState.keys()) if (!seen.has(o)) ringState.delete(o); }
+    for (const [o, st] of ringState) { let on = true; for (let p = o; p; p = p.parent) if (!p.visible) { on = false; break; }
+      if (on && !st.was) st.k = 0; st.was = on; st.k = on ? Math.min(1, st.k + (dt || 0) / RINGS.fade) : 0; }
+  }
+  const ringCopy = (st, base) => { let c = st.copies.get(base); if (c) return c;
+    const nudge = (m, u) => { m.onBeforeCompile = (sh) => { sh.uniforms.uNudge = u; sh.vertexShader = 'uniform vec2 uNudge;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  gl_Position.xy += uNudge * gl_Position.w;'); }; m.customProgramCacheKey = () => `ring-nudge-${u === ringNudge.x ? 'x' : 'y'}`; return m; };
+    c = { fade: base.clone(), x: nudge(base.clone(), ringNudge.x), y: nudge(base.clone(), ringNudge.y) };
+    for (const m of [c.fade, c.x, c.y]) m.transparent = true;
+    st.copies.set(base, c); return c; };
+  const ringDrawn = [];
+  function ringsBefore() { renderer.getDrawingBufferSize(seeSize); ringNudge.x.value.set(2 / seeSize.x, 0); ringNudge.y.value.set(0, 2 / seeSize.y);
+    for (const [o, st] of ringState) { if (!o.visible || !o.parent) continue; const base = o.material, c = ringCopy(st, base);
+      for (const m of [c.fade, c.x, c.y]) { m.color.copy(base.color); m.blending = base.blending; m.depthWrite = base.depthWrite; m.fog = base.fog; }
+      c.fade.opacity = base.opacity * st.k; c.x.opacity = c.y.opacity = base.opacity * st.k * RINGS.halo;
+      o.material = c.fade; ringDrawn.push([o, base]);
+      for (const m of [c.x, c.y]) { let t = st[m === c.x ? 'tx' : 'ty']; if (!t) { t = st[m === c.x ? 'tx' : 'ty'] = new THREE.Line(o.geometry, m); t.matrixAutoUpdate = false; t.frustumCulled = false; }
+        t.geometry = o.geometry; t.material = m; t.renderOrder = o.renderOrder; o.updateWorldMatrix(true, false); t.matrix.copy(o.matrixWorld); t.matrixWorld.copy(o.matrixWorld); ringHalo.add(t); } }
+    if (ringHalo.children.length) scene.add(ringHalo); }
+  function ringsAfter() { for (const [o, base] of ringDrawn) o.material = base; ringDrawn.length = 0; ringHalo.clear(); scene.remove(ringHalo); }
+  window.__sight = { SEE, SIGHT, devSee, fish: () => fish, rings: ringState, RINGS, guardEvent: (k, p) => guardGame.event(k, p), say: (...a) => say(...a) }; // for the checks and tools (tools/sight_fn.mjs)
+  // ---- end review polish
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
     renderer.setSize(w, h, false); stir(); // a canvas that changes size is wiped
@@ -1931,7 +2005,7 @@ export async function start(saved = {}) {
           else if (run.time - end.burst > 2) { end.burst = run.time; moment('burst'); } // a body too short to hold it
         }
       }
-      if (guard && !guard.done && Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7);
+      if (guard && !guard.done && (Math.hypot(wrapD(world.goal.x - rig.pos.x), wrapD(world.goal.z - rig.pos.z)) < 20 || Math.hypot(wrapD(guard.pos.x - rig.pos.x), wrapD(guard.pos.z - rig.pos.z)) < 30)) say('guard', 'Something keeps this rift. Deal with it and the way down opens.', 7, 'teach', { first: true }); // (review polish) said as its ground is first met, before it takes up
       if (overRift()) say('toll', 'A rift takes part of your tail as you go down it. The dark end of your scale is what this one will take.', 9);
       if (run.state === 'play' && run.floor < FLOORS.length - 1 && (!guard || guard.done) && world.atGoal(rig.pos)) { // the palace gate only leads into the hall
         const owed = tollOf(run.segs);
@@ -2016,7 +2090,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), chain: run.state === 'play' ? run.chain : 0, harmony: run.state === 'play' ? run.harmony : 0,
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), far: keeperAt(), chain: run.state === 'play' ? run.chain : 0, harmony: run.state === 'play' ? run.harmony : 0,
     });
   }
 
@@ -2051,6 +2125,14 @@ export async function start(saved = {}) {
   // just below, and the renderer's render() only while one of them is on; off, it adds nothing to the page and draws nothing differently
   { const { createGauge } = await import('./gauge.js');
     window.__gauge = createGauge({ renderer, step, focus, ended, levels: { look: LOOK_LEVEL, point: PLATE_LEVEL }, game: () => window.__game }); }
+  // ---- the front page (title.js): while it holds the dive (`holds`), nothing of the dive is stepped or drawn. It wraps the loop set just
+  // below, as the gauge does. The library still draws its own stage; while one of the dive's menus is open over the page (`menus`), the
+  // devices are still read, so a controller works that menu, and the dive's picture is still not drawn. With no front page, nothing changes.
+  if (window.__front) { const set = renderer.setAnimationLoop.bind(renderer);
+    renderer.setAnimationLoop = (fn) => set(fn && ((now) => { const F = window.__front;
+      if (!F.holds || lib.isOpen) return fn(now);
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      if (F.menus && paused) tick(dt); })); }
   renderer.setAnimationLoop((now) => {
     if (light.on && now - last < light.gap) return; // a lighter picture: on a fast screen, every other frame
     const dt = Math.min((now - last) / 1000, 0.05);
@@ -2059,7 +2141,7 @@ export async function start(saved = {}) {
     if (lib.isOpen) { if (!window.__hold) lib.frame(dt); return renderer.render(lib.scene, lib.camera); }
     if (!window.__hold) tick(dt);
     if (still() && owed <= 0 && now > drawUntil && now - drewAt < QUIET.beat * 1000) return; // nothing has moved: what is on the screen stays there
-    owed--; drewAt = now; renderer.render(scene, camera);
+    owed--; drewAt = now; ringsBefore(); renderer.render(scene, camera); ringsAfter(); // (review polish: rings fade in and read two pixels wide)
   });
 
   // keep the dive going when the page is republished under an open viewer
@@ -2068,7 +2150,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get kelp() { return kelp; }, KELPWOOD, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, keeperAt, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get kelp() { return kelp; }, KELPWOOD, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx, devSee, tutTarget,
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },

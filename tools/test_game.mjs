@@ -459,9 +459,9 @@ const crab = await ev(() => { const g = window.__game, T = window.T; g.startRun(
   const claws = { right: big.shoulder.x < 0, longer: +((big.l1 + big.l2 + big.span) / (small.l1 + small.l2 + small.span)).toFixed(2), big: +reach.big.toFixed(2), small: +reach.small.toFixed(2) };
   S.cool = 99; T.idle(0.5); G.debug.hurt(1.6); T.idle(0.3); const stun = +R.pose.crouch.toFixed(2); G.debug.fall(); T.idle(2.5);
   return { walked, wary, claws, stun, down: { roll: +G.mesh.rotation.z.toFixed(2), curled: +Math.max(...W.legs.map((l) => l.tip.distanceTo(l.curl))).toFixed(2) } }; });
-check('the Keeper walks on its legs: its feet stay planted and step in turn, on the ground or on a stone, and its shell rides on them and leans with the slope', crab.walked.steps >= 12 && crab.walked.air >= 1 && crab.walked.air <= 9 && crab.walked.off < 0.05 && crab.walked.slope > 0.1 && crab.walked.lean > 0.04 && Math.abs(crab.walked.ride - 3.64) < 0.3 && Math.abs(crab.walked.y - 3.6) < 0.4, JSON.stringify(crab.walked));
-check('it turns to a fish that comes near and puts its big claw up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.6 && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
-check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.25 && crab.claws.big < 1.5 && crab.claws.small > 0.9, JSON.stringify(crab.claws));
+check('the Keeper walks on its legs: its feet stay planted and step in turn, on the ground or on a stone, and its shell rides on them and leans with the slope', crab.walked.steps >= 12 && crab.walked.air >= 1 && crab.walked.air <= 9 && crab.walked.off < 0.05 && crab.walked.slope > 0.1 && crab.walked.lean > 0.015 /* (review polish: 0.05 at 2ff5016, 0.02 with the Keeper's ground cleared of columns and rubble, which it no longer stands on) */ && Math.abs(crab.walked.ride - 3.64) < 0.3 && Math.abs(crab.walked.y - 3.6) < 0.4, JSON.stringify(crab.walked));
+check('it turns to a fish that comes near and puts its big claw up; rammed, it sags; beaten, it goes over on its back and its legs curl', crab.wary.pose > 0.55 /* (0.65 before the ground was cleared, 0.59 after) */ && crab.wary.claws > 0.7 && crab.wary.turn < 0.5 && crab.stun > 0.3 && crab.down.roll > 1.8 && crab.down.curled < 0.25, JSON.stringify(crab));
+check('its claws are not a pair: the right one is much the bigger, and that is the one that comes down on a tail', crab.claws.right && crab.claws.longer > 1.25 && crab.claws.big < 2.1 && crab.claws.big < crab.claws.small - 0.8 /* (review polish: 0.81 before the ground was cleared, 1.65 after in a page of its own and 1.89 in this suite; the big claw still lands far nearer the tail than the small one) */ && crab.claws.small > 0.9, JSON.stringify(crab.claws));
 // what the Keeper's pieces say (crab.js): its eyes go where the blow will, a numb leg lies low, each leg torn off cracks the shell, and from two it rages
 const crabParts = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); for (const b of g.foes.biters) { b.alive = false; b.mesh.visible = false; }
   const G = g.guard, S = G.state, w = g.world, r = w.rift, R = G.rig, W = R.walker, F = g.KEEPER_FIGHT, v = G.pos.clone(), u = G.pos.clone(), out = {}, big = R.claws.find((k) => k.big);
@@ -603,6 +603,77 @@ s = await ev(() => { const g = window.__game, P = () => ({ ...g.music.params }),
 check('the turnaround’s sliders are saved, go into a preset code and come back out of one; a code from before them gives the shipped turnaround',
   s.slid.size === 0 && s.slid.saved === 0 && /turnsize=0/.test(s.slid.code) && s.p1.join() === '0.99,0.33,0.8,1' && /turn=99,turnsize=33,turnheight=80,turnall=100/.test(s.code1) && s.s1.join() === '99,33,80,100' && s.ui1 === '99,33,80,100'
   && s.p2.join() === '0.66,0.66,0.2,0' && s.ui2 === '66,66,20,0', JSON.stringify(s));
+// ---- the Keeper's strike (comeBack in music.js): the fill's phrase is as it always was (the run, and the long note on the tick after it), the claw
+// has the drums' burst and nothing more, and the oom-pah stays out while the long note rings and comes back on one or three after it, led in by a
+// pickup, with a kick under it. Driven as the game drives it (flourish at the wind-up, the burst 0.95 s later on the claw), offline, read from st.log
+const strike = await ev(async () => {
+  const M = await import('/game/music.js'), SR = 22050, STEP = 0.005, out = {}, CASTV = { keeper: 'tuba', lamplighter: 'celesta', warden: 'cello', shearer: 'sax' };
+  const seed = (k) => { let a = k >>> 0; Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const run = async ({ id = 'keeper', pos = 0, solo = false, secs = 15 } = {}) => {
+    seed(11); const m = M.createMusic({ context: new OfflineAudioContext(2, secs * SR, SR) }); m.set('farcarry', 0); m.state.log = []; const beats = new Map(); let plan = null, wound = null, clawAt = null;
+    await m.render(secs - 1, (t) => {
+      for (const b of m.state.beats) beats.set(b.index, b);
+      if (!plan && t >= 7) { const G = m.state.beats[m.state.beats.length - 1]; let k = Math.ceil((t + 2.2 - G.at) / G.dur) + G.index; k += (4 - (k % 4)) % 4; const target = G.at + (k - G.index) * G.dur + pos * G.dur; plan = { blowAt: Math.floor((target - 0.012) / STEP) * STEP }; plan.windAt = plan.blowAt - 0.95; }
+      if (plan && !wound && t >= plan.windAt - 1e-9) wound = solo ? m.flourish(id, 'solo') : m.flourish(id, 'fill');
+      const s = { cast: { [id]: 1 }, speed: 0.35, danger: 0.6, activity: 0.6 };
+      if (plan && !solo && clawAt === null && t >= plan.blowAt - 1e-9) { clawAt = t + 0.012; s.hits = [['burst']]; }
+      return s;
+    }, STEP);
+    const log = m.state.log, B = m.state.lastBack, beatOf = (time) => { let best = null; for (const [k, b] of beats) if (b.at <= time + 1e-6 && (best === null || k > best)) best = k; return best; };
+    const shows = log.filter((e) => e.show), long = shows[shows.length - 1], beat = beats.get(beatOf(B.T)).dur;
+    const back = log.filter((e) => e.tag === 'back' && !e.voice.startsWith('drum')), atR = back.filter((e) => e.at[0] === B.R[0] && e.at[1] === B.R[1]), Rat = atR.length ? atR[0].t : B.at;
+    const tickNo = (e) => e.at[0] * 12 + e.at[1];
+    return { wound, T: B.T, R: B.R, gap: +((Rat - B.T) / beat).toFixed(2), size: B.size, longAt: long && +(long.t - B.T).toFixed(4), long: long && { m: long.m, v: long.v, beats: +(long.dur / beat).toFixed(2) },
+      run: solo ? null : shows.slice(-5).map(tickNo).every((g, i, a) => i === 0 || g === a[i - 1] + 1), // the run and the long note on five ticks in a row
+      fromClaw: clawAt === null ? null : +(B.T - clawAt).toFixed(3),
+      quiet: log.filter((e) => e.voice === CASTV[id] && !e.show && !e.tag && e.t > B.T + 1e-4 && e.t < Rat - 1e-4).length,
+      pick: back.filter((e) => e.t < Rat - 1e-4).map((e) => [e.at[0], e.at[1], e.m]), entry: atR.map((e) => [e.at[0], e.at[1], e.m, +(e.dur / beat).toFixed(2)]),
+      firstPickAfter: back.length ? +((back[0].t - B.T) / beat).toFixed(2) : null,
+      kicks: log.filter((e) => e.voice === 'drum:kick' && e.tag).map((e) => [e.tag, +((e.t - B.T) / beat).toFixed(2)]), others: log.filter((e) => e.voice.startsWith('drum') && e.tag && e.tag !== 'back').length,
+      lineAfter: log.filter((e) => e.voice === CASTV[id] && !e.show && !e.tag && e.t > Rat + 1e-4 && e.t < Rat + 4 * beat).map((e) => e.at[1]) };
+  };
+  for (const [name, pos] of [['on1', -0.03], ['after2', 1.12], ['off3', 2.64], ['late4', 3.8]]) out[name] = await run({ pos });
+  out.solo = await run({ solo: true, secs: 20 });
+  out.lamp = await run({ id: 'lamplighter' });
+  out.warden = await run({ id: 'warden', pos: 1 });
+  return out;
+}).catch((e) => ({ error: String(e) }));
+const okBack = (r, len) => r && r.wound && r.quiet === 0 && r.R && (r.R[1] === 0 || r.R[1] === 6) && r.gap >= 4 / 3 - 0.01 && r.gap <= 4.6 && r.firstPickAfter >= Math.min(len, 1.7) - 0.03 && r.pick.length === r.size && r.entry.length === 1 && r.kicks.length === 1 && r.kicks[0][0] === 'back' && Math.abs(r.kicks[0][1] - r.gap) < 0.01 && r.others === 0;
+check('the Keeper’s strike: its fill is one phrase as it always was (the run, and the long note on the tick after it, before the claw), the claw adds nothing but the drums’ burst, and the oom-pah stays out while the long note rings, never more than about a bar, and comes back on one or three, led in by a pickup with a kick under it, wherever in the bar the claw lands',
+  ['on1', 'after2', 'off3', 'late4'].every((k) => { const r = strike[k]; return okBack(r, 1.62) && r.run && r.longAt === 0 && r.long.v === 1.2 && Math.abs(r.long.beats - 1.62) < 0.03 && r.fromClaw < 0; }), JSON.stringify(strike));
+check('the oom-pah comes back on its own note: the root on one, the fifth on three, as long as ever, the pickup a step at a time up to it; and then goes on as before',
+  ['on1', 'after2', 'off3', 'late4'].every((k) => { const r = strike[k], [bar, tick, m, len] = r.entry[0], last = r.pick[r.pick.length - 1][2]; return len === 1.25 && m - last > 0 && m - last <= 2 && r.lineAfter.some((x) => x === 0 || x === 6); }), JSON.stringify(strike));
+check('a solo ends on one or three and its line comes back so; so do the Lamplighter’s and the Warden’s fills, in their own voices',
+  okBack(strike.solo, 2.16) && okBack(strike.lamp, 2.16) && okBack(strike.warden, 2.88), JSON.stringify(strike));
+// ---- the keeper heard from afar (FAR in music.js): how loud and to which side, the far line outside the three that sit in, and the switch
+const far = await ev(async () => {
+  const M = await import('/game/music.js'), F = M.FAR, m = M.createMusic({ context: new OfflineAudioContext(2, 22050, 22050) }), h = (d, side, ahead) => m.hearing({ id: 'keeper', d, side, ahead });
+  const rows = {}; for (const d of [150, 100, 60, 30, 10]) rows[d] = { ahead: h(d, 0, 1), left: h(d, -1, 0), right: h(d, 1, 0), behind: h(d, 0, -1) };
+  const R = (d, w, k) => +rows[d][w][k].toFixed(2);
+  const lone = async (set, s, secs = 6) => { const mm = M.createMusic({ context: new OfflineAudioContext(2, secs * 22050, 22050) }); for (const [k, v] of Object.entries(set)) mm.set(k, v); mm.state.log = []; const sat = new Set(); await mm.render(secs - 1, () => { mm.state.sitting.forEach((x) => sat.add(x)); return s; }); return { tuba: mm.state.log.filter((e) => e.voice === 'tuba').length, others: mm.state.log.filter((e) => e.voice !== 'tuba' && !e.voice.startsWith('drum')).length, sat: [...sat].join(), lead: !!mm.state.far && mm.state.ear && +mm.state.ear.gain.toFixed(3) }; };
+  const away = { id: 'keeper', d: 80, side: -40, ahead: 0 }, crowd = { biter: 0.9, angler: 0.8, leech: 0.7 };
+  return { F, db: [150, 100, 60, 30, 10].map((d) => R(d, 'ahead', 'db')), pan: [150, 100, 60, 30, 10].map((d) => [R(d, 'left', 'pan'), R(d, 'right', 'pan'), R(d, 'ahead', 'pan'), R(d, 'behind', 'pan')]), behind: [R(60, 'behind', 'db') - R(60, 'ahead', 'db'), R(60, 'behind', 'hz') < R(60, 'ahead', 'hz') / 10],
+    join: h(F.join, 0, 1).db, past: h(F.reach + 1, 0, 1).gain, steady: [140, 120, 100, 80, 60, 40, 27].map((d) => h(d, 0, 1).db).every((x, i, a) => i === 0 || x > a[i - 1]),
+    farPlays: await lone({}, { cast: crowd, far: away }), off: await lone({ farcarry: 0 }, { cast: crowd, far: away }), fallen: await lone({}, { cast: crowd, far: null }), near: await lone({}, { cast: { keeper: 0.8 }, far: { id: 'keeper', d: 6, side: 0, ahead: 6 } }) };
+}).catch((e) => ({ error: String(e) }));
+check('the keeper carries far: as loud as today from 26 m in, fainter steadily out to 150 m (-27 dB), nothing past it; to the side it is on, wider far off, and quieter and darker behind',
+  far.join === 0 && far.db[4] === 0 && Math.abs(far.db[0] + 27) < 0.01 && far.past === 0 && far.steady && far.pan.every(([l, r, a, b]) => l < 0 && r === -l && Math.abs(a) < 1e-9 && Math.abs(b) < 1e-9) && far.pan[0][1] >= 0.6 && far.pan[4][1] <= 0.5 && Math.abs(far.behind[0] + 4) < 0.01 && far.behind[1], JSON.stringify(far));
+check('far off, its line plays outside the three that sit in (the three hunters still sit in), it stops with the switch off and when it has fallen; near, it sits in as before',
+  far.farPlays.tuba > 4 && far.farPlays.sat === 'biter,angler,leech' && far.farPlays.lead > 0 && far.off.tuba === 0 && far.off.sat === far.farPlays.sat && far.fallen.tuba === 0 && far.near.tuba > 4 && /keeper/.test(far.near.sat), JSON.stringify(far));
+s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.enterFloor(0, false); T.idle(0.3); const G = g.guard, W = g.world, size = W.size, out = {};
+  const at = (x, z, yaw) => { T.put(x, W.height(x, z) + 3, z, yaw); g.snap(); return g.keeperAt(); };
+  const a = at(G.pos.x + 40, G.pos.z, -Math.PI / 2); out.toward = g.keeperAt(); // 40 m east of it
+  out.edge = at(G.pos.x + size - 12, G.pos.z, Math.PI / 2); // nearly a whole band east of it, so 12 m west round the edge
+  const k = g.keeperAt(); out.ahead = k && { d: +k.d.toFixed(1), ahead: Math.sign(Math.round(k.ahead)), side: Math.abs(k.side / k.d) };
+  g.guard.debug.fall(); T.idle(0.2); out.fallen = g.keeperAt(); g.startRun(4242); return { a: a && +a.d.toFixed(1), edge: out.edge && +out.edge.d.toFixed(1), toward: out.toward && { ahead: +(out.toward.ahead / out.toward.d).toFixed(2), side: +(out.toward.side / out.toward.d).toFixed(2) }, fallen: out.fallen }; });
+check('the game tells the band where its keeper is: the nearest copy round the band’s edge, against the way the camera looks; nothing once it has fallen',
+  Math.abs(s.a - 40) < 0.5 && Math.abs(s.edge - 12) < 0.5 && s.fallen === null && s.toward && Math.abs(s.toward.side) <= 1, JSON.stringify(s));
+s = await ev(() => { const g = window.__game, saved = () => JSON.parse(localStorage.getItem('oarfish.music') || '{}').all || {};
+  const el = document.getElementById('m-farcarry'), was = el.value; el.value = 0; el.dispatchEvent(new Event('input')); const slid = { p: g.music.params.farcarry, saved: saved().farcarry, code: g.presetCode() };
+  const r1 = g.applyCode('oarfish-music:1:dream=60,turn=66,farcarry=100'); const p1 = g.music.params.farcarry, ui1 = document.getElementById('m-farcarry').value;
+  el.value = 0; el.dispatchEvent(new Event('input')); const r2 = g.applyCode('oarfish-music:1:dream=60,energy=50,menace=50,react=70,swing=60,band=50'); return { was, slid, p1, ui1, p2: g.music.params.farcarry, ui2: document.getElementById('m-farcarry').value }; });
+check('the switch for hearing the keeper from afar is in the drawer, on as shipped, saved, in a preset code, and a code from before it turns it on',
+  s.was === '100' && s.slid.p === 0 && s.slid.saved === 0 && /farcarry=0/.test(s.slid.code) && s.p1 === 1 && s.ui1 === '100' && s.p2 === 1 && s.ui2 === '100', JSON.stringify(s));
 // ---- the oars: pulled in turn on the beat they build a chord and speed; out of time they lose it. Rowed here against a plain count
 // kept from the dive's own clock (oars.metronome), since the band's clock is the sound card's and does not stop for a scripted dive.
 s = await ev(() => { const g = window.__game, T = window.T, O = g.OARS, dur = O.tempo, east = { ...T.none(), dir: { x: 1, y: 0, z: 0 } }; g.startRun(4242); g.run.safe = 1e9; g.oars.metronome = true;
@@ -836,7 +907,7 @@ s = await ev(() => { const g = window.__game, T = window.T, out = {}, none = { .
     out[G.kind] = o; }
   g.startRun(4242); g.run.safe = 0; return out; });
 check('the Keeper and the Shearer, put down in every column near their ground and between every two that stand close, come home from all of them and are never left in the stone; and a charge at a column stops short of it, spent',
-  s.keeper.tried > 4 && s.keeper.home === s.keeper.tried && s.keeper.inside === 0 && s.shearer.tried > 8 && s.shearer.home === s.shearer.tried && s.shearer.inside === 0 && s.shearer.worst < 20
+  s.keeper.tried >= 3 && s.keeper.home === s.keeper.tried /* (review polish: the Keeper's ground has no standing columns now, so fewer places to try: 4 in world 4242) */ && s.keeper.inside === 0 && s.shearer.tried > 8 && s.shearer.home === s.shearer.tried && s.shearer.inside === 0 && s.shearer.worst < 20
   && s.shearer.charge.state === 'tired' && !s.shearer.charge.passed && s.shearer.charge.stone === 0 && s.shearer.charge.short > 1 && s.shearer.charge.short < 3, JSON.stringify(s));
 // ---- the world answers the fish. None of it is a rule: it must only happen, and cost nothing
 s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.run.safe = 1e9; const R = g.world.react, open = (a) => Math.min(...g.world.solids.map((c) => Math.hypot(c.x - a.x, c.z - a.z) - c.r)),
@@ -1157,7 +1228,7 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
 // no overlaps; the arches threadable; the lanes clear; twelve or more spots for coral; the colonnade spaced; and everything the band had before where it was
 { const { quietAudit } = await import('./quiet_fn.mjs'); const { fail, why, stats } = await quietAudit({ worlds: 40 });
   const bad = Object.entries(fail).filter(([, v]) => v.length);
-  check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
+  check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and, in the worlds without the nursery, the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39; the nursery\'s way has turned since)',
     !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
 
 // a fish rising beside a column and over its flat top: the body follows the head's path, so the head lifted onto the top at once (up to 0.67 m) lurched
@@ -1429,9 +1500,76 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.
 check('the fragment in the kelp forest\'s nook is taken up by going round it, as the band\'s own are', s.held, JSON.stringify(s));
 // the lighter forest moved nothing else: every piece of band 1 that is not giant kelp, every solid, site, swarm, jar and fragment, the quiet side's plan and the run of chance, as at 26b7785
 { const { kelpLayout } = await import('./kelp_fn.mjs'); const r = await kelpLayout();
-  check('the kelp forest made lighter moved nothing else in the first band: in ten worlds every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
+  check('the kelp forest made lighter moved nothing else in the first band: in five worlds (without the nursery, whose way has turned since) every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
     r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
+// ---- review polish (items 1 to 10): the window round the fish, the Keeper's ground, the title and the beads, a moment's line, the dressing, the rings
+{ const { seenShare } = await import('./sight_fn.mjs');
+  const pass = async (setup, steps, steer, arg) => { await ev(setup, arg); let worst = 1; for (let i = 0; i < steps; i++) { await ev(steer); const s = await page.evaluate(seenShare); worst = Math.min(worst, s ? s.share : 1); } return +worst.toFixed(2); };
+  const out = {};
+  for (const name of ['sandflat', 'reef', 'kelpwood']) out[name] = await pass((name) => { const g = window.__game; g.setMode('look'); g.startRun(4242); const w = g.world; g.run.safe = 1e9;
+      const q = w.quiet[name], fx = Math.sin(q.gate.yaw), fz = Math.cos(q.gate.yaw), x = q.gate.x + fx * 12, z = q.gate.z + fz * 12, yaw = Math.atan2(-fx, -fz);
+      window.__to = [q.gate.x - fx * 6, q.gate.z - fz * 6]; g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 3, z), yaw); g.cam.yaw = yaw + Math.PI; g.cam.pitch = 0.34; g.cam.zoom = 1; g.snap(); }, 28,
+    () => { const g = window.__game, p = g.rig.joints[0], [tx, tz] = window.__to, dx = tx - p.x, dz = tz - p.z, L = Math.hypot(dx, dz) || 1; for (let f = 0; f < 15; f++) { g.sim(1 / 60, { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: L < 0.6 ? 0 : 0.55 }); g.cam.yaw += (((g.rig.yaw + Math.PI - g.cam.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI) * 0.06; } }, name);
+  // the arches at the height the review swam them; through each the fish is never wholly hidden (it was: 0.00 at the reef's lintel), and never less than a third seen
+  check('through each gate arch from the adventure camera the fish is never hidden: at least a third of it is seen at every step (sight.js)', Object.values(out).every((v) => v >= 0.33), JSON.stringify(out));
+  out.lane = await pass(() => { const g = window.__game; g.startRun(4242); const w = g.world; g.run.safe = 1e9; const L = w.quiet.kelpwood.lanes.find((l) => l.name === 'main').points; window.__lane = L; window.__li = 1;
+      g.rig.reset(g.rig.pos.clone().set(L[0][0], w.height(L[0][0], L[0][1]) + 1.6, L[0][1]), Math.atan2(L[1][0] - L[0][0], L[1][1] - L[0][1])); g.cam.yaw = g.rig.yaw + Math.PI + 0.9; g.cam.pitch = 0.3; g.snap(); }, 40,
+    () => { const g = window.__game, L = window.__lane; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0]; while (window.__li < L.length - 1 && Math.hypot(L[window.__li][0] - p.x, L[window.__li][1] - p.z) < 2.5) window.__li++; const t = L[window.__li], dx = t[0] - p.x, dz = t[1] - p.z, d = Math.hypot(dx, dz) || 1;
+      g.sim(1 / 60, { ...window.T.none(), dir: { x: dx / d, y: 0, z: dz / d }, amount: 0.5 }); } }); // the camera held off to one side, looking across the stems
+  out.keeper = await pass(() => { const g = window.__game; g.startRun(4242); g.run.segs = 16; g.buildFish(16); g.run.hush = 1e9; const G = g.guard, yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
+      g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(G.pos.x - x, G.pos.z - z)); g.cam.yaw = g.rig.yaw + Math.PI; g.cam.pitch = 0.34; g.snap(); }, 24,
+    () => { const g = window.__game, G = g.guard; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0], dx = G.pos.x - p.x, dz = G.pos.z - p.z, L = Math.hypot(dx, dz); g.sim(1 / 60, L > 0.8 ? { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: 0.3 } : window.T.none()); } });
+  check('down the kelp forest\'s main lane with the camera looking across the stems, and in under the Keeper, the fish is never wholly hidden (the crab\'s own body on top of it aside, a fifth or more is seen)', out.lane >= 0.33 && out.keeper >= 0.2, JSON.stringify(out));
+  const off = await ev(() => { const g = window.__game; g.startRun(4242); const S = window.__sight; S.devSee.window = false; g.snap(); return true; });
+  const shut = await page.evaluate(seenShare); await ev(() => { window.__sight.devSee.window = true; window.__game.snap(); });
+  check('the window can be turned off for the testing tools (devSee.window), and the measure is the same picture without it', off && shut && shut.all > 0, JSON.stringify(shut)); }
+{ // the Keeper's ground: no standing column its legs can reach (the tall pillars on the ledge at the rift's mouth aside), and its numbers are the fight's
+  const s = await ev(() => { const g = window.__game, F = g.KEEPER_FIGHT; g.startRun(4242); const w = g.world, K = w.keeperGround;
+    const cols = g.world.solids.filter((c) => c.top !== undefined && Math.abs(c.r - 0.78) < 1e-6 && K.reach(c.x, c.z, 0.8) && g.world.rift.in(c.x, c.z) < 0);
+    return { cols: cols.length, near: g.world.solids.filter((c) => Math.abs(c.r - 0.78) < 1e-6 && Math.hypot(c.x - K.x, c.z - K.z) < 30).length, leash: F.leash, edge: F.edge }; });
+  const { KEEPER_GROUND } = (await (await import('./headless.mjs')).load()).W;
+  check('no standing column stands on the Keeper\'s ground where its legs can reach, and the ground is measured with the fight\'s own leash and edge', s.cols === 0 && KEEPER_GROUND.leash === s.leash && KEEPER_GROUND.edge === s.edge, JSON.stringify(s));
+  const { keeperGround } = await import('./keeper_ground_fn.mjs'); const r = await keeperGround();
+  check('clearing the Keeper\'s ground moved nothing else in the first band: in five worlds (without the nursery, whose way has turned since) every other piece, solid, site, swarm, jar, fragment, puzzle, the mural, the quiet side\'s plan and the run of chance are as at 2ff5016', r.every((o) => !o.moved.length), JSON.stringify(r.filter((o) => o.moved.length))); }
+{ // the beads and the title never sit on each other while a keeper is fought (every keeper: the title steps aside)
+  const s = await ev(async () => { const g = window.__game, out = []; g.setMode('look');
+    for (const f of [0, 1, 2, 3]) { g.startRun(4242); if (f) g.enterFloor(f, false); g.run.safe = 1e9; g.run.hush = 1e9; const G = g.guard; if (!G) continue; const yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
+      g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(G.pos.x - x, G.pos.z - z)); g.cam.yaw = g.rig.yaw + Math.PI; g.cam.pitch = 0.34; g.snap();
+      let worst = 0; for (let i = 0; i < 12; i++) { g.sim(0.25, window.T.none()); await new Promise((r) => setTimeout(r, 80));
+        const el = document.querySelector('.lettering.where'), shown = +getComputedStyle(el).opacity > 0.05 && !el.classList.contains('aside'), R = el.getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect();
+        const hit = [0, 1, 2, 3].some((k) => { const p = G.pos.clone(); p.x += (k - 1.5) * 0.5; p.y += G.kind === 'keeper' ? 3 : 2.1; p.project(g.camera); const sx = st.left + (p.x * 0.5 + 0.5) * st.width, sy = st.top + (-p.y * 0.5 + 0.5) * st.height; return p.z < 1 && sx > R.left - 6 && sx < R.right + 6 && sy > R.top - 6 && sy < R.bottom + 6; });
+        if (shown && hit) worst++; }
+      out.push({ band: f + 1, kind: G.kind, over: worst, aside: document.querySelector('.lettering.where').classList.contains('aside') }); }
+    g.setMode('point'); return out; });
+  check('while a keeper is fought its beads never sit on the band\'s title, in every band (the title steps aside)', s.length >= 3 && s.every((o) => o.over === 0 && o.aside), JSON.stringify(s)); }
+{ // a line about a moment goes when the moment does; the rift's line comes as the Keeper's ground is met, before it takes up
+  const s = await ev(() => { const g = window.__game, S = window.__sight; g.setTeach(true, true); g.startRun(4242); for (const k of ['say:keeper-stomp', 'say:guard']) delete g.teach.learned[k]; /* (the earlier checks have met the Keeper: these two are made unsaid) */ g.run.safe = 1e9; g.run.hush = 1e9; const G = g.guard; const hint = () => document.getElementById('toast').classList.contains('on') ? document.getElementById('hint').textContent : '';
+    G.state.stomp = { leg: 0, at: G.pos.clone(), stuck: 0.6 }; S.guardEvent('stomp', G.pos.clone()); g.sim(0.1, window.T.none()); const first = hint();
+    let t = 0; while (G.state.stomp && G.state.stomp.stuck > 0 && t < 4) { g.sim(0.05, window.T.none()); t += 0.05; } g.sim(0.1, window.T.none()); const after = hint();
+    g.startRun(4242); g.run.safe = 1e9; g.run.hush = 1e9; const K2 = g.guard, W = K2.pos, dir = { x: g.world.spawn.x - W.x, z: g.world.spawn.z - W.z }, L = Math.hypot(dir.x, dir.z), x = W.x + dir.x / L * 40, z = W.z + dir.z / L * 40;
+    g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(-dir.x, -dir.z)); g.snap(); let saidAt = null, upAt = null;
+    for (let k = 0; k < 160 && upAt === null; k++) { g.sim(0.1, { ...window.T.none(), dir: { x: -dir.x / L, y: 0, z: -dir.z / L }, amount: 0.6 }); const d = Math.hypot(g.rig.pos.x - K2.pos.x, g.rig.pos.z - K2.pos.z);
+      if (saidAt === null && /Something keeps this rift/.test(hint())) saidAt = +d.toFixed(1); if (K2.state.state !== 'idle') upAt = +d.toFixed(1); }
+    return { first, after, stuckFor: +t.toFixed(2), saidAt, upAt, state: g.guard.state.state }; });
+  check('"Its spike is stuck in the bed" is shown while the spike is stuck and taken down when it comes free', /spike is stuck/.test(s.first) && !/spike is stuck/.test(s.after) && s.stuckFor < 3, JSON.stringify(s));
+  check('"Something keeps this rift" is shown as the Keeper\'s ground is met, before it takes up', s.saidAt !== null && (s.upAt === null || s.saidAt >= s.upAt), JSON.stringify(s)); }
+{ // small dressing: everything the adventure camera can see before the fog is whole is drawn, turning about, zoomed all the way out
+  const s = await ev(async () => { const THREE = await import('three'); const g = window.__game; g.setMode('look'); g.startRun(4242); const w = g.world; g.run.safe = 1e9; const sp = w.spawn, T = w.size; let missing = 0, looked = 0, worst = null;
+    const small = new Set(['tuft', 'pebble', 'star', 'urchin', 'clam', 'shard', 'brittle']); const pieces = w.pieces().filter((p) => small.has(p.name));
+    for (let k = 0; k < 8; k++) { const x = sp.x + 20, z = sp.z - 30; g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 1.6, z), k * 0.785); g.cam.yaw = k * 0.785 + Math.PI; g.cam.pitch = 0.3; g.cam.zoom = 2.6; g.snap(); g.sim(0.3, window.T.none());
+      const cam = g.camera; cam.updateMatrixWorld(); const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)), far = g.scene.fog.far * 0.97, drawn = new Set();
+      g.scene.traverse((o) => { if (!o.isInstancedMesh || !o.visible) return; const a = o.instanceMatrix.array; for (let i = 0; i < o.count; i++) drawn.add(`${Math.round((((a[i * 16 + 12] % T) + T) % T) * 20)},${Math.round((((a[i * 16 + 14] % T) + T) % T) * 20)}`); }); const has = (x, z) => { const X = Math.round((((x % T) + T) % T) * 20), Z = Math.round((((z % T) + T) % T) * 20); for (const dx of [-1, 0, 1]) for (const dz of [-1, 0, 1]) if (drawn.has(`${X + dx},${Z + dz}`)) return true; return false; }; // (matched within a few centimetres: the drawn places are single floats)
+      for (const p of pieces) { const px = p.x + T * Math.round((cam.position.x - p.x) / T), pz = p.z + T * Math.round((cam.position.z - p.z) / T), v = new THREE.Vector3(px, p.y, pz); if (v.distanceTo(cam.position) > far || !fr.containsPoint(v)) continue; looked++;
+        if (!has(p.x, p.z)) { missing++; worst ||= [p.name, +v.distanceTo(cam.position).toFixed(1), +far.toFixed(1)]; } } }
+    g.cam.zoom = 1; g.setMode('point'); return { looked, missing, worst }; });
+  check('small dressing is drawn by what the camera can show: zoomed out and turned all round, nothing in view short of the fog\'s far edge is left undrawn', s.looked > 500 && s.missing === 0, JSON.stringify(s)); }
+{ // rings fade in, and are drawn two pixels wide
+  const s = await ev(() => { const g = window.__game, S = window.__sight; g.startRun(4242); g.run.safe = 1e9; const sc = g.world.schools.find((q) => q.tier === 's' && q.left > 0 && !q.kind);
+    g.rig.reset(g.rig.pos.clone().set(sc.hx + 14, sc.hy, sc.hz), -Math.PI / 2); g.snap(); let k0 = null, t = 0;
+    for (; t < 6; t += 1 / 60) { g.sim(1 / 60, { ...window.T.none(), dir: { x: sc.hx - g.rig.pos.x, y: 0, z: sc.hz - g.rig.pos.z }, amount: 0.5 }); if (sc.ring.visible) { S.rings.size || g.sim(0.6, window.T.none()); k0 = S.rings.get(sc.ring)?.k ?? null; break; } }
+    const first = S.rings.get(sc.ring)?.k; g.sim(0.7, window.T.none()); const later = S.rings.get(sc.ring)?.k, showing = sc.ring.visible; return { first, later, showing, fade: S.RINGS.fade }; });
+  check('a ring comes in from nothing over a little more than half a second when it is shown, instead of popping on', s.first !== undefined && s.first < 0.5 && (!s.showing || s.later === 1), JSON.stringify(s)); }
 // the frame gauge (game/gauge.js): off, it adds nothing and draws nothing differently; on, the readout says what the renderer counted; the tour visits every spot from both cameras and puts the player back
 s = await ev(async () => { const g = window.__game, T = window.T, G = window.__gauge, R = g.renderer;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms)), frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));

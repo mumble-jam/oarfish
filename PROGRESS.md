@@ -1,3 +1,68 @@
+# Review polish (branch review-polish): progress
+
+Brief: the reviewer's ranked visual faults (/home/claude/review-findings.md), items 1 to 11. Worktree `/home/claude/oarfish-polish`; logs `/home/claude/polish-logs/`; scratch scripts `/home/claude/polish-work/`; pictures `/home/claude/polish-shots/`; sheet `/home/claude/polish-sheet.jpg`. Hands off sandflat.js, reef.js, kelpwood.js, bloom.js, music.js, and main.js's input and loudness lines.
+
+## Done
+- [x] Cost before (perf-before.log): start, kelp lane, kelp clearing, Keeper's ground, both cameras.
+- [x] (1-3, general) `game/sight.js`: a stippled window round the fish cuts whatever stands nearer the camera than the fish, and whatever is right at the lens. world.js hands it every opaque Lambert material it makes except the bed; main.js sets it after the camera is placed (`seeFish`, own block). `tools/sight_fn.mjs` measures the share of the fish seen.
+- [x] (2-3, ground) Keeper's ground: `KEEPER_GROUND`, `keeperReach`, `leaveOut` in world.js. Columns (and lintels on them, and their chimes) in reach are built and then dropped; their solids are removed only when the band is built; what grew on them is still tinted (one draw each) and then dropped. Tall sea grass there kept to 1.1 m. `tools/keeper_ground_fn.mjs`: nothing else moved in 5 worlds x nursery; bands 2-5 digest identical to 2ff5016.
+
+- [x] 4 title steps aside; 5 `say(..., { while, first })`; 6 pillar-coral heads; 7 kelp varied by index + chequer shadow + per-plant sway tempo; 8 capCoral; 9 VIEW_REACH; 10 rings fade + 2 px halo (main.js only); 11 crown on gate arches. First-pass commit d4ead03 (one commit: the items share hunks).
+- [x] Window tuned after the first pictures (wider, lens 4.5 m or 0.3 of the way to the fish).
+- [x] Checks added to test_game.mjs (arches/lane/keeper seen share, Keeper's ground, title vs beads in 4 bands, moment lines, dressing by view, ring fade).
+- [x] CLAUDE.md written (costs to fill).
+
+- [x] After-runs: pass (seen share), stills both cameras, perf both cameras. Sheet /home/claude/polish-sheet.jpg.
+- [x] First suite round: boss, teach, library, controls passed; game failed 4 Keeper checks + crashed in my new block (world read before startRun). Measured the walk/claw scenario at 2ff5016 and now (lean 0.05/0.02, wary 0.65/0.59, big claw 0.81/1.65): thresholds moved with the numbers in the check; column-spot count >= 3.
+- [x] Merged squid-play (frame gauge) into review-polish: 55b6965 (test_game.mjs conflict: both blocks kept).
+
+- [x] Merged squid-play again (DualSense buttons): 156ab26. Boss, teach, library, controls passed on the merged tree (final2-*.log). Game suite: two crashes in my own checks fixed (a name not passed; a // comment cutting a line).
+
+- [x] More fixes found by the suite: moment lines jump the queue (place lines go next without interrupting); world.update() was re-seating small things round the fish every frame (dress keeps the last view); costs measured again (perf-after3.log).
+- [x] Merged squid-play at 6e2eee4 (front page, Keeper strike): 6f8c644. On it: game, boss, teaching suites passed (final8-*.log). Library and controls last passed on 156ab26 (final2-*.log); nothing of mine since touches them.
+- [x] Fast-forward squid-play; pub-copy.
+
+## Decisions (and why)
+- One general answer for 1-3 and the kelp: a screen-space stipple (4x4 ordered dither) in the materials, not smooth transparency (no sorting, flat look). Cuts only fragments at least 0.7 m nearer than the fish (full by 2.2 m), inside a capsule from the head to 2.6 m down the body; anything nearer the lens than 3.2 m is stippled out. Shadows untouched.
+- The tall pillars on the ledge at the rift's mouth are kept even when in reach (landmark; 1 world in 300).
+- Puzzles and fragments on the Keeper's ground are left: windows in 4242; capstan/vent/fragment in others (see keeper_ground_fn output).
+- Rubble round a dropped broken column goes with it.
+- Not done: rings still go off at once (fade-out would change `.visible`, which owners and checks read). The reef station's brain coral can still hide the fish (reef.js's material; not my file). The Keeper's own body lying on the fish hides it (creature, not stonework).
+- The keeper/kelp/quiet layout tools leave out what the polish changed on purpose (`polished()`): giant kelp, coral on capitals, the arch crowns.
+
+
+---
+
+(The note squid-play carried at the merge, kept as it was:)
+
+# The front page (branch title-plate): progress
+
+Brief: a front page made from the old plate, with music cut only from George's bass track. Worktree `/home/claude/oarfish-title`; logs `/home/claude/title-logs/`; music work `/home/claude/title-work/`; sheet `/home/claude/title-sheet.jpg`; map `/home/claude/title-music-map.md`.
+
+## Done
+- [x] Music studied (161.9 bpm, 14 bars, phrases, quiet points) and built: the loop (14 bars) and the long version (82 bars, 2:01.5), only slices of the track; joins measured; AAC files in `title/music/`.
+- [x] `game/title.js` (the page, its print look, menu, input, music, diving in, coming back); hooks: one block in `main.js` (the hold), one in `index.html` (the decision and the boot); local Fell faces in `title/fonts/`.
+- [x] `tools/test_title.mjs` (its own checks, forced on), `tools/shot_title.mjs` (pictures).
+
+- [x] Pictures looked at against the plate, three rounds (fins flat pink with hatched rays and four deeper bands; runs stacked tight as on the plate; finer stipple; the model's spots lightened; the water soaks in under the fish from the edges).
+- [x] `tools/test_title.mjs`: all 28 checks pass. Sheet: `/home/claude/title-sheet.jpg`.
+- [x] CLAUDE.md, README; squid-play merged in (clean).
+
+## To do
+- [ ] The game suite after the merge (the coordinator asked for the game suite only, plus the page's own checks), then fast-forward squid-play, copy to pub-copy.
+
+## Notes
+- The machine restarted twice mid-run; one check run of mine looped for ever on a test bug (a getter copied once by Object.assign) and I ended it myself.
+
+## Decisions (and why)
+- The dive is built behind the page as soon as the page has drawn its first picture, and held: nothing stepped, nothing drawn, its band silent, until Dive. Building is not running; it is what makes Dive instant.
+- The game's name is the plate's running head, centred on the top line between "Règne animal." and "Poissons.", in letterspaced small capitals with a rule either side. The caption keeps its place and size. Rejected: the name large in italic across the paper (one frame on the sheet).
+- The plate's left credit is not copied as "Acarie Baron del.": the picture is not his drawing. It reads "after the plate drawn by Acarie Baron for Cuvier's Règne animal". The right-hand credit (the engraver) is not legible in the copy we have, so it is left out rather than guessed.
+- Settings and key bindings open the pause menu, where they live today; the band opens the pause menu with the Tuning drawer beside it. Their Resume reads "Back to the front page" while opened from the page.
+- No third (filtered) music version: the bass is almost all under 300 Hz, a low-pass would hardly be heard.
+
+---
+
 # The reef head's life (branch reef-life): progress
 
 Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfish, coral that grows from dive to dive. All behaviour in `game/reef.js` (`REEF` table); hooks in main.js and npc.js are one block each. Worktree `/home/claude/oarfish-reef`; logs `/home/claude/reef-logs/`; sheet `/home/claude/reef-sheet.jpg`.

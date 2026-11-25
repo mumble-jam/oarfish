@@ -19,6 +19,7 @@ import { trumpetRig } from './trumpet.js';
 import { burrowRig } from './burrow.js';
 import { gardenEelRig } from './gardeneel.js';
 import { pufferRig, circleRig } from './puffer.js';
+import { octopusRig } from './octopus.js';
 import { PALETTE as FISH } from './oarfish.js';
 
 export const DISTRICT = ['#f9cdd6', '#f4a4b9', '#ec7090', '#d83c5f', '#c9a877']; // each band's colour, shallowest first
@@ -173,6 +174,28 @@ NPCS.push(
     palette: { bell: '#bfe3ff', rib: '#f4fbff', gut: '#ffc4d8', gonad: '#e9d6ff', eye: '#1b1730', pedal: '#e6f4ff', tentacle: '#cfe0ff', band: '#6f8fe8' },
     build: (pal) => model.box(pal), assemble(a, pal) { jellyRig(a, pal, 'box'); }, material: { ...JELLY.material, emissive: '#bfe2ff', emissiveIntensity: 0.2 }, // the real one is all but invisible; this one has to be seen
     states: [{ id: 'drift', name: 'Drifting', speed: 0, lift: 0.45 }, { id: 'pulse', name: 'Pulsing', speed: 0.9 }, { id: 'turn', name: 'Turning sharply', speed: 0.7 }, { id: 'fish', name: 'Fishing: tipped over, sinking', speed: 0, lift: -0.55 }] });
+// ================================================================ the octopus: a model first, not yet in the dive
+// One animal at two sizes, both planned: a neighbour for the first band, about 2.3 m across its arms, and a keeper for later, the Mason, about 5.8 m,
+// older and heavier (shorter, thicker arms, a bigger sac, taller horns over its eyes). The same model and the same rig (octopus.js), told which
+// form it is (OCTO.forms in critters.js). Nothing spawns either, and nothing has been decided about what they do; the testing tool brings one to
+// look at (sandpets.js). `skins`: the library offers each skin with every movement (library.js), as well as the mood's own.
+const OCTO_STATES = (crawl, jet, carry) => [{ id: 'den', name: 'At rest in its den, arm tips feeling', speed: 0 }, { id: 'crawl', name: 'Crawling on its arms', speed: crawl }, { id: 'jet', name: 'Jetting, mantle first', speed: jet },
+  { id: 'reach', name: 'Reaching with one arm, taking a thing under the web', speed: 0 }, { id: 'carry', name: 'Carrying it under the web, on stiff arms', speed: carry }, { id: 'throw', name: 'Going dark, and throwing it', speed: 0 }];
+const OCTO_SKIN_NAMES = [['', 'Its own'], ['pale', 'Pale'], ['mottled', 'Mottled, skin raised'], ['dark', 'Dark'], ['blanched', 'Blanched'], ['clouds', 'Passing clouds']];
+const OCTOPUS = { group: 'Not yet in the dive', bands: [], bring: true, swim: null, beat: [0, 0], material: { flatShading: true, emissive: '#ffffff', emissiveIntensity: 0.04 }, skins: OCTO_SKIN_NAMES,
+  role: 'Nothing yet. It is a model to look at: no dive has one, and nothing has been decided about what it does. Planned: a neighbour in the first band that builds a den of stones and throws things, going dark before a hard throw.' };
+NPCS.push(
+  { ...OCTOPUS, id: 'octopus', name: 'Octopus', length: 2.3, lift: 0.45,
+    about: 'A day octopus, the kind that hunts on shallow reefs by day: a round baggy mantle behind its head, eyes raised on bumps with a horn over each and a pupil like a bar that stays level however it tilts, and eight stout arms five times as long as the mantle, thick at the root and fine at the tip, each a piece of its own, joined at the base by a web. Reddish brown netted with cream, a dark ringed false eye on each side, the underside and suckers pale. Its skin goes pale, mottled, near black, blanched, or runs with passing shadows, and it can raise points of skin. It sits in a den, crawls on its arms, jets mantle first, takes a stone or a shell under its web, walks on stiff arms carrying it, and throws it with its siphon.',
+    palette: { base: '#a8573f', pale: '#efd8c0', dark: '#30111b', net: '#552020', under: '#f4dfd1', blanch: '#fbf5ec', ring: '#2a1420', ocellus: '#43265a', ocellusMid: '#9a86c0', sucker: '#f8e8da', eye: '#e8c35e', pupil: '#17121b', rim: '#3b2230', mouth: '#2a1218', stone: '#8d8a80', shell: '#f6e2d0', shellBand: '#d9826a' },
+    build: (pal) => model.octopus(pal, model.OCTO.forms.neighbour), assemble(a, pal) { octopusRig(a, pal, 'neighbour'); },
+    states: OCTO_STATES(0.3, 1.6, 0.15) },
+  { ...OCTOPUS, id: 'mason', name: 'The Mason (octopus)', length: 5.8, lift: 1.3,
+    role: 'Nothing yet. A model to look at: the same octopus grown old and huge, planned as a keeper for later. Nothing has been decided about what it does.',
+    about: 'The octopus at keeper size: a mantle as long as a man is tall and arms near three metres, shorter for its size and much thicker than the neighbour’s, a heavier sac, taller horns over its eyes and more raised points of skin. Older, darker and rosier. The same rig and the same moves: den, crawl, jet, a stone taken under the web, stilt walking, the dark throw.',
+    palette: { base: '#9e4a62', pale: '#e8d0c6', dark: '#2a0f1d', net: '#5a2240', under: '#efd9d2', blanch: '#f8f1ec', ring: '#21101a', ocellus: '#3a2050', ocellusMid: '#8a76b0', sucker: '#f3e2da', eye: '#eaff7c', pupil: '#17121b', rim: '#33202c', mouth: '#24101a', stone: '#9aa6a0', shell: '#efe0c4', shellBand: '#c48a5c' },
+    build: (pal) => model.octopus(pal, model.OCTO.forms.mason), assemble(a, pal) { octopusRig(a, pal, 'mason'); },
+    states: OCTO_STATES(0.55, 3, 0.3) });
 // the two sets of colours everything built of stone is made from. They are not things: they are what things are tinted with
 NPCS.push(
   { id: 'paint', group: 'Colours of the world', kind: 'tokens', name: 'District paint', bands: [0, 1, 2, 3, 4], length: 6, fixed: true, role: 'One colour to a band. It is on the top slab of every column, the caps of the well curbs, the seal over a guarded well, and the lengths of the Sum paid in that band.',

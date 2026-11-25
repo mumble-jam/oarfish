@@ -23,6 +23,8 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | File | What it is |
 | --- | --- |
 | `index.html` | The page: all markup and all CSS. The HUD, pause menu, key bindings, specimen library. |
+| `game/title.js` | The front page: the old plate come alive before the first dive, its menu, and its music (the Lullaby, `game/titlemusic.js`). |
+| `game/titlemusic.js` | The front page's music, generated as it plays with the band's voices, and its hand-over onto the band's first chord and beat at Dive. |
 | `game/main.js` | The game itself: the loop, input, camera, HUD, messages, teaching, settings. Start here. |
 | `game/world.js` | One depth band: seabed, the rift that leads down, ruins, plants, swarms. |
 | `game/npc.js` | **The cast, as components.** How every creature and thing looks. See below. |
@@ -36,6 +38,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | `game/sawfish.js` | The Shearer put together and in motion: its saw and every tooth hung on its head, its tail trailing by itself, its wings, gills and eyes, and how it holds itself for each thing it does. |
 | `game/strands.js` | Limbs with no bones in them: an arm or a tentacle that hangs on a body and trails through the water after it. Not tied to any one animal. |
 | `game/squid.js` | The squid in motion: ten arms hung on it, each trailing by itself, and how it looks hovering, jetting, alarmed, reaching, bluffing and fleeing pale. A shoal lives at the bloom water (bloom.js). |
+| `game/octopus.js` | The octopus, a model not yet in the dive: eight arms each in a socket of its own and trailing by itself, the web made from where they are, eyes whose pupils stay level, a siphon, a skin with tones, a net, raised points, blanching and passing clouds; and how it rests in a den, crawls, jets, reaches, carries a stone under its web and throws it dark. One rig for two sizes (the neighbour and the Mason). Its sources are at the top. |
 | `game/jelly.js` | The four jellyfish in motion: a bell that squeezes and fills, part clear over what is inside it, and every arm and tentacle trailing by itself. The moon jelly and the sea nettle live at the bloom water (bloom.js); the other two are not in the dive yet. |
 | `game/bloom.js` | The bloom water, the first band's first new place: where it lies (laid by the world from its own run of numbers), its moon jellies and their fry, its sea nettles and their stinging trains, the squid shoal that raids swarms and answers pressure in steps, and the game of settling the shoal, kept in the nest. Every number is in `BLOOM`. |
 | `game/ink.js` | A squid's ink: a copy of the squid laid in soft see-through puffs that billows, curls, sags and thins away, drawn out in wisps and torn by the fish. All of it one draw call, and a faint stain on the bed. Its numbers are in `BLOOM.ink`. |

@@ -10,6 +10,7 @@ import { swarmKit, swarmFor, register, tonesOf, paintOf, stoneOf, TEMPER } from 
 import { layBloom } from './bloom.js';
 import { layQuiet, laneDistance, QUIET } from './quiet.js';
 import { shellSpots } from './shells.js';
+import { seeThrough } from './sight.js';
 
 export const BASE = 144; // a band is this far across unless it says otherwise. What a band counts (rocks, kelp, the wave counts of its bed) is counted for a square of this size
 const CELL = 3, GRID = 46;
@@ -49,6 +50,12 @@ export const CLEAN = { reach: 3.5, grow: 0.3, from: 3.55, still: 0.9, time: 7, u
 // body (`from` metres) and `grow` metres wider for every metre of body past that, a third of what the body grows, so a long body has to curl up tight to fit; it
 // has to hold the curl and the creep too, since a resting fish never quite stops (rig.js idles at 0.22 m/s). Measured with a scripted fish that coils once round
 // the middle and lets go: the farthest any part of it got from the middle in the 7.5 s after it was still was 3.3 m at the starting length, 4.6 m at the longest.
+// (review polish) The Keeper's ground in the first band, as far as it can reach: anywhere its body may stand (within `leash` of the middle of its
+// ground and `edge` back from the rift: `leash` and `edge` in KEEPER_FIGHT, guards.js, which a check holds equal) and `reach` round that (its feet
+// stand ten to eleven metres apart and its great claw reaches 5.5 m). No standing column is built there: its pieces are made and dropped, so every
+// number is drawn as before and nothing else in the band moves (what it would have stopped stops nothing; its solid is taken out only once the
+// whole band is built). Its tall sea grass is kept to `grass` metres. Puzzles, fragments and the like that stand there are left as they are.
+export const KEEPER_GROUND = { leash: 13, edge: 5, reach: 6.6, grass: 1.1 };
 export const cleanReach = (len) => CLEAN.reach + CLEAN.grow * Math.max(0, (len || 0) - CLEAN.from);
 // How much of a body is inside a ring of radius r round (cx, cz): the share of its points (the snout and every joint) inside, and the points outside, into `out`.
 export function bodyIn(snout, joints, cx, cz, r, out) { let n = 0, inn = 0; if (out) out.length = 0;
@@ -295,10 +302,16 @@ function geometries() {
       const q = p.map(([x, y, z]) => [cx + x * rx, cy + Math.max(y, -0.45) * ry, cz + z * rz]), k = 0.6 + 0.4 * clamp((my + 0.3) / 1.2, 0, 1);
       m.tri(q[0], q[1], q[2], ridge ? grey(k) : grey(k * 0.7)); } };
     lobe(0, 0.12, 0, 0.95, 0.36, 0.9, 0); lobe(0.42, 0.18, -0.3, 0.45, 0.28, 0.45, 2);
-    const pillar = (x, z, h, r) => { const n = 7, groove = (y, rr) => Array.from({ length: n * 2 }, (_, k) => { const t = (k / (n * 2)) * Math.PI * 2, d = rr * (k % 2 ? 0.82 : 1); return [x + Math.sin(t) * d, y, z + Math.cos(t) * d]; });
-      const rings = [groove(0.15, r * 1.1), groove(h * 0.55, r), groove(h, r * 0.92), groove(h + r * 0.4, r * 0.66)]; m.skin(rings, (i2, k) => (k % 2 ? [grey(0.62 + i2 * 0.12), grey(0.7 + i2 * 0.14)] : [grey(0.78 + i2 * 0.1), i2 === 2 ? bright(1.2) : grey(0.88 + i2 * 0.1)]));
-      m.cap(rings[3], [0, 1, 0], bright(1.3), r * 0.22); }; // rounded at the tip, where it is growing: a pillar of coral, not a crystal
-    for (const [x, z, h, r] of [[0, 0, 1.0, 0.17], [0.3, 0.18, 0.78, 0.15], [-0.28, 0.22, 0.7, 0.15], [-0.12, -0.32, 0.86, 0.16], [0.36, -0.22, 0.55, 0.13], [-0.45, -0.08, 0.5, 0.13], [0.1, 0.45, 0.6, 0.13]]) pillar(x, z, h, r);
+    // (review polish) the pillars were seven-sided and grooved with a point of a cap, and stretched two to four times their width they read as crystal
+    // (an amethyst geode). Now each is a thick round finger that swells and narrows a little as it grows, its polyps a fuzz of pale and darker
+    // stripes, ending in a dome (made flat here, as the head is stood up about twice as tall as it is wide), and some fork into a short knob.
+    const pillar = (x, z, h, r, ph, knob) => { const n = 10, ring = (y, rr) => ringY(y, rr, n, { x, z, turn: ph });
+      const rs = [ring(0.1, r * 1.18), ring(h * 0.34, r * (1.02 + 0.07 * Math.sin(ph * 3))), ring(h * 0.68, r * (0.95 + 0.07 * Math.cos(ph * 2))), ring(h, r), ring(h + r * 0.2, r * 0.84), ring(h + r * 0.33, r * 0.5)];
+      m.skin(rs, (i2, k) => { const t = i2 / 5, fuzz = k % 2 ? 0.9 : 1; return [grey((0.62 + 0.3 * t) * fuzz), i2 >= 3 ? bright(1.05 + 0.1 * (i2 - 3)) : grey((0.7 + 0.3 * t) * fuzz)]; });
+      m.cap(rs[5], [0, 1, 0], bright(1.25), r * 0.05); // rounded at the tip, where it is growing
+      if (knob) { const yaw = ph + 1.3, y0 = h * 0.5, base = [x + Math.sin(yaw) * r * 0.7, y0, z + Math.cos(yaw) * r * 0.7], tip = [x + Math.sin(yaw) * r * 1.9, y0 + h * 0.28, z + Math.cos(yaw) * r * 1.9];
+        m.limb(base, tip, r * 0.6, r * 0.5, 8, [grey(0.74), grey(0.92)]); m.cap(m.last, [Math.sin(yaw) * 0.45, 0.9, Math.cos(yaw) * 0.45], bright(1.2), r * 0.18); } };
+    for (const [x, z, h, r, ph, knob] of [[0, 0, 1.0, 0.24, 0.2, true], [0.36, 0.16, 0.74, 0.2, 1.1, false], [-0.33, 0.21, 0.66, 0.2, 2.3, true], [-0.1, -0.36, 0.84, 0.21, 3.1, false], [0.4, -0.27, 0.5, 0.17, 4.4, false]]) pillar(x, z, h, r, ph, knob);
     { const rim = (sc, dy) => Array.from({ length: 9 }, (_, i) => { const t = 2.2 + (i / 8) * 1.9, d = sc * (0.85 + 0.15 * Math.sin(i * 2.1)); return [Math.sin(t) * d, 0.3 + dy, Math.cos(t) * d]; });
       const inner = rim(0.75, 0.02), outer = rim(1.3, 0.09); for (let i = 0; i < 8; i++) m.quad(inner[i], outer[i], outer[i + 1], inner[i + 1], [grey(0.7), bright(1.25), bright(1.25)]); }
     return m.geometry(); })();
@@ -353,7 +366,7 @@ function geometries() {
   const grows = thing('Things that grow'), lies = thing('On the bed');
   grows('kelp', 'Kelp', 'kelp', [0, 1, 2], 5, 'Four broad blades, each folded along its midrib so the two halves take the light differently, the edges ruffled; round the foot, young blades on their floats.', ['#4ba57c', '#5fb88a', '#7bb262', '#3f9a8a', '#6cc09a'], { scale: [1.7, 5, 1.7], n: 5, spread: 1.7 }, { sway: 1, give: 0.25 });
   grows('giantkelp', 'Giant kelp', 'giantKelp', [0], 11, 'Golden brown, as the real giant kelp is, where the old field\'s kelp is green. One long stem with a blade on a gold float every little way up it, by turns to either side, and a spray of long fronds at the top. It grows only in the kelp forest of the first band, about twice as tall as the kelp of the old field, tall enough to hide the fish from the side and low enough for the camera to look down into its lanes.', ['#8f7d34', '#9a8a3e', '#7f7a35', '#a08a40', '#86803a'], { scale: [2.8, 8, 2.8], n: 3, spread: 2.2 }, { sway: 1, give: 0.25, glow: 0.4 });
-  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with grooved pillars standing up out of it, as pillar coral grows, paler at the tips, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9a86f', '#e38f8a', '#b99ad6', '#e2c46a', '#86c2b0'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
+  grows('coralhead', 'Coral head', 'coralHead', [0], 3, 'A mound of ridged lobes with thick round pillars standing up out of it, as pillar coral grows, domed and paler at the tips, a few forked, and a plate grown out from one side. They stand two to four metres tall round the middle of the reef head; the fish goes round.', ['#e9a86f', '#e38f8a', '#cf93a8', '#e2c46a', '#a9bf86'], { scale: [1.5, 3, 1.5], n: 1 }, { double: false });
   grows('searod', 'Sea rod', 'seaRod', [0], 2.8, 'A soft coral of a few tall thin stems that fork once, the polyps paler toward the tips. They stand among the coral heads of the reef head.', ['#b66fb0', '#8f5aa8', '#d0875f', '#c99a6a'], { scale: [1.8, 2.8, 1.8], n: 3, spread: 1.2 }, { sway: 0.6, give: 0.2 });
   grows('seagrass', 'Seagrass', 'tuft', [0, 1], 0.7, 'A tuft of narrow blades. It grows on the green patches of the two bands that have light.', ['#6fbf86', '#86c98f', '#5aa884', '#9bd28e'], { scale: [1.4, 0.7, 1.4], n: 9, spread: 1.3 }, { sway: 1.3, give: 0.35 });
   grows('staghorn', 'Staghorn coral', 'stag', [0, 1, 2, 3, 4], 1.3, 'Each branch forks, and the growing tips are pale. It also takes root on the stonework where there is light.', ['#f28d7d', '#f6b95f', '#c98fe3', '#f9d9c9', '#ea6079', '#ff9fb0'], { scale: 1.3, n: 3, spread: 1.4 }, { double: false });
@@ -394,6 +407,9 @@ function geometries() {
 
 // instanced decoration that re-seats itself on the nearest copy of the repeating world, and casts a shadow only from inside the sun's box
 const SIGHT = { step: 2, light: 4 }; // it is seated again when the fish has gone this far, and the box is taken this much wider to cover that
+// (review polish) the circle small things are drawn in, as parts of how far the camera sees: its middle `ahead` of the camera, its radius `wide`.
+// It holds everything within the fog's far edge out to 75 degrees either side of where the camera looks, and behind it to 0.7 of that
+const VIEW_REACH = { ahead: 0.3, wide: 1.0, step: 2, turn: 0.12 };
 class Scatter {
   // reach: small things are only drawn within this many metres of the fish; beyond it they are too small to miss
   // size: how far across the world it is scattered in is
@@ -423,9 +439,13 @@ class Scatter {
   }
   // fx, fy, fz: the fish, which the world wraps round, and which the sun's box is centred on.
   // light: the two axes across the sun's rays and half the width of its box; null, and everything that can cast does; false, and nothing does (there is no sun to cast by)
-  wrap(fx, fy, fz, light) {
+  // view (review polish): where the camera is, which way it looks across the bed (a unit fx, fz) and how far the fog lets it see. Given, small things
+  // are drawn by what the camera can show, not by how far they are from the fish: every one in a circle laid out ahead of the camera, wide enough to
+  // hold all it can see out to where the fog is whole, so nothing is ever seen to come or go (`VIEW_REACH`). Not given, as before (the tools).
+  wrap(fx, fy, fz, light, view) {
     const { items, base, tone, span, mesh } = this, n = items.length, im = mesh.instanceMatrix.array, ic = mesh.instanceColor.array, sm = this.shade ? this.shade.instanceMatrix.array : null;
-    const r2 = this.reach ? this.reach * this.reach : Infinity, T = this.size;
+    let r2 = this.reach ? this.reach * this.reach : Infinity; const T = this.size;
+    let cx = fx, cz = fz; if (view && this.reach) { cx = view.x + view.fx * view.far * VIEW_REACH.ahead; cz = view.z + view.fz * view.far * VIEW_REACH.ahead; r2 = (view.far * VIEW_REACH.wide + 2 * VIEW_REACH.step) ** 2; } // (and the slack it is seated again by: the camera moves, and sees farther, up to `step` before it is)
     let a = 0, b = 0;
     for (let i = 0; i < n; i++) {
       const it = items[i], x = it.x + T * Math.round((fx - it.x) / T), z = it.z + T * Math.round((fz - it.z) / T), dx = x - fx, dz = z - fz, s = i * 16;
@@ -433,7 +453,7 @@ class Scatter {
         const dy = it.y - fy, h = light ? light.half + span[i] : 0;
         if (!light || (Math.abs(dx * light.ax + dy * light.ay + dz * light.az) <= h && Math.abs(dx * light.bx + dy * light.by + dz * light.bz) <= h)) { const o = a++ * 16; for (let k = 0; k < 16; k++) sm[o + k] = base[s + k]; sm[o + 12] = x; sm[o + 14] = z; }
       }
-      if (dx * dx + dz * dz > r2) continue;
+      if ((x - cx) ** 2 + (z - cz) ** 2 > r2) continue;
       const o = b * 16; for (let k = 0; k < 16; k++) im[o + k] = base[s + k]; im[o + 12] = x; im[o + 14] = z; // what is drawn keeps the order it was made in
       ic[b * 3] = tone[i * 3]; ic[b * 3 + 1] = tone[i * 3 + 1]; ic[b * 3 + 2] = tone[i * 3 + 2]; b++;
     }
@@ -442,6 +462,10 @@ class Scatter {
   }
 }
 
+// How far round from the line to the rift the nursery's way runs, in radians (see the nursery in createWorld). Measured, not judged by eye:
+// from 1.5 on, every piece of it keeps 75 m or more from the Keeper's ground (less and the pens come nearer, the other way lies the kelp forest);
+// of 1.45 to 1.7, tried in ten worlds each, 1.6 had the most swarms in sight of the jar.
+export const NURSE_TURN = 1.6;
 export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery = false, nest = null } = {}) {
   const F = FLOORS[floor], G = geometries();
   const last = floor === FLOORS.length - 1;
@@ -694,10 +718,23 @@ float seaLight(vec2 p, float t) {
     sites.push([hall.x, hall.z, (hall.R + 4) / 0.75]); // nothing grows or stands in the hall, or against its wall
     for (let i = 0; i < 4; i++) { const a = hall.phi + 1.1 + i * 1.3; spots.biters.push([hall.x + Math.sin(a) * (hall.R - 2.6), hall.z + Math.cos(a) * (hall.R - 2.6)]); } // biters live on the Sum as cleaner fish do on a whale
   }
+  // (review polish) the Keeper's ground, as KEEPER_GROUND above: the points its body may stand on, a metre apart, and whether (x, z) is in reach of one
+  const keeperW = floor === 0 && rift ? { x: rift.x - rift.nx * 24, z: rift.z - rift.nz * 24 } : null, KG = KEEPER_GROUND;
+  const keeperSpots = [];
+  if (keeperW) for (let i = -KG.leash; i <= KG.leash; i++) for (let j = -KG.leash; j <= KG.leash; j++) if (i * i + j * j <= KG.leash * KG.leash && riftIn(keeperW.x + i, keeperW.z + j) + KG.edge <= 0) keeperSpots.push([keeperW.x + i, keeperW.z + j]);
+  const keeperReach = (x, z, pad = 0) => keeperSpots.length > 0 && !farFrom(x, z, keeperW.x, keeperW.z, KG.leash + KG.reach + pad) && keeperSpots.some(([a, b]) => !farFrom(x, z, a, b, KG.reach + pad));
+  const dropped = []; // the solids of what was left out there, taken out when the band is built
   const clearNow = (x, z, pad) => sites.every(([sx, sz, r]) => farFrom(x, z, sx, sz, r + pad)) && farFrom(x, z, SPAWN.x, SPAWN.z, 6 + pad) && riftClear(x, z, pad + 1);
   // A column is a stack: a plinth, a moulded base, fluted drums that narrow as they climb, a cushion and a top slab
   // in the district's colour. Where it broke, the break is jagged; where it was sawn (the Narrowing) it is flat.
+  // (review polish) coral on a capital sat dead centre on every one that had any. By the order it grew in (no number drawn): one in three is left
+  // bare, one is a staghorn off to one side and leaning out over the edge, one a small table coral off to the other side
+  let capK = 0;
+  const capCoral = (g) => { if (g.gone) return null; if (!g.cap || floor !== 0) return g; // (the first band only: the others stay as they were)
+    const k = g.capK, a = k * 2.39996 + 0.7; if (k % 3 === 1) return null;
+    const r = k % 3 === 0 ? 0.6 : 0.45; return { ...g, x: g.cx + Math.sin(a) * r, z: g.cz + Math.cos(a) * r, q: qY(a, k % 3 === 0 ? 0.5 : 0.08, 0), table: k % 3 === 2 }; };
   function column(x, z, h, { capital = true, yaw = rand() * 3, collide = true, sawn = false } = {}) {
+    const leave = keeperReach(x, z, 0.8) && riftIn(x, z) < 0 ? leaveOut() : null; // (review polish) on the Keeper's ground: made, then dropped (not the tall pillars on the ledge that mark the rift)
     const y = drawnY(x, z) - 0.25, tone = pick(stoneTones), tx = rr(-0.02, 0.02), tz = rr(-0.02, 0.02), top = y + 0.5 + h;
     blocks.push({ x, y, z, q: qY(yaw), s: S(1.55, 0.5, 1.55), color: tone });
     bases.push({ x, y: y + 0.5, z, q: qY(yaw), s: S(1), color: tone });
@@ -709,14 +746,21 @@ float seaLight(vec2 p, float t) {
     if (capital) {
       echini.push({ x, y: top, z, q: qY(yaw), s: S(0.97, 1, 0.97), color: tone });
       blocks.push({ x, y: top + 0.2, z, q: qY(yaw), s: S(1.5, 0.18, 1.5), color: district });
-      growOn(x, top + 0.38, z, 0.3);
+      { const n0 = grownFingers.length; growOn(x, top + 0.38, z, 0.3); if (grownFingers.length > n0) Object.assign(grownFingers[n0], { cap: true, cx: x, cz: z, capK: capK++ }); } // (review polish) marked: see capCoral
     } else {
       if (!sawn) stumps.push({ x, y: top - 0.01, z, q: qY(drand() * 6.28, tx, tz), s: S(1.01, dr(0.6, 1.3), 1.01), color: greened(stoneLike(tone)) });
       rubbleAt(x, z, 1.1, 2.8, sawn ? 1 : 2 + Math.floor(drand() * 3));
     }
     growOn(x + 0.9, y + 0.5, z, 0.25);
     if (collide) colliders.push({ x, z, r: 0.78, top: y + 0.9 + h });
+    leave?.();
     return top + (capital ? 0.38 : 0);
+  }
+  // (review polish) what a builder makes from here on is taken back when the returned function is called: the pieces at once, the solids at the end
+  function leaveOut() {
+    const lists = [blocks, bases, shafts, echini, stumps, rubbles, chimeSets], lens = lists.map((l) => l.length), from = colliders.length, grown = [grownFingers.length, grownBulbs.length];
+    return () => { lists.forEach((l, i) => { l.length = lens[i]; }); for (let i = from; i < colliders.length; i++) dropped.push(colliders[i]);
+      for (const [l, n] of [[grownFingers, grown[0]], [grownBulbs, grown[1]]]) for (let i = n; i < l.length; i++) l[i].gone = true; }; // (what grew on it is tinted later, one draw each: kept in the list so that the draws are)
   }
   // a shaft that came down: its drums lie where they rolled, the last of them a little apart
   function fallen(x, z, len, yaw) {
@@ -746,6 +790,7 @@ float seaLight(vec2 p, float t) {
   function lintel(ax, az, bx, bz, top, thick = 0.6, hung = true) {
     const yaw = Math.atan2(bx - ax, bz - az), len = Math.hypot(bx - ax, bz - az) + 1.5, tone = pick(stoneTones);
     const ux = Math.sin(yaw), uz = Math.cos(yaw), mx = (ax + bx) / 2, mz = (az + bz) / 2, cutAt = dr(0.38, 0.62), sag = drand() < 0.3 ? dr(0.04, 0.09) : 0;
+    const leave = keeperReach(ax, az, 0.8) || keeperReach(bx, bz, 0.8) ? leaveOut() : null; // (review polish) a lintel over a column left off the Keeper's ground goes with it
     for (const [from, to, drop] of [[0, cutAt, 0], [cutAt, 1, sag]]) {
       const c = (from + to) / 2 - 0.5;
       blocks.push({ x: mx + ux * len * c, y: top - drop, z: mz + uz * len * c, q: qY(yaw, 0, drop ? dr(-0.02, 0.02) : 0), s: S(1.35, thick, len * (to - from) - 0.03), color: stoneLike(tone) });
@@ -755,6 +800,7 @@ float seaLight(vec2 p, float t) {
     for (let i = 0; i < 2; i++) { const d = dr(-0.4, 0.4) * len; growOn(mx + ux * d, top + thick + 0.13, mz + uz * d, 0.5); }
     for (let i = 0; i <= 1.001; i += 0.25) colliders.push({ x: lerp(ax, bx, i), y: top + 0.3, z: lerp(az, bz, i), r: 0.75 });
     if (hung) hang(ax, az, bx, bz, top - sag);
+    leave?.();
   }
   // a line of chimes between two neighbours of a row of standing columns ([x, z, top]), in `count` places
   function strung(cols, closed, count) {
@@ -907,9 +953,14 @@ float seaLight(vec2 p, float t) {
   const urns = [];
   const urnAt = (x, z, size, prize) => { const y = drawnY(x, z) - 0.06, col = { x, z, r: 0.36 * size, top: y + size }; colliders.push(col); const u = { x, y, z, size, r: 0.42 * size, prize, broken: false, col, color: clay(), mesh: null }; urns.push(u); for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; flagAt(x + Math.sin(a) * 0.5 * size, z + Math.cos(a) * 0.5 * size, 0.9); } return u; };
   // The nursery: where the young of the Long Ones were taught, and where a first dive begins. A paved way runs out from
-  // the start, a little aside of the line to the well: three hoops to swim through, a pen with one small swarm, two more
-  // small pens with a bigger one beyond them (which cannot be taken until the small ones are eaten), and a sealed jar across the way.
-  const nurse = nursery && floor === 0 ? { dir: goalAngle - 0.35, hoops: [], keep: {} } : null;
+  // the start: three hoops to swim through, a pen with one small swarm, two more small pens with a bigger one beyond them
+  // (which cannot be taken until the small ones are eaten), and a sealed jar across the way, where the way ends.
+  // It runs off to the side, a quarter turn and a little more from the line to the rift (`NURSE_TURN`). It used to run almost at the rift, and a new
+  // player finishing the lessons had the Keeper in plain view, a few metres from waking it (George: 'the crab should be far away from the spawn').
+  // The turn was chosen by measuring: every piece of it is at least 75 m from the middle of the Keeper's ground, across the band's edge too (the jar
+  // about 94, the nearest pen about 81), it crosses none of the quiet side's places, the bloom water or the rings by the start, and from the jar
+  // the player looks out over open home water with swarms about. Turned the other way it would run into the kelp forest.
+  const nurse = nursery && floor === 0 ? { dir: goalAngle + NURSE_TURN, hoops: [], keep: {} } : null;
   if (nurse) {
     const A = nurse.dir, ux = Math.sin(A), uz = Math.cos(A), nx = Math.cos(A), nz = -Math.sin(A);
     const P = (d, side = 0) => [SPAWN.x + ux * (d + 4.5) + nx * side, SPAWN.z + uz * (d + 4.5) + nz * side]; // measured from where the head is when the dive begins, a body's length out from the start
@@ -922,10 +973,7 @@ float seaLight(vec2 p, float t) {
     nurse.keep[0] = P(26.5); nurse.keep[1] = P(33.5, 5.2); nurse.keep[2] = P(33.5, -5.2); nurse.keep[5] = P(41.5); // one small; then two small and, beyond them, a middling one that is too big to take until all three small ones are eaten
     { const [x, z] = P(26.5, 3.6), y = drawnY(x, z) - 0.2; blocks.push({ x, y, z, q: qY(A), s: S(1.3, 0.7, 1.3), color: pick(stoneTones) }); coils.push({ x, y: y + 0.86, z, q: qY(A), s: S(0.62), color: district }); } // the lesson, carved: a body closed round a swarm
     nurse.jar = urnAt(...P(49), 2.7, 'shell');
-    paveRoad(...P(-3), ...P(47), 1.2, 1.2);
-    { const [jx, jz] = P(51), gd = Math.hypot(goal.x - jx, goal.z - jz), gx2 = (goal.x - jx) / gd, gz2 = (goal.z - jz) / gd; // and on from the jar to the rift, small hoops marking the way
-      paveRoad(jx, jz, jx + gx2 * (gd - 19), jz + gz2 * (gd - 19), 1.2, 1.2);
-      for (let d = 4, i = 0; d < gd - 20; d += 5.5, i++) hoop(jx + gx2 * d + gz2 * (i % 2 ? 2.6 : -2.6), jz + gz2 * d - gx2 * (i % 2 ? 2.6 : -2.6), 1.1); }
+    paveRoad(...P(-3), ...P(47), 1.2, 1.2); // and no further: past the jar nothing leads anywhere, and the rest of the sea is the player's to find
   }
   F.ruins.forEach((kind, i) => {
     if (!builders[kind]) return; // 'ring' has none (see FLOORS), and draws nothing
@@ -1135,6 +1183,10 @@ float seaLight(vec2 p, float t) {
       const ax = g.x - nx * h, az = g.z - nz * h, bx = g.x + nx * h, bz = g.z + nz * h;
       const top = Math.max(column(ax, az, g.tall, { yaw: g.yaw + Math.PI / 2 }), column(bx, bz, g.tall, { yaw: g.yaw + Math.PI / 2 }));
       lintel(ax, az, bx, bz, top, 0.6, false); g.under = top - drawnY(g.x, g.z); // how much water there is under the lintel
+      // (review polish) a stepped crown on the middle of the lintel, in the band's paint, so that from afar and from above two columns and a beam say
+      // 'gate' and not 'two more of the colonnade'. Laid with no number drawn (stone of the band's first tone), so nothing after it moves
+      blocks.push({ x: g.x, y: top + 0.73, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.3, 0.34, 2.0), color: stoneTones[0] }, { x: g.x, y: top + 1.07, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(1.42, 0.1, 2.15), color: district },
+        { x: g.x, y: top + 1.17, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(0.8, 0.3, 0.85), color: stoneTones[0] }, { x: g.x, y: top + 1.47, z: g.z, q: qY(g.yaw + Math.PI / 2), s: S(0.9, 0.08, 0.95), color: district });
       paveRoad(g.x + fx * 3.5, g.z + fz * 3.5, g.x - fx * 3.5, g.z - fz * 3.5, 1.1, 1.15); };
     // ---- the sand flat: the cistern's rim, broken; the market tables at one edge; sea grass round the edge; nothing else stands on it
     { const M = S2.meadow, n = Math.round((Math.PI * 2 * M.r) / 1.2);
@@ -1191,7 +1243,8 @@ float seaLight(vec2 p, float t) {
       else if (c.state === 'broken') column(c.x, c.z, c.h, { capital: false, yaw: c.yaw });
       else { column(c.x, c.z, dr(0.8, 1.3), { capital: false, yaw: c.yaw }); fallen(c.x + Math.sin(c.yaw) * 1.4, c.z + Math.cos(c.yaw) * 1.4, c.h, c.yaw); } }
     // what took root on this stonework is coloured here, from this run, and handed in with the band's coral (coloured where the band's own is, it would ask the band's run for more)
-    more(G.finger, grownFingers.splice(fingersBefore).map((g) => ({ ...g, color: dpick(tones('staghorn')) })));
+    { const st = tones('staghorn'), tt = tones('tablecoral'), grew = grownFingers.splice(fingersBefore).map((g) => [g, dpick(st)]).map(([g, color]) => { const c = capCoral(g); return c && { ...c, color }; }).filter(Boolean); // (review polish) capCoral
+      more(G.finger, grew.filter((c) => !c.table)); more(G.table, grew.filter((c) => c.table).map((c) => ({ ...c, color: tt[st.indexOf(c.color) % tt.length] }))); }
     randNow = ownR; drandNow = ownD;
   }
   // The bloom water (bloom.js), in the first band: laid after the swarms and before anything is scattered, from a run of numbers of its own, so that what is
@@ -1268,6 +1321,7 @@ float seaLight(vec2 p, float t) {
       }
     }
     for (const [x, z] of spots.kelpRows || []) kelp.push({ x, y: drawnY(x, z) - 0.15, z, q: qY(rand() * 6.28), s: S(1.6, rr(3.6, 4.6), 1.6), color: pick(kelpTones) });
+    for (const k of kelp) if (keeperReach(k.x, k.z)) { k.s.x = Math.min(k.s.x, 1.5); k.s.z = Math.min(k.s.z, 1.5); k.s.y = Math.min(k.s.y, KG.grass); } // (review polish) low on the Keeper's ground
     scatter(G.kelp, kelpMat, (grownAt.kelp = kelp), { receive: false });
   }
 
@@ -1279,7 +1333,7 @@ float seaLight(vec2 p, float t) {
     const s = rr(0.8, 1.9), q = qY(rand() * 6.28, rr(-0.12, 0.12), rr(-0.12, 0.12)), tone = pick(coralTones), finger = rand() < 0.62;
     if (clearOfSites(x, z)) (finger ? fingers : tables).push({ x, y: drawnY(x, z) - 0.1, z, q, s: S(s), color: finger ? tone : tableTones[coralTones.indexOf(tone) % tableTones.length] });
   }
-  for (const g of grownFingers) fingers.push({ ...g, color: dpick(coralTones) });
+  for (const g of grownFingers) { const color = dpick(coralTones), c = capCoral(g); if (c) (c.table ? tables : fingers).push({ ...c, color: c.table ? tableTones[coralTones.indexOf(color) % tableTones.length] : color }); }
   const coralMat = mat(new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }));
   scatter(G.finger, coralMat, fingers, { cast: false });
   scatter(G.table, coralMat, tables);
@@ -1290,7 +1344,7 @@ float seaLight(vec2 p, float t) {
     if (clearOfSites(x, z)) (i % 3 === 2 ? pens : lanterns).push({ x, y: drawnY(x, z) - 0.05, z, q, s: i % 3 === 2 ? S(1.5, hgt * 0.9 + 0.4, 1.5) : S(1.25, hgt * 0.75 + 0.35, 1.25), color: i % 3 === 2 ? penTones[glowTones.indexOf(tone) % penTones.length] : tone });
   }
   for (const [x, z] of spots.glowRows || []) lanterns.push({ x, y: drawnY(x, z) - 0.05, z, q: qY(rand() * 6.28), s: S(1.3, rr(1.2, 1.6), 1.3), color: glowTones[0] });
-  for (const g of grownBulbs) lanterns.push({ ...g, s: S(g.s.x * 1.1, g.s.y * 1.6 + 0.2, g.s.z * 1.1), color: dpick(glowTones) });
+  for (const g of grownBulbs) { const color = dpick(glowTones); if (!g.gone) lanterns.push({ ...g, s: S(g.s.x * 1.1, g.s.y * 1.6 + 0.2, g.s.z * 1.1), color }); }
   scatter(G.lantern, plant({ sway: 0.3, glow: 1.15, give: 0.2 }), lanterns, { cast: false, receive: false });
   scatter(G.pen, plant({ sway: 0.3, glow: 1.15, shy: 1 }), (grownAt.seapen = pens), { cast: false, receive: false });
 
@@ -1329,7 +1383,16 @@ float seaLight(vec2 p, float t) {
   if (quiet) { // what grows only on the quiet side
     scatter(G.coralHead, plant({ double: false }), (grownAt.coralhead = quietGrown.heads));
     scatter(G.seaRod, plant({ sway: 0.6, give: 0.2 }), (grownAt.searod = quietGrown.rods), { receive: false });
-    scatter(G.giantKelp, plant({ sway: 1, give: 0.25, glow: KELP_GLOW }), (grownAt.giantkelp = quietGrown.tall), { receive: false }); } // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
+    // (review polish) no two stems alike, by each stem's own place in the list and no new number drawn: every second one is the mirror image (its
+    // blades on the other side), a third turned further off the current, and each leans a little and is a little wider or taller than the last
+    quietGrown.tall.forEach((it, i) => { const f = (k) => ((i * k) % 1 + 1) % 1, turn = (f(0.618034) - 0.5) * 0.5 + (i % 3 === 2 ? 0.35 * (i % 2 ? 1 : -1) : 0);
+      it.q.multiply(qY(turn, (f(0.381966) - 0.5) * 0.14, (f(0.754878) - 0.5) * 0.14)); it.s.x *= (i % 2 ? -1 : 1) * (0.88 + 0.24 * f(0.569840)); it.s.z *= 0.88 + 0.24 * f(0.245122); it.s.y *= 0.92 + 0.16 * f(0.430160); });
+    const giant = scatter(G.giantKelp, plant({ sway: 1, give: 0.25, glow: KELP_GLOW }), (grownAt.giantkelp = quietGrown.tall), { receive: false });
+    // (review polish) its shadow is half a shadow, as a clear jelly's is: drawn into the shadow map as a chequer, which the soft filter averages, so the
+    // bed is not printed with sharp combs (kelp is thin and lets the sun through)
+    if (giant.shade) { const d = mat(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide }));
+      d.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'void main() {\n  if (mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;'); };
+      d.customProgramCacheKey = () => 'kelp-shade-half'; giant.shade.customDepthMaterial = d; } } // its ground, claimed only now that everything scattered by chance has been, so that no stream of chance was asked for more
 
   // ------------------------------------------------------------ drifting specks and slow light shafts
   const SPECKS = 320, BOX = new THREE.Vector3(46, 16, 46);
@@ -1721,18 +1784,19 @@ float seaLight(vec2 p, float t) {
   let wrapTimer = 0;
   // what the dressing was last seated for: where the picture was centred, and whether there was a sun to cast by
   const sight = { on: true, sun: null, lit: false, fx: NaN, fy: 0, fz: NaN, light: { ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, half: 0 }, z: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
-  function dress(focus) {
+  function dress(focus, view = sight.view) { // (review polish) update() calls it with no view: the last one main.js gave stands
     if (!sight.sun) sight.sun = scene.children.find((o) => o.isDirectionalLight) || null;
     const sun = sight.sun && sight.sun.castShadow && sight.sun.visible ? sight.sun : null;
-    if (Math.hypot(focus.x - sight.fx, focus.z - sight.fz) < SIGHT.step && Math.abs(focus.y - sight.fy) < SIGHT.step && !sun === !sight.lit) return;
-    Object.assign(sight, { fx: focus.x, fy: focus.y, fz: focus.z, lit: !!sun });
+    const was = sight.view, viewSame = !view === !was && (!view || (Math.hypot(view.x - was.x, view.z - was.z) < VIEW_REACH.step && Math.abs(view.far - was.far) < VIEW_REACH.step && view.fx * was.fx + view.fz * was.fz > Math.cos(VIEW_REACH.turn))); // (review polish) the camera moved, turned or sees farther
+    if (viewSame && Math.hypot(focus.x - sight.fx, focus.z - sight.fz) < SIGHT.step && Math.abs(focus.y - sight.fy) < SIGHT.step && !sun === !sight.lit) return;
+    Object.assign(sight, { fx: focus.x, fy: focus.y, fz: focus.z, lit: !!sun, view: view && { ...view } });
     let light = sun || !sight.sun ? null : false; // a scene with no sun of this kind is somebody else's: there, everything casts
     if (sun && sight.on) { // the sun's box, as its shadow camera will lay it: across the rays, about the point it is aimed at (which is the point the picture is centred on)
       const c = sun.shadow.camera, { x, y, z } = sight;
       z.subVectors(sun.position, sun.target.position).normalize(); x.crossVectors(sight.up, z).normalize(); y.crossVectors(z, x);
       light = Object.assign(sight.light, { ax: x.x, ay: x.y, az: x.z, bx: y.x, by: y.y, bz: y.z, half: Math.max(c.right, -c.left, c.top, -c.bottom) + SIGHT.light });
     }
-    for (const s of scatters) s.wrap(focus.x, focus.y, focus.z, light);
+    for (const s of scatters) s.wrap(focus.x, focus.y, focus.z, light, view);
   }
   // ---- the tempers of swarms (TEMPER). What each does is told to whoever is listening through `swarmNews`: { what: 'bolt' | 'part' | 'shy' | 'lit', x, y, z }.
   const swarmNews = [], tell = (what, sc) => { swarmNews.push({ what, x: sc.x, y: sc.y, z: sc.z }); if (swarmNews.length > 12) swarmNews.shift(); };
@@ -2107,9 +2171,12 @@ float seaLight(vec2 p, float t) {
     return sc.items.map((it) => ({ name, x: it.x, y: it.y, z: it.z, sx: it.s.x, sy: it.s.y, sz: it.s.z, turn: [it.q.x, it.q.y, it.q.z, it.q.w], box: [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z], lo: b.min.y, hi: b.max.y, half: Math.max(b.max.x, -b.min.x, b.max.z, -b.min.z), tilt: 2 * Math.acos(Math.min(1, Math.hypot(it.q.w, it.q.y))) })); }),
     ...single.filter((o) => o.signs || o.uses !== undefined || (o.held !== undefined && !o.held && !o.gone)).map((o) => ({ name: o.signs ? 'mural' : o.uses !== undefined ? 'station' : 'fragment', x: o.x, y: o.y - (o.held !== undefined ? 0.45 : 0), z: o.z, sx: 1, sy: 1, sz: 1, lo: 0, hi: 1, half: o.signs ? 1.6 : 0.6, tilt: 0 }))]; // (a fragment lies with its middle 0.45 m up; the moving parts of the puzzles hang where they are meant to)
   // for the checks: have everything cast (false) or only what is in the sun's box (true), and count what is drawn and what the shadow pass draws
-  const sorting = (on) => { sight.on = on; sight.fx = NaN; };
+  const sorting = (on) => { sight.on = on; sight.fx = NaN; sight.view = null; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
+  // whatever stands (stone, plants, coral, jars) can be cut away in the window round the fish (sight.js); the bed cannot, nor anything see-through
+  for (const m of materials) if (m !== tMat) seeThrough(m);
+  for (const c of dropped) colliders.splice(colliders.indexOf(c), 1); // (review polish) the Keeper's ground: see leaveOut
   // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed
-  return { size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, quiet, nibble, revive,
+  return { keeperGround: keeperW && { ...keeperW, reach: keeperReach }, size: T, spawn: SPAWN, wrap: wrapD, solids: colliders, sites, update, react, pushOut, topNear, inStone, footing, steer, height, drawn: drawnY, pieces, dress, sorting, tally, puff: puffAt, ceiling: 15.5, time, floor: F, index: floor, goal, hall, portal, schools, take, atGoal, openSpot, rift: rift && { ...rift, in: riftIn, mid: riftMid, w: riftW, ledgeY: rift.y - rift.step, murk, light: () => lamps[0].mesh.material.opacity / lamps[0].peak }, dispose, rand, spots, urns, breakUrn, nursery: nurse, bloom, quiet, nibble, revive,
     stats: { rocks: rocks.length, coral: fingers.length + tables.length, colliders: colliders.length, minnows: minnows.length, swarms: F.schools } };
 }

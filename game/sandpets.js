@@ -9,6 +9,9 @@
 //   gardeneel   a colony of them in a patch of sand, each in its own hole, facing the current; they sink as a body comes near and rise again after
 //   puffer      over its finished circle, ploughing in along a valley and out again; a body very near and it puffs up
 //   sandcircle  three circles side by side, at three stages of building
+//   octopus     (and the Mason, the same at keeper size) not a sand flat creature, but brought the same way, since it lives on the bed: it rests in a den
+//               of stones watching the fish, crawls off over the bed, reaches for a stone or a shell, walks with it under its web, goes dark and
+//               throws it (away from the fish), and rests again; a fish that comes at it fast sends it jetting off, pale. In no band yet
 // main.js calls bringSand(id, ctx) and then pet.step(dt) every frame, and pet.dispose() to take it away. ctx: { make, scene, rig, wrapD, world, time }.
 import * as THREE from 'three';
 import { HERMIT, CIRCLE } from './critters.js';
@@ -21,6 +24,8 @@ export const SAND_PETS = {
   gardeneel: { here: 'A colony of garden eels is in the sand just ahead of you. They sink as you come near. They are only to look at.', gone: 'The garden eels are gone.' },
   puffer: { here: 'A white-spotted puffer is over its sand circle just ahead of you. It is only to look at.', gone: 'The puffer and its circle are gone.' },
   sandcircle: { here: 'Three puffer circles are in the sand just ahead of you, at three stages of building. They are only to look at.', gone: 'The circles are gone.' },
+  octopus: { here: 'An octopus is on the bed just ahead of you, in its den. Watch it a while: it crawls, takes a stone, and throws it. Come at it fast and it jets off. It is only to look at.', gone: 'The octopus is gone.' },
+  mason: { here: 'The Mason, an octopus at keeper size, is on the bed just ahead of you, in its den. It is only to look at.', gone: 'The Mason is gone.' },
 };
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -127,4 +132,48 @@ const MAKERS = {
     const at = spot(ctx, 7, 0), w = ctx.world, list = [0.15, 0.45, 1].map((stage, i) => { const a = ctx.make('sandcircle'), d = (i - 1) * 3.3, x = at.x + at.ax * d, z = at.z + at.az * d; ctx.scene.add(a.object); settle(ctx, a.object, x, z, CIRCLE.R + 0.1); a.rig.update(0, { stage }); return { a, pos: a.object.position }; });
     return { list, centre: list[1].pos, step() {}, dispose() { for (const s of list) { ctx.scene.remove(s.a.object); s.a.dispose(); } } };
   },
+  octopus: (ctx) => octoPet(ctx, 'octopus'),
+  mason: (ctx) => octoPet(ctx, 'mason'),
 };
+
+// The octopus brought to look at: a round of what it does, each for a while (ACTS), and a jet away from a fish that comes at it fast.
+// force(mood) starts that act at once (for the tools that photograph it).
+const OCTO_ACTS = { den: 7, crawl: 7, reach: 3.4, carry: 4.5, throw: 4.4, jet: 2.6 }, OCTO_NEXT = { den: 'crawl', crawl: 'reach', reach: 'carry', carry: 'throw', throw: 'den', jet: 'den' };
+function octoPet(ctx, id) {
+  const a = ctx.make(id), R = a.rig, w = ctx.world, sz = R.pose.size, fish = ctx.rig, ground = (x, z) => w.drawn(x, z), at = spot(ctx, 4 + 6 * sz, 1.2 + 2 * sz);
+  ctx.scene.add(a.object);
+  const S = { x: at.x, z: at.z, y: 0, yaw: Math.atan2(-at.fx, -at.fz), mood: 'den', t: 0, k: 0, to: { x: 0, z: 0 }, n: 0, rise: 0, skin: '' }, body = { x: 0, y: 0, z: 0 }, watch = new THREE.Vector3();
+  const toFish = () => Math.atan2(ctx.wrapD(fish.pos.x - S.x), ctx.wrapD(fish.pos.z - S.z));
+  function start(mood) {
+    S.mood = mood; S.t = 0; S.k = 0; S.n++; S.skin = '';
+    if (mood === 'den') R.den(S.x, S.z, S.yaw); else R.den(null);
+    if (mood === 'crawl') { const a0 = toFish() + Math.PI + (S.n % 2 ? 1.1 : -1.1), r = 2.5 + 1.5 * sz; S.to.x = S.x + Math.sin(a0) * r; S.to.z = S.z + Math.cos(a0) * r; }
+    if (mood === 'reach') { const ang = S.yaw + R.arms[0].def.angle, d = 2.1 * sz; R.lay(S.x + Math.sin(ang) * d, S.z + Math.cos(ang) * d, S.n % 2 ? 'shell' : 'stone'); }
+    if (mood === 'throw') { S.yaw = toFish() + Math.PI + 0.5; if (R.thing.state === 'none') R.hold(); } // it throws away from the fish
+    if (mood === 'jet') { S.yaw = toFish(); S.rise = 0; R.drop(); } // facing the fish, so that it goes mantle first away from it
+    if (mood === 'den' || mood === 'crawl') R.drop();
+  }
+  start('den');
+  return { list: [{ a }], body, get centre() { return { x: S.x, z: S.z }; },
+    force(mood) { start(mood); },
+    place(x, z, yaw = S.yaw) { S.x = x; S.z = z; S.yaw = yaw; start(S.mood); }, // (for the tools that photograph it)
+    step(dt) {
+      S.t += dt; const T = OCTO_ACTS[S.mood], dx = ctx.wrapD(fish.pos.x - S.x), dz = ctx.wrapD(fish.pos.z - S.z), far = Math.hypot(dx, dz);
+      if (far > 40) { const p = spot(ctx, 4 + 6 * sz, 1.2 + 2 * sz); S.x = p.x; S.z = p.z; start('den'); } // the fish has gone a long way, or down a rift: it is there again
+      // a fish coming at it fast: blanch, and jet off
+      const speed = fish.speed ?? 0; if (S.mood !== 'jet' && far < 1.6 + 1.2 * sz && speed > 3) start('jet');
+      const turn = (want, rate) => { S.yaw += clamp(wrapPi(want - S.yaw), -rate * dt, rate * dt); };
+      if (S.mood === 'den') turn(toFish(), 0.3);
+      else if (S.mood === 'crawl' || S.mood === 'carry') { if (S.mood === 'crawl') { const tx = S.to.x - S.x, tz = S.to.z - S.z, d = Math.hypot(tx, tz); if (d < 0.2) S.t = T; else turn(Math.atan2(tx, tz), 0.9); }
+        const v = (S.mood === 'carry' ? 0.5 : 1.1) * sz * Math.min(1, S.t / 0.8); S.x += Math.sin(S.yaw) * v * dt; S.z += Math.cos(S.yaw) * v * dt; } // (in mantle lengths a second)
+      else if (S.mood === 'jet') { const q = R.pose.jet, v = 9 * sz * (0.3 + 1.2 * (q < 0.22 ? q / 0.22 : Math.exp(-(q - 0.22) * 4))); S.x -= Math.sin(S.yaw) * v * dt; S.z -= Math.cos(S.yaw) * v * dt; S.rise = Math.min(1, S.rise + dt * 1.5) * (S.t > T - 0.8 ? Math.max(0, (T - S.t) / 0.8) : 1); S.skin = S.t < 0.5 ? 'blanched' : ''; }
+      S.k = Math.min(1, S.t / T);
+      if (S.t >= T) { if (S.mood === 'carry') R.hold(); start(OCTO_NEXT[S.mood]); }
+      S.x = fish.pos.x - ctx.wrapD(fish.pos.x - S.x); S.z = fish.pos.z - ctx.wrapD(fish.pos.z - S.z); // the nearest copy of the world to the fish
+      const bed = ground(S.x, S.z), y = S.mood === 'jet' ? bed + sz * (0.6 + 3.4 * S.rise) : undefined;
+      watch.set(fish.pos.x, fish.pos.y, fish.pos.z);
+      R.update(dt, { x: S.x, y, z: S.z, yaw: S.yaw, mood: S.mood, k: S.k, ground, watch, skin: S.skin });
+      const o = a.object.children[0].position; body.x = o.x; body.y = o.y; body.z = o.z;
+    },
+    dispose() { ctx.scene.remove(a.object); a.dispose(); } };
+}
