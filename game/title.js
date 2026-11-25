@@ -40,8 +40,8 @@ export const FRONT = {
     // Both versions are built only from the one track (title-music-map.md). `period` is the loop's length in samples at 44.1 kHz;
     // `first` is where its first sound crosses 0.01 in the left channel, which finds the loop in the decoded sound whatever the
     // browser's decoder puts in front of it.
-    long: { src: 'title/music/title-long.m4a', period: 5359208, first: 40015 },
-    loop: { src: 'title/music/title-loop.m4a', period: 914987, first: 1803 },
+    long: { src: 'title/music/title-long.mp4', period: 5359208, first: 40015 },
+    loop: { src: 'title/music/title-loop.mp4', period: 914987, first: 1803 },
     gain: 0.75, fadeIn: 1.6, fadeOut: 1.4,
   },
 };
