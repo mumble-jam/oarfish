@@ -1161,3 +1161,141 @@ export function sandCircle(pal) {
     const t0 = [x - s, 0.002, z - s * 0.4], t1 = [x + s * 0.8, 0.004, z - s * 0.6], t2 = [x + s * 0.2, 0.003, z + s], t3 = [x, s * 0.7, z], c = [h, h * 0.7, 0, at]; for (const [p0, p1, p2] of [[t0, t1, t3], [t1, t2, t3], [t2, t0, t3]]) { m.tri(p0, p1, p2, [col, col, tint(col, '#ffffff', 0.4)]); C.push(...c, ...c, ...c); } }
   const g = m.geometry(); g.setAttribute('cut', new THREE.Float32BufferAttribute(new Float32Array(C), 4)); return g;
 }
+
+// ================================================================ the octopus (octopus.js; not in the dive yet)
+// Its look is the day octopus's, Octopus cyanea (the sources are at the top of octopus.js): a smooth round mantle with a few big warts, one large
+// cirrus over each eye, stout arms all of about one length (the fourth pair a little longer), a mottled and netted skin, the arms blotched, and a dark
+// ringed false eye on each side between the eye and the base of the third and fourth arms.
+// Modelled with the mantle's length as the unit, so that one model serves every size: OCTO.forms says how many metres that is for each, and the
+// proportions that change with it (a big old animal has shorter, thicker arms and a heavier sac). The crown, where the arms hang round the mouth,
+// is at the origin, the mouth down (-y), the head over it with the eyes on bumps at its sides, the face toward +z, and the mantle a sac going up and
+// back from the head (toward +y and -z).
+// One model (octopus): head, eye bumps, mantle, the cirri, the skin's points, the false eyes. Pieces of their own, hung on by octopus.js: eight arms
+// (octoArm; each in a socket of its own, trailed by strands.js), two eyes (octoEye; turned so the pupil stays level), the siphon (octoSiphon), a stone
+// or a shell to carry and throw (octoThing) and the stones of a den (octoDen). The web between the arms is made by octopus.js each frame, from where
+// the arms are.
+// Every corner of what is skin carries three marks for octopus.js's shader: `skin` (x: the pattern, -1 a pale patch to 1 the dark net; y: how much it
+// is underside; z: how much it is the ring round the eye; w: 1 for skin that changes colour, 0 for what does not), `rise` (xyz: where a skin point goes
+// when it is raised all the way; w: how far along the animal the corner is, from the tip of the mantle out to the tips of the arms, for the passing
+// clouds) and `puff` (where it goes when the mantle fills all the way).
+const OCTO_M = new THREE.Vector3(0, 0.8, -1).normalize(); // the way the mantle goes from the neck
+const octoArmDef = (i) => { const angle = Math.PI / 8 + (i * Math.PI) / 4, pair = [1, 2, 3, 4, 4, 3, 2, 1][i]; return { i, angle, pair, side: i < 4 ? 1 : -1, reach: pair === 4 ? 1.06 : 1 }; };
+export const OCTO = {
+  // ml: the mantle's length in metres; arm: an arm's length in mantle lengths; thick: an arm's half-width at its root; sac: how big the mantle is;
+  // cirrus: how tall the horn over each eye stands; points: how many raised points of skin; thing: the radius of what it carries, in mantle lengths
+  forms: {
+    neighbour: { ml: 0.24, arm: 4.6, thick: 0.19, sac: 1, cirrus: 0.1, points: 16, thing: 0.5, ocellus: 1 },
+    mason: { ml: 0.8, arm: 3.4, thick: 0.255, sac: 1.12, cirrus: 0.24, points: 30, thing: 0.5, ocellus: 0.8 },
+  },
+  crown: 0.13, joints: 12, mantle: OCTO_M, neck: [0, 0.3, -0.04],
+  arms: Array.from({ length: 8 }, (_, i) => octoArmDef(i)), // round the crown from the face by the animal's left: L1 L2 L3 L4 R4 R3 R2 R1
+  eye: { at: [0.205, 0.31, 0.075], r: 0.088, look: [1, 0.22, 0.5] },
+  siphon: { at: [0.17, 0.18, -0.12], look: [0.75, -0.25, 0.6] },
+};
+const octoHash = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+const octoNet = (x, y, z) => { const h = octoHash(x, y, z); return h > 0.66 ? 1 : h > 0.56 ? 0.5 : h < 0.22 ? -1 : 0; }; // the day octopus's netted mottle: a dark net with pale patches in it
+// The marks, set face by face: rule(t, centroid, normal) gives [skin x, y, z, w] for triangle t; rises and puffs are set by the caller, corner by corner.
+function octoMarks(g, rule, along, rises = null, puff = null) {
+  const P = g.attributes.position, n = P.count, S = new Float32Array(n * 4), R = new Float32Array(n * 4), F = new Float32Array(n * 3), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), N = new THREE.Vector3(), C = new THREE.Vector3();
+  for (let t = 0; t < n / 3; t++) { a.fromBufferAttribute(P, t * 3); b.fromBufferAttribute(P, t * 3 + 1); c.fromBufferAttribute(P, t * 3 + 2); C.copy(a).add(b).add(c).multiplyScalar(1 / 3);
+    N.crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize(); const s = rule(t, C, N);
+    for (let k = 0; k < 3; k++) { const v = t * 3 + k; S.set(s, v * 4); const p = k ? (k === 1 ? b : c) : a; R[v * 4 + 3] = along(p); if (puff) { const f = puff(t, p); F[v * 3] = f[0]; F[v * 3 + 1] = f[1]; F[v * 3 + 2] = f[2]; } } }
+  if (rises) for (const [v, x, y, z] of rises) { R[v * 4] = x; R[v * 4 + 1] = y; R[v * 4 + 2] = z; }
+  g.setAttribute('skin', new THREE.Float32BufferAttribute(S, 4)); g.setAttribute('rise', new THREE.Float32BufferAttribute(R, 4)); g.setAttribute('puff', new THREE.Float32BufferAttribute(F, 3));
+  return g;
+}
+const octoAlongBody = (p) => Math.max(0, 1.05 - (p.y * OCTO_M.y + p.z * OCTO_M.z)); // the mantle's tip about 0, the crown about 1, the arms on from there
+export function octopus(pal, form) {
+  const m = mesher(), { ocellus, ocellusMid } = pal, W = '#ffffff', S1 = '#f2f2f2', S2 = '#e4e4e4'; // skin is drawn white and coloured by the shader; these are only its facets' light
+  const regions = [], mark = (name) => regions.push([name, m.triangles]), rises = [];
+  // the head: a round block over the crown, a little narrower front to back, leaning back into the mantle
+  mark('head');
+  const HEAD = [[-0.05, 0.12, 0.02], [0.02, 0.175, 0.02], [0.12, 0.215, 0.01], [0.24, 0.225, -0.01], [0.34, 0.19, -0.03], [0.42, 0.12, -0.06]];
+  const rings = HEAD.map(([y, r, z]) => ringY(y, r, 10, { z, squash: 0.86 }));
+  m.skin(rings, (i, k) => (k % 3 ? S1 : W)); m.cap(rings[0], [0, -1, 0], S2, 0.02); m.cap(rings[rings.length - 1], [0, 1, 0], W, 0.02);
+  // the mantle: a sac from the neck, up and back, filling and emptying (`puff`)
+  mark('mantle');
+  const N = new THREE.Vector3(...OCTO.neck), X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0).addScaledVector(OCTO_M, -OCTO_M.y).normalize();
+  const sac = (s) => form.sac * 0.4 * Math.sin(Math.PI * (0.12 + 0.88 * s)) ** 0.62 + 0.004, at = (s, a, out = 0) => { const r = sac(s) + out, C = N.clone().addScaledVector(OCTO_M, s * 0.98 * (0.92 + 0.08 * form.sac)); return C.addScaledVector(X, Math.sin(a) * r).addScaledVector(Y, Math.cos(a) * r * 0.9); };
+  const S = [-0.06, 0.05, 0.15, 0.27, 0.4, 0.53, 0.66, 0.77, 0.86, 0.93, 0.98, 1];
+  m.skin(S.map((s) => Array.from({ length: 10 }, (_, k) => at(Math.max(0, s), (k / 10) * Math.PI * 2).toArray())), (i, k) => ((i + k) % 4 ? (k % 2 ? S1 : W) : S2));
+  // the eye bumps, raised high on the sides of the head; the eye itself is a piece of its own, set in the open end
+  mark('turret');
+  const E = OCTO.eye; for (const s of [1, -1]) { const n = new THREE.Vector3(s * E.look[0], E.look[1], E.look[2]).normalize(), c = [s * E.at[0], E.at[1], E.at[2]], from = [c[0] - n.x * 0.11, c[1] - n.y * 0.11, c[2] - n.z * 0.11];
+    m.limb(from, [c[0] - n.x * 0.004, c[1] - n.y * 0.004, c[2] - n.z * 0.004], 0.1, E.r * 1.04, 8, [S1, W]); }
+  // the horn over each eye, and the warts: each a low pyramid whose point is raised by the skin (`rise`). The point is corner 0 of each face
+  mark('points');
+  const point = (base, up, size, tall, at0 = 0) => { const t = new THREE.Vector3().crossVectors(up, Math.abs(up.y) > 0.9 ? X : new THREE.Vector3(0, 1, 0)).normalize(), b = new THREE.Vector3().crossVectors(up, t);
+    const ring = [0, 1, 2].map((k) => base.clone().addScaledVector(t, Math.cos(k * 2.094) * size).addScaledVector(b, Math.sin(k * 2.094) * size).toArray()), apex = base.clone().addScaledVector(up, tall * at0).toArray();
+    for (let k = 0; k < 3; k++) { const v = m.triangles * 3; m.tri(apex, ring[k], ring[(k + 1) % 3], W); rises.push([v, up.x * tall * (1 - at0), up.y * tall * (1 - at0), up.z * tall * (1 - at0)]); } };
+  for (const s of [1, -1]) point(new THREE.Vector3(s * 0.15, 0.4, 0.07), new THREE.Vector3(s * 0.35, 1, 0.15).normalize(), 0.035, form.cirrus, 0.35);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < form.points; i++) { const s = 0.12 + 0.72 * rnd(), a = (rnd() - 0.5) * 2.3, P = at(s, a, -0.004), C = N.clone().addScaledVector(OCTO_M, s * 0.98), up = P.clone().sub(C).normalize(); point(P, up, 0.022 + 0.014 * rnd(), 0.045 + 0.03 * rnd()); }
+  // the false eyes: a dark ring low on each side of the head, between the eye and the roots of the third and fourth arms, with skin in its middle
+  mark('ocellus');
+  const ringAt = (s) => { const c = new THREE.Vector3(s * 0.19, 0.03, -0.09), n = new THREE.Vector3(s, -0.15, -0.55).normalize(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    const R0 = 0.05 * form.ocellus, R1 = 0.032 * form.ocellus, p = (r, k) => new THREE.Vector3(Math.cos(k * 0.785) * r, Math.sin(k * 0.785) * r, 0).applyQuaternion(q).add(c).addScaledVector(n, 0.012).toArray();
+    for (let k = 0; k < 8; k++) m.quad(p(R1, k), p(R0, k), p(R0, k + 1), p(R1, k + 1), k % 2 ? ocellus : tint(ocellus, ocellusMid, 0.25)); return [c, n, p, R1]; };
+  const mids = [1, -1].map(ringAt);
+  mark('ocellusMid'); for (const [, , p, R1] of mids) for (let k = 0; k < 8; k++) m.tri(p(0, 0), p(R1, k), p(R1, k + 1), ocellusMid);
+  mark('end');
+  const g = m.geometry(), where = (t) => { let name = 'head'; for (const [n, from] of regions) if (t >= from) name = n; return name; };
+  const mantleFrom = regions.find((r) => r[0] === 'mantle')[1], turretFrom = regions.find((r) => r[0] === 'turret')[1];
+  return octoMarks(g, (t, C, Nf) => { const r = where(t), under = Math.max(0, Math.min(1, (-Nf.y - 0.15) * 1.4)) * (C.y < 0.25 ? 1 : 0.5);
+    if (r === 'ocellus') return [0, 0, 0, 0];
+    if (r === 'turret') return [octoNet(C.x, C.y, C.z) * 0.5, 0, 1, 1];
+    if (r === 'ocellusMid') return [-0.6, 0, 0, 1];
+    return [octoNet(Math.floor(Math.abs(C.x) * 7 + 0.5), Math.floor(C.y * 7), Math.floor(C.z * 7)), under, 0, 1]; }, // (patches a seventh of a mantle across, the same on both sides)
+  octoAlongBody, rises, (t, p) => { if (t < mantleFrom || t >= turretFrom) return [0, 0, 0]; const s = Math.max(0, p.clone().sub(N).dot(OCTO_M)), C = N.clone().addScaledVector(OCTO_M, s), k = Math.sin(Math.PI * Math.min(1, s / 0.95)) ** 0.8; return p.clone().sub(C).multiplyScalar(k).toArray(); });
+}
+// One arm, modelled straight along +z from where it hangs; the back up (+y), the sucker face down. It is thick at the root and runs to a fine tip,
+// its joints closer together toward the tip, where it curls. Five sides: the flat one underneath is the paler strip, with a few suckers on it near the root.
+export const octoArmSize = (form, long, z) => form.thick * (1 - 0.9 * Math.min(1, Math.max(0, z / long))) ** 1.05 + 0.006; // half-width at z, thick at the root and fine at the tip
+export function octoArmCuts(form, def) { const n = OCTO.joints, q = 0.885, long = form.arm * def.reach, first = (long * (1 - q)) / (1 - q ** n), cuts = [0]; for (let i = 0; i < n; i++) cuts.push(cuts[i] + first * q ** i); return { long, cuts }; }
+export function octoArm(pal, form, def) {
+  const m = mesher(), { sucker } = pal, { long, cuts } = octoArmCuts(form, def), r0 = form.thick, n = cuts.length - 1;
+  const size = (z) => octoArmSize(form, long, z);
+  const ring = (z) => { const w = size(z), h = w * 0.86; return [[0, h, z], [w, 0.3 * h, z], [0.62 * w, -0.85 * h, z], [-0.62 * w, -0.85 * h, z], [-w, 0.3 * h, z]]; };
+  const zs = [-0.05, ...cuts.slice(0, 3).map((z, i) => [z, (z + cuts[i + 1]) / 2]).flat(), ...cuts.slice(3)]; // a section at every joint, and half way between near the root, where it bends most
+  m.skin(zs.map(ring), (i, k) => (k === 2 ? '#ffffff' : k === 1 || k === 3 ? '#ececec' : k === 0 ? '#ffffff' : '#f4f4f4'));
+  const skinTo = m.triangles;
+  for (let i = 0; i < 7; i++) { const z = 0.06 + (cuts[i] + cuts[i + 1]) / 2, w = size(z), x = (i % 2 ? 0.3 : -0.3) * w, y = -0.85 * w * 0.86 - 0.006, r = w * 0.42; m.quad([x, y, z - r], [x + r, y, z], [x, y, z + r], [x - r, y, z], sucker); }
+  const g = m.geometry();
+  return octoMarks(g, (t, C) => { if (t >= skinTo) return [0, 1, 0, 0]; const k = Math.floor(t / 2) % 5, blot = octoNet(Math.floor(C.z * 1.6) * 0.37 + def.i, def.i * 1.3, 0) * 0.8;
+    return [k === 2 ? 0 : blot, k === 2 ? 1 : k === 1 || k === 3 ? 0.3 : 0, 0, 1]; }, (p) => 1.05 + Math.max(0, p.z));
+}
+// An eye, looking along +z: a dark rim, a golden iris swelling a little, and the bar of a pupil across it, which octopus.js keeps level
+export function octoEye(pal) {
+  const m = mesher(), { eye, pupil, rim } = pal, r = OCTO.eye.r, n = 10, dome = 0.02;
+  const P = (k, rad, z) => [Math.cos((k / n) * Math.PI * 2) * rad, Math.sin((k / n) * Math.PI * 2) * rad, z];
+  for (let k = 0; k < n; k++) m.quad(P(k, r * 0.8, 0.003), P(k, r, -0.004), P(k + 1, r, -0.004), P(k + 1, r * 0.8, 0.003), rim);
+  for (let k = 0; k < n; k++) m.tri([0, 0, dome], P(k, r * 0.8, 0.003), P(k + 1, r * 0.8, 0.003), k % 2 ? eye : tint(eye, '#ffffff', 0.18), true);
+  const hz = (x, y) => 0.003 + (dome - 0.003) * (1 - Math.hypot(x, y) / (r * 0.8)) + 0.0025, bw = r * 0.6, bh = r * 0.15; // the bar lies on the dome
+  const bar = [[-bw, -bh], [0, -bh * 1.15], [bw, -bh], [bw, bh], [0, bh * 1.15], [-bw, bh]].map(([x, y]) => [x, y, hz(x, y)]);
+  m.quad(bar[0], bar[1], bar[4], bar[5], pupil).quad(bar[1], bar[2], bar[3], bar[4], pupil);
+  m.tri([r * 0.22, r * 0.45, hz(r * 0.22, r * 0.45) + 0.001], [r * 0.38, r * 0.36, hz(r * 0.38, r * 0.36) + 0.001], [r * 0.3, r * 0.56, hz(r * 0.3, r * 0.56) + 0.001], '#ffffff', true);
+  return octoMarks(m.geometry(), () => [0, 0, 0, 0], () => 1);
+}
+// The siphon, a short tube along +z from where it comes out under the mantle's edge; dark inside its mouth
+export function octoSiphon(pal) {
+  const m = mesher(), { mouth } = pal; m.limb([0, 0, -0.04], [0, 0, 0.2], 0.062, 0.046, 7, ['#ececec', '#ffffff']); const to = m.triangles; m.cap(m.last, [0, 0, 1], mouth, -0.05);
+  return octoMarks(m.geometry(), (t) => (t >= to ? [0, 0, 0, 0] : [0, 0.4, 0, 1]), () => 0.95);
+}
+// What it carries and throws: a rounded stone, or a cockle's half shell, of radius 1 (octopus.js sizes it)
+export function octoThing(pal, kind) {
+  const m = mesher();
+  if (kind === 'stone') { const { stone } = pal, ico = new THREE.IcosahedronGeometry(1, 1), mat = new THREE.Matrix4().makeScale(1, 0.72, 0.9);
+    m.add(ico, mat, stone); const g = m.geometry(), C = g.attributes.color; for (let t = 0; t < C.count / 3; t++) { const k = 0.82 + 0.18 * octoHash(t, 1, 2); for (let v = 0; v < 3; v++) C.setXYZ(t * 3 + v, C.getX(t * 3 + v) * k, C.getY(t * 3 + v) * k, C.getZ(t * 3 + v) * k); } return g; }
+  const { shell, shellBand } = pal, R = 10, A = 6; // the shell: ribs fanning from its hinge, its back up, lying open side down
+  const pt = (i, j) => { const a = (-0.5 + i / R) * 2.2, h = j / A, r = 0.25 + 0.75 * h; return [Math.sin(a) * r, 0.55 * Math.sin(Math.PI * 0.5 * (1 - h * 0.85)) * (1 - 0.2 * h) + (i % 2 ? 0.03 : 0), -0.6 + Math.cos(a) * r * 0.95]; };
+  for (let i = 0; i < R; i++) for (let j = 0; j < A; j++) m.quad(pt(i, j), pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1), j % 2 ? shell : tint(shell, shellBand, 0.55));
+  for (let i = 0; i < R; i++) m.tri([0, -0.02, -0.4], pt(i + 1, A), pt(i, A), tint(shell, shellBand, 0.3));
+  return m.geometry();
+}
+// The stones of a den: a low broken wall round the back and sides of a hollow, open toward +z, in mantle lengths
+export function octoDen(pal) {
+  const m = mesher(), { stone } = pal, ico = new THREE.IcosahedronGeometry(1, 0);
+  const STONES = [[-1.75, 3.5, 0.45], [-1.3, 3.55, 0.55], [-0.85, 3.65, 0.62], [-0.4, 3.7, 0.66], [0.05, 3.7, 0.68], [0.5, 3.65, 0.62], [0.95, 3.6, 0.58], [1.4, 3.5, 0.52], [1.8, 3.45, 0.42], [-0.6, 4.2, 0.5], [0.7, 4.15, 0.48]]; // (out past where its arms lie)
+  STONES.forEach(([a, r, s], i) => { const x = Math.sin(a + Math.PI) * r * -1, z = -Math.cos(a) * r * -1; const mat = new THREE.Matrix4().compose(new THREE.Vector3(Math.sin(a) * r, s * 0.45, -Math.cos(a) * r), new THREE.Quaternion().setFromEuler(new THREE.Euler(0.3 * i, a * 1.7, 0.2)), new THREE.Vector3(s, s * 0.8, s * 0.9)); m.add(ico, mat, dim(stone, 0.85 + 0.15 * octoHash(i, x, z))); });
+  return m.geometry();
+}
