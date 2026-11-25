@@ -212,7 +212,7 @@ await ctx.close();
   await ev(() => window.__front.touch()); await sleep(1800);
   // the end state of every transition at once: what is measured is where the mark comes to rest
   await ev(() => document.head.insertAdjacentHTML('beforeend', '<style>#front .menu button, #front .menu button::before, #front .menu button::after { transition: none !important; }</style>'));
-  const SIZES = [[320, 568, 'up'], [375, 667, 'up'], [393, 660, 'up'], [393, 852, 'up'], [430, 932, 'up'], [768, 1024, 'up'], [844, 390, 'side'], [1440, 900, 'wide']];
+  const SIZES = [[320, 568, 'up'], [375, 667, 'up'], [393, 660, 'up'], [393, 852, 'up'], [430, 932, 'up'], [768, 1024, 'up'], [844, 390, 'side'], [1274, 476, 'side'], [1440, 900, 'wide'], [1907, 894, 'wide']];
   for (const [w, h, kind] of SIZES) {
     await page.setViewportSize({ width: w, height: h }); await sleep(300);
     const bad = [];
@@ -240,6 +240,42 @@ await ctx.close();
       for (const [a, z] of lz) for (const [n, c] of [['clip', clip], ['ink filter', filt]]) if (a < c.l - 0.5 || z > c.r + 0.5 || loz.y - 3.5 < c.t || loz.y + 3.5 > c.b) bad.push(`item ${k}: a lozenge is cut by the ${n}`);
     }
     check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'on its side' : 'wide'} at ${w}x${h}: the menu clears the caption and the credit${kind === 'up' ? ', is centred on the caption' : ''}, and every item's focus mark is whole`, !bad.length, bad.slice(0, 6).join('; '));
+    // ---- 9c. the plate's grid (George: 'pay closer attention to alignments of all the graphic block'; and, of the side-by-side layout, the
+    // fish should look at the menu). The running head on one baseline (upright: its two ends, the name standing over them) and its ends on
+    // equal margins; the credit hung under the picture's lower left corner; in the plate and upright layouts the fish (the mean of its ink
+    // over a breath: it waves by several px either way), the caption and the menu on one centre line; side by side, the menu on the left
+    // margin, left of the fish, at the height of its head, and nothing overlapping.
+    const G = await ev(() => {
+      const F = window.__front, q = (s) => document.querySelector('#front ' + s);
+      const ink = (el) => { const r = document.createRange(); r.selectNodeContents(el); const b = r.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+      const base = (el) => { const tn = [...el.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim()); const s = document.createElement('span'), mk = document.createElement('span'); mk.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline'; tn.replaceWith(s); s.append(tn, mk); const y = mk.getBoundingClientRect().bottom; s.replaceWith(tn); return y; };
+      const pic = q('.pic').getBoundingClientRect(), s = F.view.s, B = F.box, pcx = pic.left + pic.width / 2, pcy = pic.top + pic.height / 2, cy = (B.y0 + B.y1) / 2;
+      const frame = { l: pcx - s * (B.x1 - B.x0) / 2, r: pcx + s * (B.x1 - B.x0) / 2, t: pcy - s * (B.y1 - B.y0) / 2, b: pcy + s * (B.y1 - B.y0) / 2 };
+      const head = { t: pcy - (B.hy1 - cy) * s, b: pcy - (B.hy0 - cy) * s };
+      const mesh = F.mesh, pos = mesh.geometry.attributes.position, v = new mesh.position.constructor(); let sum = 0, m = 0;
+      for (let t = 0; t < 15; t += 0.5) { F.at(t); mesh.skeleton.update(); let l = 1e9, r = -1e9; for (let i = 0; i < pos.count; i += 3) { v.fromBufferAttribute(pos, i); mesh.applyBoneTransform(i, v); v.applyMatrix4(mesh.matrixWorld).project(F.camera); const x = (v.x + 1) / 2 * innerWidth; l = Math.min(l, x); r = Math.max(r, x); } sum += (l + r) / 2; m++; }
+      F.at(3);
+      const items = [...document.querySelectorAll('#front .menu button')], box = (e) => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+      const row = items.map(ink).reduce((a, b) => ({ l: Math.min(a.l, b.l), r: Math.max(a.r, b.r), t: Math.min(a.t, b.t), b: Math.max(a.b, b.b) }));
+      return { W: innerWidth, base: [base(q('.book')), base(q('.name')), base(q('.class'))], book: ink(q('.book')), cls: ink(q('.class')), name: box(q('.name')), credit: ink(q('.credit')), caption: ink(q('.caption')), capBox: box(q('.caption')), menuBox: box(q('.menu')), row, items: items.map(box), dive: box(items[0]), frame, head, fishMean: sum / m };
+    });
+    { const bad = [], c = (b) => (b.l + b.r) / 2, f1 = (x) => x.toFixed(1), meet = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+      const [bb, nb, cb] = G.base;
+      if (Math.abs(bb - cb) > 1 || (kind !== 'up' && Math.abs(bb - nb) > 1)) bad.push(`head line baselines ${[bb, nb, cb].map(f1).join(' / ')}`);
+      if (Math.abs(G.book.l - (G.W - G.cls.r)) > 1) bad.push(`margins ${f1(G.book.l)} left, ${f1(G.W - G.cls.r)} right`);
+      if (Math.abs(G.credit.l - G.frame.l) > 1) bad.push(`credit at ${f1(G.credit.l)}, the picture's left edge at ${f1(G.frame.l)}`);
+      if (G.credit.t < G.frame.b - 1) bad.push('the credit is not under the picture');
+      if (kind !== 'side') {
+        const cc = c(G.caption), menuC = kind === 'up' ? c(G.menuBox) : c(G.row);
+        if (Math.abs(G.fishMean - cc) > 2 || Math.abs(menuC - cc) > 2 || Math.abs(c(G.frame) - cc) > 2) bad.push(`centres: fish ${f1(G.fishMean)} (framed ${f1(c(G.frame))}), caption ${f1(cc)}, menu ${f1(menuC)}`);
+      } else {
+        if (!(G.menuBox.r <= G.frame.l)) bad.push(`menu reaches ${f1(G.menuBox.r)}, the fish starts at ${f1(G.frame.l)}`);
+        if (Math.abs(G.row.l - G.book.l) > 1) bad.push(`menu's left ${f1(G.row.l)} off the margin ${f1(G.book.l)}`);
+        const dy = (G.dive.t + G.dive.b) / 2; if (dy < G.head.t || dy > G.head.b) bad.push(`Dive at ${f1(dy)}, the head from ${f1(G.head.t)} to ${f1(G.head.b)}`);
+        G.items.forEach((it, i) => { for (const [n, o] of [['caption', G.capBox], ['credit', G.credit], ['head line', G.name]]) if (meet(it, o)) bad.push(`item ${i} meets the ${n}`); if (it.b > h) bad.push(`item ${i} runs off the page`); });
+      }
+      check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'side by side' : 'plate layout'} at ${w}x${h}: the running head on one baseline and equal margins, the credit under the picture's corner, ${kind === 'side' ? 'the menu on the left margin at the height of the fish\'s head, nothing overlapping' : 'fish, caption and menu on one centre line'}`, !bad.length, bad.join('; '));
+    }
   }
   await ctx.close(); }
 
