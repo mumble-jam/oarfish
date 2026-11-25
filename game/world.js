@@ -462,6 +462,10 @@ class Scatter {
   }
 }
 
+// How far round from the line to the rift the nursery's way runs, in radians (see the nursery in createWorld). Measured, not judged by eye:
+// from 1.5 on, every piece of it keeps 75 m or more from the Keeper's ground (less and the pens come nearer, the other way lies the kelp forest);
+// of 1.45 to 1.7, tried in ten worlds each, 1.6 had the most swarms in sight of the jar.
+export const NURSE_TURN = 1.6;
 export function createWorld(scene, { seed = 1, floor = 0, calm = false, nursery = false, nest = null } = {}) {
   const F = FLOORS[floor], G = geometries();
   const last = floor === FLOORS.length - 1;
@@ -949,9 +953,14 @@ float seaLight(vec2 p, float t) {
   const urns = [];
   const urnAt = (x, z, size, prize) => { const y = drawnY(x, z) - 0.06, col = { x, z, r: 0.36 * size, top: y + size }; colliders.push(col); const u = { x, y, z, size, r: 0.42 * size, prize, broken: false, col, color: clay(), mesh: null }; urns.push(u); for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; flagAt(x + Math.sin(a) * 0.5 * size, z + Math.cos(a) * 0.5 * size, 0.9); } return u; };
   // The nursery: where the young of the Long Ones were taught, and where a first dive begins. A paved way runs out from
-  // the start, a little aside of the line to the well: three hoops to swim through, a pen with one small swarm, two more
-  // small pens with a bigger one beyond them (which cannot be taken until the small ones are eaten), and a sealed jar across the way.
-  const nurse = nursery && floor === 0 ? { dir: goalAngle - 0.35, hoops: [], keep: {} } : null;
+  // the start: three hoops to swim through, a pen with one small swarm, two more small pens with a bigger one beyond them
+  // (which cannot be taken until the small ones are eaten), and a sealed jar across the way, where the way ends.
+  // It runs off to the side, a quarter turn and a little more from the line to the rift (`NURSE_TURN`). It used to run almost at the rift, and a new
+  // player finishing the lessons had the Keeper in plain view, a few metres from waking it (George: 'the crab should be far away from the spawn').
+  // The turn was chosen by measuring: every piece of it is at least 75 m from the middle of the Keeper's ground, across the band's edge too (the jar
+  // about 94, the nearest pen about 81), it crosses none of the quiet side's places, the bloom water or the rings by the start, and from the jar
+  // the player looks out over open home water with swarms about. Turned the other way it would run into the kelp forest.
+  const nurse = nursery && floor === 0 ? { dir: goalAngle + NURSE_TURN, hoops: [], keep: {} } : null;
   if (nurse) {
     const A = nurse.dir, ux = Math.sin(A), uz = Math.cos(A), nx = Math.cos(A), nz = -Math.sin(A);
     const P = (d, side = 0) => [SPAWN.x + ux * (d + 4.5) + nx * side, SPAWN.z + uz * (d + 4.5) + nz * side]; // measured from where the head is when the dive begins, a body's length out from the start
@@ -964,10 +973,7 @@ float seaLight(vec2 p, float t) {
     nurse.keep[0] = P(26.5); nurse.keep[1] = P(33.5, 5.2); nurse.keep[2] = P(33.5, -5.2); nurse.keep[5] = P(41.5); // one small; then two small and, beyond them, a middling one that is too big to take until all three small ones are eaten
     { const [x, z] = P(26.5, 3.6), y = drawnY(x, z) - 0.2; blocks.push({ x, y, z, q: qY(A), s: S(1.3, 0.7, 1.3), color: pick(stoneTones) }); coils.push({ x, y: y + 0.86, z, q: qY(A), s: S(0.62), color: district }); } // the lesson, carved: a body closed round a swarm
     nurse.jar = urnAt(...P(49), 2.7, 'shell');
-    paveRoad(...P(-3), ...P(47), 1.2, 1.2);
-    { const [jx, jz] = P(51), gd = Math.hypot(goal.x - jx, goal.z - jz), gx2 = (goal.x - jx) / gd, gz2 = (goal.z - jz) / gd; // and on from the jar to the rift, small hoops marking the way
-      paveRoad(jx, jz, jx + gx2 * (gd - 19), jz + gz2 * (gd - 19), 1.2, 1.2);
-      for (let d = 4, i = 0; d < gd - 20; d += 5.5, i++) hoop(jx + gx2 * d + gz2 * (i % 2 ? 2.6 : -2.6), jz + gz2 * d - gx2 * (i % 2 ? 2.6 : -2.6), 1.1); }
+    paveRoad(...P(-3), ...P(47), 1.2, 1.2); // and no further: past the jar nothing leads anywhere, and the rest of the sea is the player's to find
   }
   F.ruins.forEach((kind, i) => {
     if (!builders[kind]) return; // 'ring' has none (see FLOORS), and draws nothing

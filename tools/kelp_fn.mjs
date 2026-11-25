@@ -13,7 +13,8 @@ export async function kelpLayout({ seeds = [1, 2, 3, 777, 4242], ref = '26b7785'
   const pick = (w, kelp, done = polished(w)) => ({ pieces: w.pieces().filter((p) => p.name !== 'giantKelp' && !done(p) && !off(p.x, p.z)).map((p) => [p.name, p.x, p.y, p.z, p.sx, p.sy, p.sz]), solids: w.solids.filter((c) => !off(c.x, c.z)).map((c) => [c.x, c.y, c.z, c.r, c.top]), sites: w.sites,
     swarms: w.schools.map((s) => [s.hx, s.hz, s.n]), quiet: { ...w.quiet, places: undefined, sandflat: w.quiet.sandflat, reef: w.quiet.reef, kelpwood: w.quiet.kelpwood }, urns: w.urns.map((u) => [u.x, u.z, u.size]),
     fragments: w.react.fragments.map((f) => [f.x, f.z, f.yaw]), chance: [w.rand(), w.rand(), w.openSpot()], kelp: kelp ? w.pieces().filter((p) => p.name === 'giantKelp').length : 0 });
-  for (const seed of seeds) for (const nursery of [false, true]) {
+  // (worlds without the nursery only: the nursery's way was turned away from the rift after this commit, so in a first dive what is laid after it moved with it)
+  for (const seed of seeds) for (const nursery of [false]) {
     const a = was.build(seed, 0, { nursery }).world, b = now.build(seed, 0, { nursery }).world; K = b.keeperGround; const A = pick(a, true), B = pick(b, true);
     const moved = Object.keys(A).filter((k) => k !== 'kelp' && v(A[k]) !== v(B[k]));
     out.push({ seed, nursery, moved, kelp: [A.kelp, B.kelp] }); a.dispose(); b.dispose();

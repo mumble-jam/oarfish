@@ -776,7 +776,7 @@ export async function start(saved = {}) {
     tut.stall += dt;
     const L = LESSONS[tut.step], head = rig.snout, t = world.time.value;
     const next = () => { tut.step++; tut.stall = 0; tut.told = false; tut.was = 0; music.hit('catch', 0.8); buzz(0, 0.5, 120); pulse('grow');
-      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('The paved way goes on to the rift. Something keeps it.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
+      if (tut.step >= LESSONS.length) { tut.on = false; teach.done = true; saveTeach(); $('btn-skip').hidden = true; tell('The paved way ends here. The rest of this sea is yours to find.', 8, { kind: 'teach', title: 'That was the nursery', after: true }); } };
     if (L === 'hoop') {
       const h = N.hoops[tut.step], dx = wrapD(head.x - h.x), dz = wrapD(head.z - h.z), along = dx * h.ux + dz * h.uz, off = Math.hypot(dx - along * h.ux, dz - along * h.uz, head.y - h.y);
       h.mesh.material.emissiveIntensity = 0.3 + 0.25 * Math.sin(t * 3.2);

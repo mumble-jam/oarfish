@@ -37,7 +37,7 @@ async function survey(from) {
   const keeper = !r ? null : band === 0 ? { x: r.x - r.nx * 24, z: r.z - r.nz * 24, r: Guards.KEEPER_FIGHT.leash, walks: true } : { x: r.x, z: r.z, r: 0, walks: false };
   const wild = P.filter((p) => NATURAL.test(p.name)), built = P.filter((p) => !NATURAL.test(p.name) && !/^(mural|fragment|station)$/.test(p.name));
   const out = { title: `Band ${band + 1} · ${F.name} · seed ${seed}${nursery && band === 0 ? ' · the dive that opens in the nursery' : ''}`, from: from ? `as it was at ${game.name}` : 'as it is in this folder', size, spawn: [spawn.x, spawn.z], goal: [w.goal.x, w.goal.z, w.goal.kind], fog: F.fog[1], home: Math.min(F.home || size, size),
-    way: Math.hypot(w.goal.x - spawn.x, w.goal.z - spawn.z), lines, keeper, hall: w.hall && [w.hall.x, w.hall.z, w.hall.R], nest: band === 0 && !nursery ? { yaw: game.W.NEST.yaw } : null,
+    way: Math.hypot(w.goal.x - spawn.x, w.goal.z - spawn.z), lines, keeper, nurse: w.nursery && { hoops: w.nursery.hoops.map((h) => [h.x, h.z]), jar: [w.nursery.jar.x, w.nursery.jar.z] }, // the nursery's way: start, hoops, jar hall: w.hall && [w.hall.x, w.hall.z, w.hall.R], nest: band === 0 && !nursery ? { yaw: game.W.NEST.yaw } : null,
     sites: sites.map(([x, z, rad, what]) => [x, z, rad, what ? 1 : 0]), solids: solids.filter((c) => !c.off).map((c) => [c.x, c.z, c.r]),
     wild: wild.map((p) => [+p.x.toFixed(2), +p.z.toFixed(2)]), built: built.filter((p) => !LOW.test(p.name)).map((p) => footprint(THREE, p)), low: built.filter((p) => LOW.test(p.name)).map((p) => footprint(THREE, p)),
     swarms: w.schools.filter((s) => !s.of).map((s) => [s.hx, s.hz, s.n, s.kind || '']), puzzles: w.react.puzzles.map((p) => ({ kind: p.kind, x: p.x, z: p.z, cx: p.cache.x, cz: p.cache.z, hoops: (p.hoops || []).map((h) => [h.x, h.z]) })),
@@ -132,6 +132,7 @@ function draw({ panels, scale }) {
         ring(...q.kelp.clearing, '#2f7a4c', 'rgba(252,252,251,0.7)', 1.5); ring(...q.kelp.nook, '#2f7a4c', '#eda100', 1.2); gate(q.kelp.gate); }
       // the colonnade: a column a ring; broken half filled; fallen a bar
       for (const [x, z, st] of q.columns) { if (st === 'fallen') { g.fillStyle = INK; g.fillRect(X(x) - 5, Y(z) - 1.5, 10, 3); } else dot(X(x), Y(z), 4, st === 'standing' ? INK : MUTED, SURFACE, 1.4); } });
+    if (p.nurse) { g.strokeStyle = '#0a7d8c'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(sx), Y(sz)); for (const [x, z] of [...p.nurse.hoops, p.nurse.jar]) g.lineTo(X(x), Y(z)); g.stroke(); for (const [x, z] of p.nurse.hoops) dot(X(x), Y(z), 4, SURFACE, '#0a7d8c', 2); }
     if (p.nest) { g.save(); g.translate(X(sx), Y(sz)); g.rotate(p.nest.yaw); g.strokeStyle = INK; g.lineWidth = 1.2; g.strokeRect(-1.65 * scale, -0.6 * scale, 5.7 * scale, 8.7 * scale); g.restore(); } // the most ground the nest takes: the line of stones to the left of the body, the shells' places to its right
     mark.start(X(sx), Y(sz));
     // the words on the plan: each tries the places round its mark and takes the first that is clear of the words already there and of the marks that matter
@@ -150,6 +151,7 @@ function draw({ panels, scale }) {
     label('Start' + (p.nest ? ' and nest' : ''), sx, sz, 11, { weight: 600, size: 12.5 });
     if (p.goal[2] === 'rift') label('Rift', p.goal[0], p.goal[1], 16 * scale * 0.5, { weight: 600, size: 12.5, onPlace: true }); else label('Palace gate', p.goal[0], p.goal[1], 8, { weight: 600, size: 12.5, onPlace: true });
     if (p.keeper && p.keeper.walks) label('Keeper’s ground', p.keeper.x, p.keeper.z, p.keeper.r * scale, {});
+    if (p.nurse) label('Nursery jar', p.nurse.jar[0], p.nurse.jar[1], 8, { weight: 600, size: 12.5, color: '#0a7d8c' });
     if (p.mural) label('Mural', p.mural[0], p.mural[1], 9, {});
     if (p.bloom) label('Bloom water', p.bloom.x, p.bloom.z, p.bloom.R * scale, { weight: 600, size: 12.5 });
     if (p.quiet) { label('Sand flat', p.quiet.sand[0], p.quiet.sand[1], p.quiet.sand.R * scale, { weight: 600, size: 12.5 }); label('Reef head', p.quiet.reef[0], p.quiet.reef[1], p.quiet.reef.R * scale, { weight: 600, size: 12.5 });
