@@ -20,7 +20,8 @@ export function polished(world) {
 export async function keeperGround({ seeds = [1, 2, 3, 777, 4242], ref = '2ff5016', margin = 1.5 } = {}) {
   const now = await load(), was = await load({ ref }), out = [];
   const v = (o) => JSON.stringify(o, (k, x) => (typeof x === 'number' ? +x.toFixed(6) : x));
-  for (const seed of seeds) for (const nursery of [false, true]) {
+  // (worlds without the nursery only: the nursery's way was turned away from the rift after this commit, so in a first dive what is laid after it moved with it)
+  for (const seed of seeds) for (const nursery of [false]) {
     const a = was.build(seed, 0, { nursery }).world, b = now.build(seed, 0, { nursery }).world, K = b.keeperGround;
     const near = (p) => K.reach(p.x, p.z, margin + 1.6), key = (p, grass) => v([p.name, p.x, p.y, p.z, ...(grass && p.name === 'kelp' ? [] : [p.sx, p.sy, p.sz])]);
     const pa = polished(a), pb = polished(b), A = a.pieces().filter((p) => !pa(p)), B = b.pieces().filter((p) => !pb(p)), moved = [];

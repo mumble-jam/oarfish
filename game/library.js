@@ -29,7 +29,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
   let fishModel = null;
 
   const clock = { value: 0 }; // the water's time, for what sways
-  const S = { open: false, id: 'oarfish', band: 0, state: 0, speed: 0, tier: 'm', tone: 0, turn: true, wire: false, fish: false, yaw: 0.7, pitch: 0.22, dist: 5, t: 0, lift: 1.4, drag: null, dirty: false, changed: false };
+  const S = { open: false, id: 'oarfish', band: 0, state: 0, skin: '', speed: 0, tier: 'm', tone: 0, turn: true, wire: false, fish: false, yaw: 0.7, pitch: 0.22, dist: 5, t: 0, lift: 1.4, drag: null, dirty: false, changed: false };
   let shown = null, rebuild = 0; // shown: { actor | kit+mesh+fish | run }, with dispose()
   const v = new THREE.Vector3(), v2 = new THREE.Vector3(), q = new THREE.Quaternion(), m4 = new THREE.Matrix4(), fwd = new THREE.Vector3(0, 0, 1), one = new THREE.Vector3(1, 1, 1), size = new THREE.Vector2();
 
@@ -42,7 +42,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
   function mount() {
     shown?.dispose(); stand.clear(); rule.clear();
     const spec = NPC[S.id], preview = resolve(S.id), state = spec.states[S.state] || spec.states[0];
-    S.lift = clamp(spec.length * 0.5, 1.1, 3.2);
+    S.lift = spec.lift ?? clamp(spec.length * 0.5, 1.1, 3.2); // (a creature that lives on the bed may say how high to look over it)
     let tris = 0;
     if (spec.swarm) {
       const kit = swarmKit(S.id, { glow: FLOORS[S.band].fishGlow, preview }), n = SWARMS[S.tier].n, rand = rng(7);
@@ -109,7 +109,8 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     if (S.turn && !S.drag) S.yaw += dt * 0.3;
     if (shown?.actor) {
       const a = shown.actor, o = a.object;
-      if (a.rig) a.rig.show(dt, state, S.speed, S.lift); // it stands on its own legs (and is told how far the bed is under the stand, for what falls off it)
+      if (a.rig && 'watch' in a.rig) a.rig.watch = camera.position; // (eyes that follow whoever looks at them)
+      if (a.rig) a.rig.show(dt, state, S.speed, S.lift, S.skin); // it stands on its own legs (and is told how far the bed is under the stand, for what falls off it); a skin chosen apart from the state, for a creature that has `skins`
       else { a.tick(dt * (state.rate || 1), S.speed); o.rotation.z = state.wobble ? 0.35 * Math.sin(S.t * 14) : 0; }
       if (spec.spin) { o.rotation.y += dt * spec.spin[1]; o.rotation.x += dt * spec.spin[0]; }
       if (state.sway) o.rotation.y = Math.sin(S.t * 0.4) * 0.6;
@@ -153,6 +154,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
       { const hear = $('#lib-hear'), voice = CAST[spec.id]; hear.hidden = !voice; hear.textContent = voice ? `In the band: ${voice.name}. Hear it` : ''; } // its instrument, where it has one
       $('#lib-play').innerHTML = `<label>Light of</label>${seg('band', BANDS.map((b, i) => [i, i + 1, b, spec.bands.includes(i)]), S.band)}`
         + (spec.states.length > 1 ? `<label>State</label>${seg('state', spec.states.map((s, i) => [i, s.name]), S.state)}` : '')
+        + (spec.skins ? `<label>Skin</label>${seg('skin', spec.skins, S.skin)}` : '')
         + (spec.swarm ? `<label>Swarm</label>${seg('tier', Object.entries(SWARMS).map(([k, s]) => [k, s.n]), S.tier)}` : '')
         + (spec.swarm || shown?.tones > 1 ? `<label>Tint</label>${seg('tone', Array.from({ length: spec.swarm ? 4 : shown.tones }, (_, i) => [i, i + 1]), S.tone % (spec.swarm ? 4 : shown.tones))}` : '')
         + (spec.swim && !spec.swarm ? `<label for="lib-speed">Speed</label><div class="slide"><input type="range" id="lib-speed" min="0" max="10" step="0.1" value="${S.speed}"><output>${S.speed.toFixed(1)} m/s</output></div>` : '')
@@ -169,7 +171,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     $('#lib-copy').disabled = !n; $('#lib-all').disabled = !n;
     $('#lib-note').textContent = n ? `${n === 1 ? 'One component is' : `${n} components are`} changed in this browser. The game uses them from the next band or dive. To make them the game’s own for everyone, copy them and paste them to Claude.` : 'Colours and size can be tried here. They are kept in this browser and used by the game too.';
   }
-  function pick(id) { if (!NPC[id]) return; $('#lib-text').hidden = true; S.id = id; S.state = NPC[id].kind === 'fish' ? 1 : 0; S.tone = 0; S.dirty = false; const spec = NPC[id]; if (spec.kind === 'thing' || spec.kind === 'shell') S.dist = clamp(Math.max(spec.length, (spec.show?.spread || 0) * 2.4) * 2.2 + 2, 2.4, 22); if (spec.bands.length && !spec.bands.includes(S.band)) S.band = spec.bands[0]; if (spec.kind !== 'thing' && spec.kind !== 'shell') S.dist = clamp(spec.length * 2.4 + 2.2, 2.6, 26); if (spec.run) S.dist = 16; if (spec.id === 'warden') S.dist = 17; if (spec.swarm) S.dist = SWARMS[S.tier].r * 9 + 3; S.yaw = 0.85; S.pitch = 0.2; light(); mount(); list(); panel(); try { history.replaceState(null, '', `#library/${id}`); } catch { /* not allowed here */ } }
+  function pick(id) { if (!NPC[id]) return; $('#lib-text').hidden = true; S.id = id; S.state = NPC[id].kind === 'fish' ? 1 : 0; S.tone = 0; S.skin = ''; S.dirty = false; const spec = NPC[id]; if (spec.kind === 'thing' || spec.kind === 'shell') S.dist = clamp(Math.max(spec.length, (spec.show?.spread || 0) * 2.4) * 2.2 + 2, 2.4, 22); if (spec.bands.length && !spec.bands.includes(S.band)) S.band = spec.bands[0]; if (spec.kind !== 'thing' && spec.kind !== 'shell') S.dist = clamp(spec.length * 2.4 + 2.2, 2.6, 26); if (spec.run) S.dist = 16; if (spec.id === 'warden') S.dist = 17; if (spec.swarm) S.dist = SWARMS[S.tier].r * 9 + 3; S.yaw = 0.85; S.pitch = 0.2; light(); mount(); list(); panel(); try { history.replaceState(null, '', `#library/${id}`); } catch { /* not allowed here */ } }
 
   $('#lib-hear').addEventListener('click', () => onHear?.(S.id));
   root.addEventListener('click', (e) => {
@@ -178,6 +180,7 @@ export function createLibrary({ renderer, root, onClose, onHear }) {
     const set = b.parentElement?.dataset.set;
     if (set === 'band') { S.band = +b.dataset.v; light(); mount(); panel(); }
     else if (set === 'state') { S.state = +b.dataset.v; S.dirty = false; const st = NPC[S.id].states[S.state]; if (st.speed !== undefined) S.speed = st.speed; if (NPC[S.id].kind === 'fish') mount(); panel(); }
+    else if (set === 'skin') { S.skin = b.dataset.v; panel(); }
     else if (set === 'tier') { S.tier = b.dataset.v; S.dist = SWARMS[S.tier].r * 9 + 3; mount(); panel(); }
     else if (set === 'tone') { S.tone = +b.dataset.v; mount(); panel(); }
     else if (set === 'show') { S[b.dataset.v] = !S[b.dataset.v]; if (S.fish && !fishModel) { fishModel = buildOarfish({ seed: 11, scale: 0.4, bones: 10 }); fishModel.mesh.frustumCulled = false; scene.add(fishModel.group); } mount(); panel(); }

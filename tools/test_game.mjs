@@ -1228,7 +1228,7 @@ check('the three Go to buttons (sand flat, reef head, kelp forest) put the fish 
 // no overlaps; the arches threadable; the lanes clear; twelve or more spots for coral; the colonnade spaced; and everything the band had before where it was
 { const { quietAudit } = await import('./quiet_fn.mjs'); const { fail, why, stats } = await quietAudit({ worlds: 40 });
   const bad = Object.entries(fail).filter(([, v]) => v.length);
-  check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39)',
+  check('the quiet side, in 80 worlds (40 seeds, with and without the nursery): every place and named spot is inside the square, out of the rift, off the Keeper\'s ground, out of the bloom and off every swarm\'s home; no place overlaps another or anything claimed before it; each arch can be threaded and each kelp lane swum end to end; the reef has at least twelve spots for coral, in order; the colonnade is at most forty columns, 10 to 32 m apart; and, in the worlds without the nursery, the swarms, puzzles, fragments, mural, jars, pilot fish, chimes, bloom, shells and every earlier claim are where they were (5428c39; the nursery\'s way has turned since)',
     !bad.length && Math.max(...stats.columns) <= 40, bad.length ? why.join(' | ') : `columns ${Math.min(...stats.columns)} to ${Math.max(...stats.columns)}`); }
 
 // a fish rising beside a column and over its flat top: the body follows the head's path, so the head lifted onto the top at once (up to 0.67 m) lurched
@@ -1500,7 +1500,7 @@ s = await ev(() => { const g = window.__game, T = window.T; g.startRun(4242); g.
 check('the fragment in the kelp forest\'s nook is taken up by going round it, as the band\'s own are', s.held, JSON.stringify(s));
 // the lighter forest moved nothing else: every piece of band 1 that is not giant kelp, every solid, site, swarm, jar and fragment, the quiet side's plan and the run of chance, as at 26b7785
 { const { kelpLayout } = await import('./kelp_fn.mjs'); const r = await kelpLayout();
-  check('the kelp forest made lighter moved nothing else in the first band: in ten worlds every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
+  check('the kelp forest made lighter moved nothing else in the first band: in five worlds (without the nursery, whose way has turned since) every piece that is not giant kelp, every solid, claimed site, swarm, jar and fragment, the quiet side\'s whole plan and the band\'s run of chance are as they were at 26b7785; and there is less giant kelp',
     r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
 // ---- review polish (items 1 to 10): the window round the fish, the Keeper's ground, the title and the beads, a moment's line, the dressing, the rings
@@ -1531,7 +1531,7 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   const { KEEPER_GROUND } = (await (await import('./headless.mjs')).load()).W;
   check('no standing column stands on the Keeper\'s ground where its legs can reach, and the ground is measured with the fight\'s own leash and edge', s.cols === 0 && KEEPER_GROUND.leash === s.leash && KEEPER_GROUND.edge === s.edge, JSON.stringify(s));
   const { keeperGround } = await import('./keeper_ground_fn.mjs'); const r = await keeperGround();
-  check('clearing the Keeper\'s ground moved nothing else in the first band: in ten worlds every other piece, solid, site, swarm, jar, fragment, puzzle, the mural, the quiet side\'s plan and the run of chance are as at 2ff5016', r.every((o) => !o.moved.length), JSON.stringify(r.filter((o) => o.moved.length))); }
+  check('clearing the Keeper\'s ground moved nothing else in the first band: in five worlds (without the nursery, whose way has turned since) every other piece, solid, site, swarm, jar, fragment, puzzle, the mural, the quiet side\'s plan and the run of chance are as at 2ff5016', r.every((o) => !o.moved.length), JSON.stringify(r.filter((o) => o.moved.length))); }
 { // the beads and the title never sit on each other while a keeper is fought (every keeper: the title steps aside)
   const s = await ev(async () => { const g = window.__game, out = []; g.setMode('look');
     for (const f of [0, 1, 2, 3]) { g.startRun(4242); if (f) g.enterFloor(f, false); g.run.safe = 1e9; g.run.hush = 1e9; const G = g.guard; if (!G) continue; const yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
