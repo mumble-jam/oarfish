@@ -445,7 +445,7 @@ class Scatter {
   wrap(fx, fy, fz, light, view) {
     const { items, base, tone, span, mesh } = this, n = items.length, im = mesh.instanceMatrix.array, ic = mesh.instanceColor.array, sm = this.shade ? this.shade.instanceMatrix.array : null;
     let r2 = this.reach ? this.reach * this.reach : Infinity; const T = this.size;
-    let cx = fx, cz = fz; if (view && this.reach) { cx = view.x + view.fx * view.far * VIEW_REACH.ahead; cz = view.z + view.fz * view.far * VIEW_REACH.ahead; r2 = (view.far * VIEW_REACH.wide) ** 2; }
+    let cx = fx, cz = fz; if (view && this.reach) { cx = view.x + view.fx * view.far * VIEW_REACH.ahead; cz = view.z + view.fz * view.far * VIEW_REACH.ahead; r2 = (view.far * VIEW_REACH.wide + 2 * VIEW_REACH.step) ** 2; } // (and the slack it is seated again by: the camera moves, and sees farther, up to `step` before it is)
     let a = 0, b = 0;
     for (let i = 0; i < n; i++) {
       const it = items[i], x = it.x + T * Math.round((fx - it.x) / T), z = it.z + T * Math.round((fz - it.z) / T), dx = x - fx, dz = z - fz, s = i * 16;
