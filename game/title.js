@@ -82,25 +82,25 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front .caption b { font: italic 400 clamp(15px, 1.75vw, 25px)/1.15 "Front Fell", serif; letter-spacing: 0.1em; text-transform: uppercase; font-size: clamp(13px, 1.45vw, 21px); }
 #front .caption i { font: italic 400 clamp(14px, 1.6vw, 23px)/1.15 "Front Fell", serif; margin-left: 0.5em; white-space: nowrap; }
 #front .caption i span { font-size: 0.86em; }
-#front .foot { grid-area: menu; position: relative; display: grid; place-items: center; }
+#front .plate-foot { grid-area: menu; position: relative; display: grid; place-items: center; }
 #front .invite { margin: 0; font: italic 400 clamp(14px, 1.45vw, 20px)/1.2 "Front Fell", serif; opacity: 0.78; transition: opacity 0.5s; }
 #front .invite::before, #front .invite::after { content: "\\2009\\2014\\2009"; opacity: 0.6; }
 #front.awake .invite { opacity: 0; pointer-events: none; }
-#front .foot > * { grid-area: 1 / 1; }
-#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; align-content: center; }
+#front .plate-foot > * { grid-area: 1 / 1; }
+#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; align-content: center; padding: 0 24px; }
 #front.awake .menu { visibility: visible; }
 #front .menu button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; padding: 0.32em 0.15em 0.42em; font: 400 clamp(12px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.2em; color: inherit;
-  clip-path: inset(-20% 100% -20% 0); opacity: 0; transition: clip-path 0.75s cubic-bezier(.3,.1,.2,1), opacity 0.5s; touch-action: manipulation; }
+  clip-path: inset(-20% 100% -20% -60%); opacity: 0; transition: clip-path 0.75s cubic-bezier(.3,.1,.2,1), opacity 0.5s; touch-action: manipulation; }
 #front .menu button.dive { font: italic 400 clamp(22px, 2.4vw, 36px)/1 "Front Fell", serif; letter-spacing: 0.04em; padding: 0.12em 0.35em 0.3em; }
-#front.awake .menu button { clip-path: inset(-20% -12% -20% -12%); opacity: 1; }
+#front.awake .menu button { clip-path: inset(-20% -60% -20% -60%); opacity: 1; }
 #front .menu .sep { font-size: 10px; opacity: 0; transition: opacity 0.6s 0.6s; }
 #front.awake .menu .sep { opacity: 0.5; }
 /* the focus: an engraver's rule drawn under the word, with a lozenge at each end */
 #front .menu button::after { content: ""; position: absolute; left: 0.05em; right: 0.2em; bottom: 0.08em; height: 1px; background: currentColor; transform: scaleX(0); transition: transform 0.28s cubic-bezier(.3,.1,.2,1); }
-#front .menu button::before { content: ""; position: absolute; left: -0.6em; right: -0.45em; bottom: calc(0.08em - 2.5px); height: 6px; opacity: 0; transition: opacity 0.2s;
+#front .menu button::before { content: ""; position: absolute; left: calc(0.05em - 9px); right: calc(0.2em - 9px); bottom: calc(0.08em - 3px); height: 7px; opacity: 0; transition: opacity 0.2s;
   background: var(--lozenge) left center / 6px 7px no-repeat, var(--lozenge) right center / 6px 7px no-repeat; }
 #front .menu button.dive::after { bottom: 0.12em; }
-#front .menu button.dive::before { bottom: calc(0.12em - 2.5px); }
+#front .menu button.dive::before { bottom: calc(0.12em - 3px); }
 #front .menu button.cur::after, #front .menu button:hover::after { transform: scaleX(1); }
 #front .menu button.cur::before { opacity: 0.9; }
 #front .menu button:focus-visible { outline: none; }
@@ -112,7 +112,8 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front .veil { position: absolute; inset: 0; pointer-events: none; }
 /* a phone held upright: the S above, the menu as a list */
 @media (max-aspect-ratio: 3/4) {
-  #front .sheet { grid-template: "head" auto "pic" minmax(0, 0.9fr) "credit" auto "caption" auto "menu" minmax(0, 1.1fr) / minmax(0, 1fr); }
+  #front .sheet { grid-template: "head" auto "pic" minmax(0, 0.9fr) "credit" auto "caption" auto "menu" minmax(auto, 1.1fr) / minmax(0, 1fr); }
+  #front .plate-foot { padding-top: 14px; }
   #front .head { grid-template-columns: 1fr 1fr; grid-template-areas: "name name" "book class"; row-gap: 14px; }
   #front .name { grid-area: name; justify-content: center; font-size: clamp(18px, 5.6vw, 28px); }
   #front .book { grid-area: book; font-size: 11px; } #front .class { grid-area: class; font-size: 14px; }
@@ -126,8 +127,8 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 /* a phone on its side, or any short window: the picture and its caption at the left, the menu as a column at the right */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
   #front .sheet { grid-template: "head head" auto "pic menu" minmax(0, 1fr) "credit menu" auto "caption menu" auto / minmax(0, 1fr) minmax(150px, 26%); column-gap: 18px; row-gap: 4px; }
-  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; }
-  #front .foot { place-items: center start; }
+  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; padding: 0 12px 0 20px; margin-left: -20px; }
+  #front .plate-foot { place-items: center start; }
   #front .invite { text-align: left; font-size: 14px; }
   #front .menu .sep { display: none; }
   #front .menu button { font-size: 13px; padding: 0.5em 0.2em 0.55em; }
@@ -151,7 +152,7 @@ const MARKUP = `
   <div class="pic" aria-hidden="true"></div>
   <p class="credit ink">after the plate drawn by Acarie Baron for Cuvier’s Règne animal</p>
   <p class="caption ink"><b>Le Gymnètre épée.</b><i>(Gymnetrus gladius. <span>Cuv. Val.</span>)</i></p>
-  <div class="foot">
+  <div class="plate-foot">
     <p class="invite ink" role="status">Press any key, or touch the page</p>
     <nav class="menu ink" aria-label="Oarfish dive">
       <button type="button" class="dive" data-go="dive">Dive</button><span class="sep" aria-hidden="true">◆</span>

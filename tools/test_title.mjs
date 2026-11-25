@@ -202,6 +202,47 @@ await ctx.close();
   check('on a phone, a tap wakes the page and starts the music, and a tap on Dive dives', a.awake && a.playing && s.state === 'gone' && s.run === 'play' && box && box.width > 40 && box.height > 30, JSON.stringify({ a, s, box }));
   await ctx.close(); }
 
+// ---- 9b. the lettering at every size (George, on an upright iPhone: Dive drawn over the caption, the menu right of the centre line, one
+// lozenge of the focus mark adrift and the other gone). Upright phones (393x660 is Safari with its bars), a tablet, a phone on its side, a
+// wide screen: no item of the menu meets the caption or the credit (upright, the menu starts below the caption); upright, the menu is centred
+// on the caption's line within 2 px; and for each item in focus, its rule is drawn and a lozenge sits at each end of it, on its line, inside
+// what the item's clip and the ink filter's region let show.
+{ const { page, ctx, ev } = await open('?title=1', { size: [393, 852], touch: true });
+  await page.waitForFunction('window.__front?.ready === true', null, { timeout: 120000 });
+  await ev(() => window.__front.touch()); await sleep(1800);
+  // the end state of every transition at once: what is measured is where the mark comes to rest
+  await ev(() => document.head.insertAdjacentHTML('beforeend', '<style>#front .menu button, #front .menu button::before, #front .menu button::after { transition: none !important; }</style>'));
+  const SIZES = [[320, 568, 'up'], [375, 667, 'up'], [393, 660, 'up'], [393, 852, 'up'], [430, 932, 'up'], [768, 1024, 'up'], [844, 390, 'side'], [1440, 900, 'wide']];
+  for (const [w, h, kind] of SIZES) {
+    await page.setViewportSize({ width: w, height: h }); await sleep(300);
+    const bad = [];
+    for (let k = 0; k < 5; k++) {
+      await ev((k) => window.__front.menu.forEach((b, j) => b.classList.toggle('cur', j === k)), k); await sleep(450);
+      const r = await ev((k) => {
+        const R = (e) => { const q = e.getBoundingClientRect(); return { l: q.left, t: q.top, r: q.right, b: q.bottom }; };
+        const btns = [...document.querySelectorAll('#front .menu button')], b = btns[k], B = R(b), menu = R(document.querySelector('#front .menu'));
+        const px = (v) => parseFloat(v), A = getComputedStyle(b, '::after'), L = getComputedStyle(b, '::before'), W = B.r - B.l, H = B.b - B.t;
+        const rule = { l: B.l + px(A.left), r: B.r - px(A.right), y: B.b - px(A.bottom) - px(A.height) / 2, on: A.transform };
+        const loz = { l: B.l + px(L.left), r: B.r - px(L.right), y: B.b - px(L.bottom) - px(L.height) / 2, op: +L.opacity };
+        const v = (getComputedStyle(b).clipPath.match(/-?[\d.]+%/g) || []).map((x) => parseFloat(x) / 100), ins = v.length ? [v[0], v[1] ?? v[0], v[2] ?? v[0], v[3] ?? v[1] ?? v[0]] : []; // top right bottom left, as CSS shortens them
+        const clip = ins.length === 4 ? { l: B.l + ins[3] * W, r: B.r - ins[1] * W, t: B.t + ins[0] * H, b: B.b - ins[2] * H } : B;
+        const mw = menu.r - menu.l, mh = menu.b - menu.t, filt = { l: menu.l - 0.02 * mw, r: menu.r + 0.02 * mw, t: menu.t - 0.2 * mh, b: menu.b + 0.2 * mh };
+        return { B, rule, loz, clip, filt, menu, items: btns.map(R), cap: R(document.querySelector('#front .caption')), credit: R(document.querySelector('#front .credit')) };
+      }, k);
+      const meet = (a, c) => a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b;
+      if (k === 0) r.items.forEach((it, i) => { for (const [n, c] of [['caption', r.cap], ['credit', r.credit]]) if (meet(it, c)) bad.push(`item ${i} meets the ${n}`); if (kind === 'up' && it.t < r.cap.b) bad.push(`item ${i} starts above the caption's foot`); });
+      if (k === 0 && kind === 'up') { const cc = (r.cap.l + r.cap.r) / 2; if (Math.abs((r.menu.l + r.menu.r) / 2 - cc) > 2) bad.push(`menu centre ${((r.menu.l + r.menu.r) / 2).toFixed(1)} vs caption ${cc.toFixed(1)}`);
+        r.items.forEach((it, i) => { if (Math.abs((it.l + it.r) / 2 - cc) > 2) bad.push(`item ${i} centre ${((it.l + it.r) / 2).toFixed(1)} vs caption ${cc.toFixed(1)}`); }); }
+      const { rule, loz, clip, filt } = r, lz = [[loz.l, loz.l + 6], [loz.r - 6, loz.r]];
+      if (!/matrix\(1, 0, 0, 1/.test(rule.on) || loz.op < 0.8) bad.push(`item ${k}: mark not shown (${rule.on}, ${loz.op})`);
+      if (Math.abs(loz.y - rule.y) > 1) bad.push(`item ${k}: lozenges ${(loz.y - rule.y).toFixed(1)} px off the rule's line`);
+      if (!(lz[0][1] <= rule.l && rule.l - lz[0][1] <= 6) || !(lz[1][0] >= rule.r && lz[1][0] - rule.r <= 6)) bad.push(`item ${k}: lozenges not at the rule's ends (${lz.map((z) => z.map((v) => v.toFixed(1)).join('-')).join(' / ')} vs rule ${rule.l.toFixed(1)}-${rule.r.toFixed(1)})`);
+      for (const [a, z] of lz) for (const [n, c] of [['clip', clip], ['ink filter', filt]]) if (a < c.l - 0.5 || z > c.r + 0.5 || loz.y - 3.5 < c.t || loz.y + 3.5 > c.b) bad.push(`item ${k}: a lozenge is cut by the ${n}`);
+    }
+    check(`${kind === 'up' ? 'upright' : kind === 'side' ? 'on its side' : 'wide'} at ${w}x${h}: the menu clears the caption and the credit${kind === 'up' ? ', is centred on the caption' : ''}, and every item's focus mark is whole`, !bad.length, bad.slice(0, 6).join('; '));
+  }
+  await ctx.close(); }
+
 // ---- 10. as a player opens it: the page shows; a link that names a place goes straight in; ?title=0 turns it off
 { const { page, ctx, ev } = await open('', { notDriven: true });
   await page.waitForFunction('window.__front?.ready === true', null, { timeout: 120000 });
