@@ -68,39 +68,44 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front { --lozenge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 7'%3E%3Cpath d='M3 0L6 3.5L3 7L0 3.5Z' fill='%233b3026'/%3E%3C/svg%3E"); position: fixed; inset: 0; z-index: 7; overflow: hidden; color: ${FRONT.colours.ink}; background: ${FRONT.colours.paper}; font: 400 16px/1.3 "Front Fell", Georgia, serif; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 #front[hidden] { display: none; }
 #front canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#front .sheet { position: absolute; inset: 0; display: grid; padding: clamp(12px, 2.6vh, 30px) clamp(14px, 3.4vw, 54px) clamp(10px, 2vh, 22px);
-  grid-template: "head" auto "pic" minmax(0, 1fr) "credit" auto "caption" auto "menu" minmax(4.2em, auto) / minmax(0, 1fr); row-gap: clamp(4px, 1vh, 10px); }
-#front .head { grid-area: head; display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 12px; }
-#front .book { font: 400 clamp(11px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.24em; margin: 0; }
-#front .name { margin: 0; text-align: center; font: 400 clamp(17px, 2.1vw, 30px)/1 "Front Fell SC", serif; letter-spacing: 0.34em; padding-left: 0.34em; display: flex; align-items: center; gap: 0.7em; }
-#front .name::before, #front .name::after { content: ""; width: clamp(18px, 4vw, 64px); height: 1px; background: currentColor; opacity: 0.55; }
-#front .class { margin: 0; justify-self: end; font: italic 400 clamp(13px, 1.4vw, 20px)/1 "Front Fell", serif; display: flex; gap: 2.4em; align-items: baseline; }
-#front .class span { font-style: normal; font-size: 0.8em; letter-spacing: 0.06em; }
+#front .sheet { --beat: clamp(12px, 1.1vw, 18px); position: absolute; inset: 0; display: grid; padding: clamp(12px, 2.6vh, 30px) clamp(14px, 3.4vw, 54px) clamp(10px, 2vh, 22px);
+  grid-template: "head" auto "." minmax(0, 1fr) "pic" minmax(0, var(--pic-h, 1fr)) "credit" auto "caption" auto "menu" minmax(4.2em, auto) "." minmax(0, 1fr) / minmax(0, 1fr); row-gap: 0; }
+/* the grid, as on the plate: the running head on one baseline across the top, its two ends on the page's margins; under it one block centred
+   on the picture's axis: the picture (its row no taller than the fish needs, --pic-h, so what is left is shared above and below the block),
+   the draughtsman's credit hung small under the picture's lower left corner (--fish-in, from frame()), then the caption and the menu, each a
+   beat (--beat) under the last */
+#front .head { grid-area: head; display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 12px; margin-bottom: var(--beat); }
+#front .book { display: block; font: 400 clamp(11px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.24em; margin: 0; }
+#front .name { margin: 0; text-align: center; font: 400 clamp(17px, 2.1vw, 30px)/1 "Front Fell SC", serif; letter-spacing: 0.34em; padding-left: 0.34em; white-space: nowrap; }
+#front .name::before, #front .name::after { content: ""; display: inline-block; vertical-align: 0.3em; width: clamp(18px, 4vw, 64px); height: 1px; background: currentColor; opacity: 0.55; }
+#front .name::before { margin-right: 0.7em; } #front .name::after { margin-left: 0.36em; }
+#front .class { display: block; margin: 0; justify-self: end; font: italic 400 clamp(13px, 1.4vw, 20px)/1 "Front Fell", serif; white-space: nowrap; }
+#front .class span { font-style: normal; font-size: 0.8em; letter-spacing: 0.06em; margin-left: 3em; }
 #front .pic { grid-area: pic; min-height: 0; }
-#front .credit { grid-area: credit; margin: 0; font: italic 400 clamp(10px, 0.9vw, 13px)/1.2 "Front Fell", serif; opacity: 0.85; padding-left: 4%; }
-#front .caption { grid-area: caption; margin: 0; text-align: center; font-weight: 400; text-wrap: balance; }
+#front .credit { grid-area: credit; margin: 0; font: italic 400 clamp(10px, 0.9vw, 13px)/1.2 "Front Fell", serif; opacity: 0.85; padding-left: var(--fish-in, 0px); margin-top: 0.3em; }
+#front .caption { grid-area: caption; margin: var(--beat) 0 0; text-align: center; font-weight: 400; text-wrap: balance; }
 #front .caption b { font: italic 400 clamp(15px, 1.75vw, 25px)/1.15 "Front Fell", serif; letter-spacing: 0.1em; text-transform: uppercase; font-size: clamp(13px, 1.45vw, 21px); }
 #front .caption i { font: italic 400 clamp(14px, 1.6vw, 23px)/1.15 "Front Fell", serif; margin-left: 0.5em; white-space: nowrap; }
 #front .caption i span { font-size: 0.86em; }
-#front .foot { grid-area: menu; position: relative; display: grid; place-items: center; }
+#front .plate-foot { grid-area: menu; position: relative; display: grid; place-items: center; margin-top: var(--beat); }
 #front .invite { margin: 0; font: italic 400 clamp(14px, 1.45vw, 20px)/1.2 "Front Fell", serif; opacity: 0.78; transition: opacity 0.5s; }
 #front .invite::before, #front .invite::after { content: "\\2009\\2014\\2009"; opacity: 0.6; }
 #front.awake .invite { opacity: 0; pointer-events: none; }
-#front .foot > * { grid-area: 1 / 1; }
-#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; align-content: center; }
+#front .plate-foot > * { grid-area: 1 / 1; }
+#front .menu { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2em clamp(10px, 2.1vw, 34px); visibility: hidden; align-content: center; padding: 0 calc(24px + 0.35 * clamp(22px, 2.4vw, 36px) - 0.35 * clamp(12px, 1.15vw, 16px)) 0 24px; }
 #front.awake .menu { visibility: visible; }
 #front .menu button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; padding: 0.32em 0.15em 0.42em; font: 400 clamp(12px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.2em; color: inherit;
-  clip-path: inset(-20% 100% -20% 0); opacity: 0; transition: clip-path 0.75s cubic-bezier(.3,.1,.2,1), opacity 0.5s; touch-action: manipulation; }
+  clip-path: inset(-20% 100% -20% -60%); opacity: 0; transition: clip-path 0.75s cubic-bezier(.3,.1,.2,1), opacity 0.5s; touch-action: manipulation; }
 #front .menu button.dive { font: italic 400 clamp(22px, 2.4vw, 36px)/1 "Front Fell", serif; letter-spacing: 0.04em; padding: 0.12em 0.35em 0.3em; }
-#front.awake .menu button { clip-path: inset(-20% -12% -20% -12%); opacity: 1; }
+#front.awake .menu button { clip-path: inset(-20% -60% -20% -60%); opacity: 1; }
 #front .menu .sep { font-size: 10px; opacity: 0; transition: opacity 0.6s 0.6s; }
 #front.awake .menu .sep { opacity: 0.5; }
 /* the focus: an engraver's rule drawn under the word, with a lozenge at each end */
 #front .menu button::after { content: ""; position: absolute; left: 0.05em; right: 0.2em; bottom: 0.08em; height: 1px; background: currentColor; transform: scaleX(0); transition: transform 0.28s cubic-bezier(.3,.1,.2,1); }
-#front .menu button::before { content: ""; position: absolute; left: -0.6em; right: -0.45em; bottom: calc(0.08em - 2.5px); height: 6px; opacity: 0; transition: opacity 0.2s;
+#front .menu button::before { content: ""; position: absolute; left: calc(0.05em - 9px); right: calc(0.2em - 9px); bottom: calc(0.08em - 3px); height: 7px; opacity: 0; transition: opacity 0.2s;
   background: var(--lozenge) left center / 6px 7px no-repeat, var(--lozenge) right center / 6px 7px no-repeat; }
 #front .menu button.dive::after { bottom: 0.12em; }
-#front .menu button.dive::before { bottom: calc(0.12em - 2.5px); }
+#front .menu button.dive::before { bottom: calc(0.12em - 3px); }
 #front .menu button.cur::after, #front .menu button:hover::after { transform: scaleX(1); }
 #front .menu button.cur::before { opacity: 0.9; }
 #front .menu button:focus-visible { outline: none; }
@@ -112,26 +117,27 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 #front .veil { position: absolute; inset: 0; pointer-events: none; }
 /* a phone held upright: the S above, the menu as a list */
 @media (max-aspect-ratio: 3/4) {
-  #front .sheet { grid-template: "head" auto "pic" minmax(0, 0.9fr) "credit" auto "caption" auto "menu" minmax(0, 1.1fr) / minmax(0, 1fr); }
+  #front .sheet { --beat: 16px; }
+  #front .menu { padding: 0 24px; }
   #front .head { grid-template-columns: 1fr 1fr; grid-template-areas: "name name" "book class"; row-gap: 14px; }
-  #front .name { grid-area: name; justify-content: center; font-size: clamp(18px, 5.6vw, 28px); }
+  #front .name { grid-area: name; font-size: clamp(18px, 5.6vw, 28px); }
   #front .book { grid-area: book; font-size: 11px; } #front .class { grid-area: class; font-size: 14px; }
   #front .menu { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 0.15em; }
   #front .menu .sep { display: none; }
   #front .menu button { font-size: 15px; padding: 0.55em 0.4em 0.6em; }
   #front .menu button.dive { font-size: 32px; padding: 0.15em 0.4em 0.3em; }
-  #front .credit { text-align: center; padding: 0; }
   #front .caption i { display: block; margin: 0.2em 0 0; }
 }
-/* a phone on its side, or any short window: the picture and its caption at the left, the menu as a column at the right */
+/* a phone on its side, or any short window: the menu as a column on the left margin, the fish to its right looking at it, its caption under it */
 @media (max-height: 520px) and (min-aspect-ratio: 4/3) {
-  #front .sheet { grid-template: "head head" auto "pic menu" minmax(0, 1fr) "credit menu" auto "caption menu" auto / minmax(0, 1fr) minmax(150px, 26%); column-gap: 18px; row-gap: 4px; }
-  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; }
-  #front .foot { place-items: center start; }
+  #front .sheet { --beat: 8px; grid-template: "head head" auto "menu ." minmax(0, 1fr) "menu pic" minmax(0, var(--pic-h, 1fr)) "menu credit" auto "menu caption" auto "menu ." minmax(0, 1fr) / minmax(150px, 22%) minmax(0, 1fr); column-gap: 18px; }
+  #front .menu { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0.1em; padding: 0 12px 0 20px; margin-left: -20px; }
+  #front .plate-foot { place-items: start start; align-self: stretch; margin-top: 0; }
+  #front .plate-foot > * { margin-top: var(--menu-top, 0px); }
   #front .invite { text-align: left; font-size: 14px; }
   #front .menu .sep { display: none; }
-  #front .menu button { font-size: 13px; padding: 0.5em 0.2em 0.55em; }
-  #front .menu button.dive { font-size: 28px; }
+  #front .menu button { font-size: 13px; padding: 0.5em 0.2em 0.55em 0; }
+  #front .menu button.dive { font-size: 28px; padding-left: 0; }
   #front .caption b { font-size: 12px; } #front .caption i { font-size: 13px; }
 }
 /* the game's own screens, opened from this page, are laid over it */
@@ -151,7 +157,7 @@ const MARKUP = `
   <div class="pic" aria-hidden="true"></div>
   <p class="credit ink">after the plate drawn by Acarie Baron for Cuvier’s Règne animal</p>
   <p class="caption ink"><b>Le Gymnètre épée.</b><i>(Gymnetrus gladius. <span>Cuv. Val.</span>)</i></p>
-  <div class="foot">
+  <div class="plate-foot">
     <p class="invite ink" role="status">Press any key, or touch the page</p>
     <nav class="menu ink" aria-label="Oarfish dive">
       <button type="button" class="dive" data-go="dive">Dive</button><span class="sep" aria-hidden="true">◆</span>
@@ -381,22 +387,46 @@ export async function openFront({ boot }) {
   shear.set(1, 0, 0, 0, 0, 1, -k, 0, 0, k, 1, 0, 0, 0, 0, 1); // in the camera's frame: what is farther back is drawn higher, the depth kept for what hides what
   camera.position.set(0, 0, 0); camera.updateMatrixWorld();
   const box = { x0: 0, x1: 1, y0: 0, y1: 1 };
-  function measure() { // the picture's extent in the plate's projection, from the model as it lies
+  function measure() { // the picture's extent in the plate's projection: its mean over one breath (the S swells and the body waves, so
+    // the extent at any one moment wanders by a few per cent of the width; the picture is framed, and so centred, on the mean), and the head
+    const v = new THREE.Vector3(), g = mesh.geometry, pos = g.attributes.position, n = pos.count;
+    const extent = () => { built.group.updateMatrixWorld(true); mesh.skeleton.update(); let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let i = 0; i < n; i += 3) { mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld); const X = v.x, Y = v.y - k * v.z; if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; }
+      return [x0, x1, y0, y1]; };
+    const pose = (t) => { S.t = t - 0.5; rig.phase = S.t * Math.PI * 2 * FRONT.breathe.rate; rig.time = S.t; for (let i = 0; i < 15; i++) animate(1 / 30); }; // as at(t) poses it
+    const sum = [0, 0, 0, 0]; let m = 0;
+    pose(0); for (let f = 0; f < 225; f++) { animate(1 / 15); if (f % 3 === 0) { extent().forEach((e, j) => { sum[j] += e; }); m++; } } // fifteen seconds, a whole breath
+    sum.forEach((e, j) => { sum[j] = e / m; });
+    pose(0);
+    const [x0, x1, y0, y1] = sum;
     built.group.updateMatrixWorld(true); mesh.skeleton.update();
-    const v = new THREE.Vector3(); let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-    const n = mesh.geometry.attributes.position.count;
-    for (let i = 0; i < n; i += 2) { mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld); const X = v.x, Y = v.y - k * v.z; if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; }
-    Object.assign(box, { x0, x1, y0, y1 });
+    // the head: the body's skin in the front 7% of the model's length (no fins, no crest), for the menu to be set beside
+    const fin = new Uint8Array(n); for (const gr of g.groups) if (/^Fin/.test(mesh.material[gr.materialIndex]?.name || '')) fin.fill(1, gr.start, gr.start + gr.count);
+    let zmin = 1e9, zmax = -1e9; for (let i = 0; i < n; i++) { const z = pos.getZ(i); if (z < zmin) zmin = z; if (z > zmax) zmax = z; }
+    let hy0 = 1e9, hy1 = -1e9;
+    for (let i = 0; i < n; i++) { if (fin[i] || pos.getZ(i) < zmax - 0.07 * (zmax - zmin)) continue; mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld); const Y = v.y - k * v.z; if (Y < hy0) hy0 = Y; if (Y > hy1) hy1 = Y; }
+    Object.assign(box, { x0, x1, y0, y1, hy0, hy1 });
   }
   measure();
   const view = { W: 1, H: 1, px: 1, s: 1 };
+  const SIDE = matchMedia('(max-height: 520px) and (min-aspect-ratio: 4/3)'); // the side-by-side layout's query, as in the CSS
   function frame() { // fit the plate's picture into the box the page's layout leaves for it
     const W = innerWidth, H = innerHeight, px = Math.min(devicePixelRatio || 1, 2);
-    const r = $('.pic').getBoundingClientRect();
     const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+    root.style.setProperty('--pic-h', `${($('.pic').getBoundingClientRect().width * bh / bw).toFixed(1)}px`); // the picture's row: no taller than the fish at its width
+    const r = $('.pic').getBoundingClientRect();
     const s = Math.min(r.width / (bw * 1.04), r.height / (bh * 1.04));
     const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
     const left = cx - (r.left + r.width / 2) / s, top = cy + (r.top + r.height / 2) / s;
+    root.style.setProperty('--fish-in', `${Math.max(0, r.width / 2 - s * bw / 2).toFixed(1)}px`); // the credit hangs under the picture's lower left corner
+    const foot = $('.plate-foot'), nav = $('.menu'), dive = menu[0];
+    if (SIDE.matches) { // the menu beside the fish: Dive at the height of the fish's head, the menu kept inside its column
+      root.style.setProperty('--menu-top', '0px');
+      const f = foot.getBoundingClientRect(), d = dive.getBoundingClientRect(), m = nav.getBoundingClientRect();
+      const headY = r.top + r.height / 2 - ((box.hy0 + box.hy1) / 2 - cy) * s;
+      const want = headY - (d.top + d.height / 2 - m.top) - f.top;
+      root.style.setProperty('--menu-top', `${Math.max(0, Math.min(want, f.height - m.height)).toFixed(1)}px`);
+    } else root.style.removeProperty('--menu-top');
     ortho.makeOrthographic(left, left + W / s, top, top - H / s, -50, 50);
     camera.projectionMatrix.copy(ortho).multiply(shear); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
     if (view.W !== W || view.H !== H || view.px !== px) {
@@ -437,6 +467,7 @@ export async function openFront({ boot }) {
     if (awake && !document.hidden) raf = requestAnimationFrame(loop);
   }
   addEventListener('resize', () => { frame(); draw(); wake(); });
+  document.fonts?.ready.then(() => { if (!root.hidden) { frame(); draw(); } }); // the lettering's own sizes, once its faces are in, decide where the menu sits
   // a hidden tab: the page's sound waits (its context is the band's too, which is silent while the page is up; in a dive it is the game's to keep)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); wake(); } if (!F.music || F.state === 'gone') return; if (document.hidden) F.music.pause(); else F.music.resume(); });
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => { still = reduced(); wake(); });
