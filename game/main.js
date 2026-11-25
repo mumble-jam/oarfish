@@ -634,7 +634,7 @@ export async function start(saved = {}) {
       else if (kind === 'windup') music.flourish(guard?.kind, 'fill'); // the wind-up of its biggest blow: its instrument plays a fill (seldom: music.js sees to that)
       else if (kind === 'laststand') music.flourish(guard?.kind, 'solo');
       else if (kind === 'turned') say('keeper-shell', 'Its shell turns a ram. Wait until it has struck and missed, then go for a leg.', 7);
-      else if (kind === 'slam') { if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed
+      else if (kind === 'slam') { music.strike(guard?.kind); if (pos.distanceTo(rig.pos) < 16) { cam.shake = Math.max(cam.shake, 0.4); moment('burst'); } } // the great claw, or the Keeper itself, coming down on the bed (its fill's last note, if one is playing, is the strike: music.js)
       else if (kind === 'numb') say('keeper-leg', 'That leg has gone numb. Ram it again, or go round it, and it comes off.', 7, 'teach', { while: lasts((S) => S.leg.includes(1)) });
       else if (kind === 'crack') { moment('ram'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.25); }
       else if (kind === 'knock') { moment('burst'); pulse('grow'); cam.shake = Math.max(cam.shake, 0.5); say('keeper-knock', 'A leg off the ground can be knocked away. It stumbles.', 6, 'teach', { while: lasts((S) => S.stun > 0 || S.open) }); }
@@ -867,6 +867,16 @@ export async function start(saved = {}) {
     bloom?.cast(most, nearBy);
     kelp?.cast(most, nearBy);
     return c;
+  }
+  // Where this band's keeper is, for the band to carry it from afar and place it left or right (FAR in music.js): its nearest copy across
+  // the band's repeating edge, from the fish, against the way the camera looks on the level (the fish's heading if it looks straight down).
+  const earDir = new THREE.Vector3();
+  function keeperAt() {
+    if (!guard || guard.done) return null;
+    const dx = wrapD(guard.pos.x - rig.pos.x), dz = wrapD(guard.pos.z - rig.pos.z);
+    camera.getWorldDirection(earDir); let fx = earDir.x, fz = earDir.z; const l = Math.hypot(fx, fz);
+    if (l < 0.05) { fx = Math.sin(rig.yaw); fz = Math.cos(rig.yaw); } else { fx /= l; fz /= l; }
+    return { id: guard.kind, d: Math.hypot(dx, dz), side: -dx * fz + dz * fx, ahead: dx * fx + dz * fz };
   }
   function nowPlaying(dt) { // what the band is playing, for whoever is tuning it
     nowT -= dt;
@@ -1544,7 +1554,9 @@ export async function start(saved = {}) {
   // The turnaround's three sliders and its switch (TURN in music.js) are music sliders like the rest, as shipped here: every 4 bars (66 of
   // off/8/4/2), a walk-up of three (66 of one passing note/2/3/4), stepwise (20), keepers only (0). A code from before them gives these.
   const TURN_SHIPPED = { turn: 66, turnsize: 66, turnheight: 20, turnall: 0 };
-  for (const [k, v] of Object.entries(TURN_SHIPPED)) { if (!MUSIC_KEYS.includes(k)) MUSIC_KEYS.push(k); SHIPPED_MUSIC.all[k] ??= v; }
+  // The keeper heard from afar (FAR in music.js) is a switch in the same way: on as shipped (100); a code from before it gives it on.
+  const FAR_SHIPPED = { farcarry: 100 };
+  for (const [k, v] of Object.entries({ ...TURN_SHIPPED, ...FAR_SHIPPED })) { if (!MUSIC_KEYS.includes(k)) MUSIC_KEYS.push(k); SHIPPED_MUSIC.all[k] ??= v; }
   const prefs = store.get('oarfish.music', {});
   if (!prefs.all) { prefs.all = {}; for (const k of MUSIC_KEYS) if (Number.isFinite(prefs[k])) prefs.all[k] = prefs[k]; } // settings saved by the first version
   prefs.zones ||= {};
@@ -1571,6 +1583,7 @@ export async function start(saved = {}) {
     }
     if (!Object.keys(got).length) return 'That code has no settings in it.';
     if (!Object.keys(TURN_SHIPPED).some((k) => k in got)) Object.assign(got, TURN_SHIPPED); // a code from before the turnaround: its shipped setting
+    if (!('farcarry' in got)) Object.assign(got, FAR_SHIPPED); // and from before the keeper carried far
     if (zone === null) Object.assign(prefs.all, got); else prefs.zones[zone] = { ...preset(zone), ...got };
     savePrefs(); showPreset();
     if (zone !== null) return `Applied to ${zoneName(zone)} only.`;
@@ -2077,7 +2090,7 @@ export async function start(saved = {}) {
     hud(dt);
     music.update(dt, {
       speed: clamp(rig.speed / SPEED.sprint, 0, 1), coil: Math.max((hap.wrap = wrapBest, rig.coiling * 0.5), wrapBest), danger: Math.max(foes.state.danger, sum ? sum.state.danger : 0, guard ? guard.state.danger : 0), // the roll tightens as the wrap closes
-      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), chain: run.state === 'play' ? run.chain : 0, harmony: run.state === 'play' ? run.harmony : 0,
+      low: run.segs <= MIN_SEGS + 2, alive: run.state !== 'dead', length: run.segs / MAX_SEGS, activity: activity(), cast: castNear(), far: keeperAt(), chain: run.state === 'play' ? run.chain : 0, harmony: run.state === 'play' ? run.harmony : 0,
     });
   }
 
@@ -2112,6 +2125,14 @@ export async function start(saved = {}) {
   // just below, and the renderer's render() only while one of them is on; off, it adds nothing to the page and draws nothing differently
   { const { createGauge } = await import('./gauge.js');
     window.__gauge = createGauge({ renderer, step, focus, ended, levels: { look: LOOK_LEVEL, point: PLATE_LEVEL }, game: () => window.__game }); }
+  // ---- the front page (title.js): while it holds the dive (`holds`), nothing of the dive is stepped or drawn. It wraps the loop set just
+  // below, as the gauge does. The library still draws its own stage; while one of the dive's menus is open over the page (`menus`), the
+  // devices are still read, so a controller works that menu, and the dive's picture is still not drawn. With no front page, nothing changes.
+  if (window.__front) { const set = renderer.setAnimationLoop.bind(renderer);
+    renderer.setAnimationLoop = (fn) => set(fn && ((now) => { const F = window.__front;
+      if (!F.holds || lib.isOpen) return fn(now);
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      if (F.menus && paused) tick(dt); })); }
   renderer.setAnimationLoop((now) => {
     if (light.on && now - last < light.gap) return; // a lighter picture: on a fast screen, every other frame
     const dt = Math.min((now - last) / 1000, 0.05);
@@ -2129,7 +2150,7 @@ export async function start(saved = {}) {
   // used by the automated checks: advance the simulation without waiting for real time
   window.__game = {
     rig, run, cam, scene, camera, renderer, music, feel, shed, addFood, startRun, enterFloor, buildFish, snap: () => placeCamera(0), presetCode, applyCode,
-    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get kelp() { return kelp; }, KELPWOOD, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
+    get binds() { return binds; }, bindStore, hap, buzz, teach, tut, setTeach, get lib() { return lib; }, openLibrary: (id) => openLibrary(id), pad, look, ui, setPaused, setMode, setFull, activity, castNear, keeperAt, readInput, session, QUIET, KEEPER_FIGHT, SHEARER_FIGHT, bringSquid, bring, pets, BLOOM, get bloom() { return bloom; }, get kelp() { return kelp; }, KELPWOOD, get pet() { return pets.squid?.list[0] || null; }, light, adrift, sun, noteBody, openNote, die, LENGTH, CHAIN, OARS, HAUL, CLEAN, nest, feat, oars, stroke, beatNow, fishPulse, stature, growCost, riftToll, tollOf, bite: game.bite, STAMINA, giveShell, SHELLS,
     get mods() { return mods; }, get field() { return field; }, get guard() { return guard; }, hitView, sctx, devSee, tutTarget,
     dropShells() { run.shells = []; shellsChanged(); buildFish(run.segs); },
     get world() { return world; }, get foes() { return foes; }, get sum() { return sum; }, end, get paused() { return paused; }, get dev() { return dev; },
