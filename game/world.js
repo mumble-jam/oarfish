@@ -1778,7 +1778,7 @@ float seaLight(vec2 p, float t) {
   let wrapTimer = 0;
   // what the dressing was last seated for: where the picture was centred, and whether there was a sun to cast by
   const sight = { on: true, sun: null, lit: false, fx: NaN, fy: 0, fz: NaN, light: { ax: 0, ay: 0, az: 0, bx: 0, by: 0, bz: 0, half: 0 }, z: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) };
-  function dress(focus, view) {
+  function dress(focus, view = sight.view) { // (review polish) update() calls it with no view: the last one main.js gave stands
     if (!sight.sun) sight.sun = scene.children.find((o) => o.isDirectionalLight) || null;
     const sun = sight.sun && sight.sun.castShadow && sight.sun.visible ? sight.sun : null;
     const was = sight.view, viewSame = !view === !was && (!view || (Math.hypot(view.x - was.x, view.z - was.z) < VIEW_REACH.step && Math.abs(view.far - was.far) < VIEW_REACH.step && view.fx * was.fx + view.fz * was.fz > Math.cos(VIEW_REACH.turn))); // (review polish) the camera moved, turned or sees farther
