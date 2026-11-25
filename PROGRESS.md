@@ -18,9 +18,9 @@ Brief: the reviewer's ranked visual faults (/home/claude/review-findings.md), it
 
 - [x] Merged squid-play again (DualSense buttons): 156ab26. Boss, teach, library, controls passed on the merged tree (final2-*.log). Game suite: two crashes in my own checks fixed (a name not passed; a // comment cutting a line).
 
-## To do
-- [ ] game suite on 932c7bc+ (final4-game.log)
-- [ ] fast-forward squid-play; pub-copy; hand back
+- [x] More fixes found by the suite: moment lines jump the queue (place lines go next without interrupting); world.update() was re-seating small things round the fish every frame (dress keeps the last view); costs measured again (perf-after3.log).
+- [x] Merged squid-play at 6e2eee4 (front page, Keeper strike): 6f8c644. On it: game, boss, teaching suites passed (final8-*.log). Library and controls last passed on 156ab26 (final2-*.log); nothing of mine since touches them.
+- [x] Fast-forward squid-play; pub-copy.
 
 ## Decisions (and why)
 - One general answer for 1-3 and the kelp: a screen-space stipple (4x4 ordered dither) in the materials, not smooth transparency (no sorting, flat look). Cuts only fragments at least 0.7 m nearer than the fish (full by 2.2 m), inside a capsule from the head to 2.6 m down the body; anything nearer the lens than 3.2 m is stippled out. Shadows untouched.
