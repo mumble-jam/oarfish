@@ -2064,6 +2064,14 @@ export async function start(saved = {}) {
   // just below, and the renderer's render() only while one of them is on; off, it adds nothing to the page and draws nothing differently
   { const { createGauge } = await import('./gauge.js');
     window.__gauge = createGauge({ renderer, step, focus, ended, levels: { look: LOOK_LEVEL, point: PLATE_LEVEL }, game: () => window.__game }); }
+  // ---- the front page (title.js): while it holds the dive (`holds`), nothing of the dive is stepped or drawn. It wraps the loop set just
+  // below, as the gauge does. The library still draws its own stage; while one of the dive's menus is open over the page (`menus`), the
+  // devices are still read, so a controller works that menu, and the dive's picture is still not drawn. With no front page, nothing changes.
+  if (window.__front) { const set = renderer.setAnimationLoop.bind(renderer);
+    renderer.setAnimationLoop = (fn) => set(fn && ((now) => { const F = window.__front;
+      if (!F.holds || lib.isOpen) return fn(now);
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      if (F.menus && paused) tick(dt); })); }
   renderer.setAnimationLoop((now) => {
     if (light.on && now - last < light.gap) return; // a lighter picture: on a fast screen, every other frame
     const dt = Math.min((now - last) / 1000, 0.05);

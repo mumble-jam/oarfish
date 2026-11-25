@@ -23,6 +23,7 @@ then open http://localhost:8080. Any static server pointed at this folder does t
 | File | What it is |
 | --- | --- |
 | `index.html` | The page: all markup and all CSS. The HUD, pause menu, key bindings, specimen library. |
+| `game/title.js` | The front page: the old plate come alive before the first dive, its menu, and its music (`title/`). |
 | `game/main.js` | The game itself: the loop, input, camera, HUD, messages, teaching, settings. Start here. |
 | `game/world.js` | One depth band: seabed, the rift that leads down, ruins, plants, swarms. |
 | `game/npc.js` | **The cast, as components.** How every creature and thing looks. See below. |

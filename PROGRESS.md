@@ -1,3 +1,31 @@
+# The front page (branch title-plate): progress
+
+Brief: a front page made from the old plate, with music cut only from George's bass track. Worktree `/home/claude/oarfish-title`; logs `/home/claude/title-logs/`; music work `/home/claude/title-work/`; sheet `/home/claude/title-sheet.jpg`; map `/home/claude/title-music-map.md`.
+
+## Done
+- [x] Music studied (161.9 bpm, 14 bars, phrases, quiet points) and built: the loop (14 bars) and the long version (82 bars, 2:01.5), only slices of the track; joins measured; AAC files in `title/music/`.
+- [x] `game/title.js` (the page, its print look, menu, input, music, diving in, coming back); hooks: one block in `main.js` (the hold), one in `index.html` (the decision and the boot); local Fell faces in `title/fonts/`.
+- [x] `tools/test_title.mjs` (its own checks, forced on), `tools/shot_title.mjs` (pictures).
+
+- [x] Pictures looked at against the plate, three rounds (fins flat pink with hatched rays and four deeper bands; runs stacked tight as on the plate; finer stipple; the model's spots lightened; the water soaks in under the fish from the edges).
+- [x] `tools/test_title.mjs`: all 28 checks pass. Sheet: `/home/claude/title-sheet.jpg`.
+- [x] CLAUDE.md, README; squid-play merged in (clean).
+
+## To do
+- [ ] The game suite after the merge (the coordinator asked for the game suite only, plus the page's own checks), then fast-forward squid-play, copy to pub-copy.
+
+## Notes
+- The machine restarted twice mid-run; one check run of mine looped for ever on a test bug (a getter copied once by Object.assign) and I ended it myself.
+
+## Decisions (and why)
+- The dive is built behind the page as soon as the page has drawn its first picture, and held: nothing stepped, nothing drawn, its band silent, until Dive. Building is not running; it is what makes Dive instant.
+- The game's name is the plate's running head, centred on the top line between "Règne animal." and "Poissons.", in letterspaced small capitals with a rule either side. The caption keeps its place and size. Rejected: the name large in italic across the paper (one frame on the sheet).
+- The plate's left credit is not copied as "Acarie Baron del.": the picture is not his drawing. It reads "after the plate drawn by Acarie Baron for Cuvier's Règne animal". The right-hand credit (the engraver) is not legible in the copy we have, so it is left out rather than guessed.
+- Settings and key bindings open the pause menu, where they live today; the band opens the pause menu with the Tuning drawer beside it. Their Resume reads "Back to the front page" while opened from the page.
+- No third (filtered) music version: the bass is almost all under 300 Hz, a low-pass would hardly be heard.
+
+---
+
 # The reef head's life (branch reef-life): progress
 
 Brief: a cleaning station at the reef's middle, trumpetfish that ride the oarfish, coral that grows from dive to dive. All behaviour in `game/reef.js` (`REEF` table); hooks in main.js and npc.js are one block each. Worktree `/home/claude/oarfish-reef`; logs `/home/claude/reef-logs/`; sheet `/home/claude/reef-sheet.jpg`.
