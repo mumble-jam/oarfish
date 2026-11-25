@@ -35,6 +35,13 @@ export const FRONT = {
     Body: '#b49a79', BodyTop: '#a68b6c', Belly: '#c9bfae', Spots: '#98805f', Face: '#9a958f', Gill: '#b9aea3', Jaw: '#7f766f', Mouth: '#5b3b3a',
     FinPale: '#efc4bd', FinPink: '#e9b6b1', FinMid: '#e4aba8', FinRed: '#d98e93', EyeRing: '#3f3429', Eye: '#e3c13a', Pupil: '#241c16',
   },
+  // The dorsal fin's wave (its shader, and finWave below for the checks): how fast it runs (radians a second), how many radians to a metre
+  // of the body; and how far a corner rises and falls, and sways along the body, for each metre it stands over the back. It moves only in
+  // the fin's own plane. It used to lean the fin a long way to the side (0.6 m a metre), and in the plate's projection, where what is
+  // farther back is drawn higher, a lean shows as up or down on the paper: leaning toward the viewer the fin was drawn down into the back,
+  // leaning away it lifted off it with paper showing under it, and at the turns, seen end on, it folded over the body (George: 'the dorsal
+  // fin isn't attached to the body consistently across the body'). Its foot never moves.
+  fin: { speed: 2.1, along: 2.4, rise: 0.1, sway: 0 }, // (no sway: along the body is into the paper at the turns, where a sway shows as up and down again)
   bands: [0.3, 0.47, 0.63, 0.8], // where the dorsal fin runs deeper pink, along the body (0 the neck, 1 the tail), as on the plate
   dive: { wash: 0.95, straighten: 0.85, swim: 1.5, release: 1.3, reveal: 0.55, skip: 0.22 }, // seconds: the event of diving in
   back: { fade: 0.6 }, // coming back to the page from a dive
@@ -179,10 +186,10 @@ function printMaterial(name, colour, shared) {
             float ph = uTime * 0.9 + position.x * 9.0 + position.z * 6.0;
             transformed.z += fh * 0.13 * sin(ph) * uStir;
             transformed.x += fh * 0.10 * sin(uTime * 0.63 + position.z * 11.0) * uStir;
-          } else { // the dorsal fin: a wave running down its length
-            float w = uTime * 2.1 + position.z * 2.4;
-            transformed.x += fh * 0.6 * sin(w) * uStir;
-            transformed.y += fh * 0.07 * sin(w + 1.2) * uStir;
+          } else { // the dorsal fin: a wave running down its length (finWave, below, is the same sum)
+            float w = uTime * ${f(FRONT.fin.speed)} + position.z * ${f(FRONT.fin.along)};
+            transformed.y += fh * ${f(FRONT.fin.rise)} * sin(w) * uStir;
+            transformed.z += fh * ${f(FRONT.fin.sway)} * sin(w + 1.2) * uStir;
           }
         #endif`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvView = mvPosition.xyz;');
@@ -219,6 +226,10 @@ function printMaterial(name, colour, shared) {
   m.customProgramCacheKey = () => `front-${fin ? 'fin' : body ? 'body' : 'flat'}`;
   return m;
 }
+
+// the dorsal fin's wave at a corner `fh` over the back, `w` along the wave: how far it moves (x, y, z in the model), as its shader moves it
+function finWave(fh, w, stir) { const F = FRONT.fin; return [0, fh * F.rise * Math.sin(w) * stir, fh * F.sway * Math.sin(w + 1.2) * stir]; }
+const f = (x) => (Number.isInteger(x) ? x.toFixed(1) : String(x)); // a number written into a shader
 
 // fin height over the body, for every corner of the model: how far up a fin each corner is, which is how far it waves
 function finHeights(mesh) {
@@ -669,8 +680,38 @@ export async function openFront({ boot }) {
     frame(); draw();
   }
   function advance(secs) { for (let t = 0; t < secs - 1e-6; t += 1 / 60) { animate(1 / 60); tickTransition(1 / 60); } frame(); draw(); }
+  // ---- the dorsal fin against the back, measured on the screen (tools/test_title.mjs, tools/shot_fin.mjs). Slice by slice along the body
+  // (the model's own length, 5 cm slices), in CSS pixels up the screen: `outline`, the back's outline as the paper shows it (the highest
+  // corner of the body's skin in the slice); `base`, where the fin's base is drawn (its corners at the foot of the fin); `top`, the fin's
+  // highest corner, waved as its shader waves it (the same sum, done here). `gap` is base less outline (above nought: a strip of back shows
+  // under the fin; below: the fin is drawn down into the body), `shows` the fin's height over the outline.
+  function finProbe() {
+    built.group.updateMatrixWorld(true); mesh.skeleton.update();
+    const g = mesh.geometry, pos = g.attributes.position, fin = g.attributes.aFin, n = pos.count, mats = mesh.material, t = shared.uTime.value, stir = shared.uStir.value;
+    const matOf = new Array(n); for (const gr of g.groups) for (let i = gr.start; i < gr.start + gr.count; i++) matOf[i] = mats[gr.materialIndex].name;
+    const v = new THREE.Vector3(), W = innerWidth, H = innerHeight, up = () => { v.applyMatrix4(mesh.matrixWorld).project(camera); return [(v.x + 1) / 2 * W, (v.y + 1) / 2 * H]; };
+    const sl = new Map(), slice = (z) => { const k = Math.round(z / 0.05); if (!sl.has(k)) sl.set(k, { z: k * 0.05, outline: -1e9, base: [], top: -1e9, x: 0, nx: 0 }); return sl.get(k); };
+    const ridge = new Map(); // the back's top in the model, slice by slice: only fin corners up there are the dorsal fin's (the pelvic fins are Fin too)
+    for (let i = 0; i < n; i++) if (/^(Body|BodyTop|Spots)$/.test(matOf[i])) { const k = Math.round(pos.getZ(i) / 0.05); ridge.set(k, Math.max(ridge.get(k) ?? -9, pos.getY(i))); }
+    for (let i = 0; i < n; i++) {
+      const name = matOf[i], z = pos.getZ(i);
+      if (/^Fin/.test(name) && (z > -0.45 || !(pos.getY(i) > (ridge.get(Math.round(z / 0.05)) ?? 9) - 0.08))) continue; // (the crest's rays stand forward of -0.45)
+      if (/^(Body|BodyTop|Spots)$/.test(name)) { v.fromBufferAttribute(pos, i); mesh.applyBoneTransform(i, v); const [x, y] = up(); const s = slice(z); s.outline = Math.max(s.outline, y); s.x += x; s.nx++; }
+      else if (/^Fin/.test(name) && z <= 0.02) {
+        const fh = fin.getX(i), w = t * FRONT.fin.speed + z * FRONT.fin.along; v.fromBufferAttribute(pos, i);
+        const d = finWave(fh, w, stir); v.x += d[0]; v.y += d[1]; v.z += d[2];
+        mesh.applyBoneTransform(i, v); const [, y] = up(); const s = slice(z);
+        if (fh < 1e-4) s.base.push(y); s.top = Math.max(s.top, y);
+      }
+    }
+    // a fin's top corner lies a little behind its foot, so its height over the back is read over the slice and the two either side
+    const topNear = (k) => Math.max(...[-2, -1, 0, 1, 2].map((d) => sl.get(k + d)?.top ?? -1e9));
+    const rows = [...sl.entries()].filter(([, s]) => s.base.length && s.nx).sort((a, b) => b[1].z - a[1].z).map(([k, s]) => { const base = s.base.reduce((a, b) => a + b, 0) / s.base.length; return { z: +s.z.toFixed(2), x: +(s.x / s.nx).toFixed(1), outline: +s.outline.toFixed(2), gap: +(base - s.outline).toFixed(2), shows: +(topNear(k) - s.outline).toFixed(2) }; });
+    const gaps = rows.map((r) => r.gap), shows = rows.map((r) => r.shows);
+    return { rows, summary: { slices: rows.length, gapMin: Math.min(...gaps), gapMax: Math.max(...gaps), showMin: Math.min(...shows), showMax: Math.max(...shows), px: +view.s.toFixed(1) } };
+  }
   // ---- what the checks read and drive (tools/test_title.mjs)
-  Object.assign(F, { shared, camera, mesh, view, root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, renderer, rig, FRONT, box, at, advance });
+  Object.assign(F, { shared, camera, mesh, view, finProbe, root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, renderer, rig, FRONT, box, at, advance });
   Object.defineProperty(F, 'cur', { get: () => menu[cur].dataset.go }); // a getter, read each time (Object.assign would copy its value once)
   wake();
   return F;

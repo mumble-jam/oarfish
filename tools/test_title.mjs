@@ -81,6 +81,25 @@ await sleep(2600);
   check('after it the Lullaby plays, made as it goes, on an AudioContext the band will play on too (the band not started)', m.state === 'running' && m.playing && m.which === 'a' && m.gain > 0.1 && m.notes > 3 && m.shared && !m.band && !m.err, JSON.stringify(m));
   check('no sound file is fetched', audioFetched.length === 0, JSON.stringify(audioFetched)); }
 
+// ---- 3b. the dorsal fin stays on the back (George: 'the dorsal fin isn't attached to the body consistently across the body'). At three
+// moments of its wave, slice by slice along the body, measured on the screen against the same moment with the wave stilled: its foot is
+// drawn on the back's outline (no more than a few millimetres of the fish above it, so no paper shows under it, nor more than 3 cm below
+// it, the ridge it stands on as the plate's projection draws it), and its height over the back moves by no more than its own rise allows (twice FRONT.fin.rise and 4% more: a quarter at 0.1;
+// the old lean, 0.6 to the side, moved it by up to 0.3 + 0.07 of the fin's height): the wave stays in the fin's own plane and does not lean
+// it onto or off the back.
+{ const r = await ev(() => { const F = window.__front, out = [];
+    for (const t of [3, 3.75, 4.5]) { F.shared.uStir.value = 0; F.at(t); const still = F.finProbe(); F.shared.uStir.value = 1; F.at(t); const wave = F.finProbe();
+      out.push({ t, px: wave.summary.px, rows: wave.rows.map((w, i) => ({ z: w.z, gap: w.gap, shows: w.shows, still: still.rows[i].shows })) }); }
+    F.shared.uStir.value = 1; return { out, rise: F.FRONT.fin.rise }; });
+  const allow = 2 * r.rise + 0.04;
+  const bad = [];
+  for (const m of r.out) for (const x of m.rows) {
+    if (x.gap > 0.004 * m.px || x.gap < -0.03 * m.px) bad.push(`t ${m.t} z ${x.z}: foot ${x.gap} px from the outline`);
+    if (x.still > 5 && Math.abs(x.shows - x.still) > allow * x.still) bad.push(`t ${m.t} z ${x.z}: height ${x.shows} px against ${x.still} still`);
+  }
+  const n = r.out.reduce((a, m) => a + m.rows.length, 0);
+  check('the dorsal fin\'s foot stays on the back\'s outline along the whole body at three moments of its wave, and the wave never leans it onto or off the back', n > 100 && !bad.length, `${n} slices; ${bad.length} off: ${bad.slice(0, 6).join('; ')}`); }
+
 // ---- 4. every item by keyboard: each opens its screen over the page, and closing it comes back to the page
 const items = await ev(() => window.__front.menu.map((b) => b.dataset.go));
 { const seen = []; for (let i = 0; i < items.length; i++) { seen.push(await ev(() => window.__front.cur)); await page.keyboard.press('ArrowRight'); }
