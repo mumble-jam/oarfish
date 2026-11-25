@@ -736,6 +736,20 @@ export function createMusic({ context = null } = {}) {
       }
       return t;
     },
+    // The front page's music (titlemusic.js) plays on this band's clock, so that its hand-over lands on the band's beat. `adopt` gives
+    // the band the page's AudioContext, if it has none yet (it is made at the page's first touch; the band begins in it at Dive).
+    // `grid` says where the band's beats fall: the last beat it has scheduled (or, before it has scheduled any, its first, at the length
+    // schedule() will give it), its number (bar * 4 + beat) and length, and where its swung eighth falls. `beat` is one beat it has scheduled, by number. `chordOf` is its chord in a bar.
+    adopt(c) { if (!ctx && c) ctx = c; return ctx === c; },
+    get context() { return ctx; },
+    grid() {
+      if (!st.started) return null;
+      const late = lerp(0.5, 0.74, params.swing), b = st.beats[st.beats.length - 1];
+      if (b) return { at: b.at, index: b.index, dur: b.dur, late };
+      return { at: st.nextTime, index: st.bar * 4 + st.tick / 3, dur: 60 / (lerp(108, 172, energyNow()) * (1 + 0.1 * st.intensity) * (st.alive ? 1 : 0.6)), late };
+    },
+    beat(index) { const b = st.beats.find((x) => x.index === index); return b ? { at: b.at, dur: b.dur, late: lerp(0.5, 0.74, params.swing) } : null; }, // one beat it has scheduled (it keeps the last sixteen)
+    chordOf(bar) { const ch = chordAt(bar); return { root: ch.root, voice: ch.q.voice, tones: ch.q.tones }; },
     get energy() { return energyNow(); },
     get muted() { return st.muted; },
     get running() { return st.started && ctx?.state === 'running'; },

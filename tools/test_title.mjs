@@ -1,7 +1,7 @@
 // Scripted checks of the front page (game/title.js). Every other suite opens the page under automation and gets a dive at once;
 // these force the front page on (?title=1) and check what it promises: nothing of the dive runs or is drawn behind it; nothing
-// plays before the first touch and the music after it, looping between its points, following the sound switch and the volume,
-// and silent in the dive; every item can be reached and chosen by keyboard, mouse, touch and controller, and its screen closes
+// plays before the first touch and the music after it (generated, no sound file fetched), on the band's clock, following the sound switch
+// and the volume, landing its run on the band's downbeat when Dive is pressed, and silent in the dive; every item can be reached and chosen by keyboard, mouse, touch and controller, and its screen closes
 // back to the page; Dive starts a dive; the pause menu and the end card lead back; a link that names a place goes straight in;
 // and under automation, by default, there is no front page at all.
 //   node tools/test_title.mjs
@@ -24,10 +24,14 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || un
 let failures = 0;
 const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const audioFetched = []; // every sound file any page asked for: there should be none
+// where the page's run landed against the band's own beat there (both on one clock): the handover, and the band's scheduled beat
+const landing = async (ev) => { await ev(() => new Promise((ok) => { const t0 = performance.now(), f = () => (window.__front.music.handover?.land != null || performance.now() - t0 > 5000 ? ok() : setTimeout(f, 50)); f(); })); return ev(() => { const h = window.__front.music.handover, b = window.__game.music.state.beats.find((x) => h && x.index === h.bar * 4); return { land: h?.land, bar: h?.bar, beat: b?.at, off: h && b && h.land != null ? +((h.land - b.at) * 1000).toFixed(2) : null, guessOff: h && b ? +((h.guess - b.at) * 1000).toFixed(2) : null, at: h?.at, same: window.__front.music.ctx === window.__game.music.context }; }); };
 async function open(query = '?title=1', { size = [1440, 820], touch = false, notDriven = false, point = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, hasTouch: touch, isMobile: touch, deviceScaleFactor: touch ? 2 : 1 });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => { failures++; console.log('[pageerror]', e.message); });
+  page.on('request', (r) => { if (/\.(mp4|m4a|mp3|ogg|oga|wav|aac|flac|webm)(\?|$)/i.test(r.url())) audioFetched.push(r.url()); });
   page.on('console', (m) => { if (['error'].includes(m.type()) && !/fonts\.g|ERR_|Failed to load resource|GPU stall|GL Driver|AudioContext/.test(m.text())) console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
   await page.addInitScript(() => { window.__noNursery = true; });
   if (point) await page.addInitScript(() => { try { const f = JSON.parse(localStorage.getItem('oarfish.feel') || '{}'); if (!f.mode) localStorage.setItem('oarfish.feel', JSON.stringify({ ...f, mode: 'point' })); } catch {} });
@@ -69,14 +73,13 @@ await sleep(400);
 { await ev(() => { window.__front.FRONT.idle = 0.5; }); await sleep(1200); const f0 = await ev(() => window.__front.frames); await sleep(1500); const f1 = await ev(() => window.__front.frames);
   check('left alone, the page stops drawing', f1 === f0, `${f0} → ${f1}`); await ev(() => { window.__front.FRONT.idle = 90; }); }
 
-// ---- 3. the first touch: a key. The menu inks itself in and the music comes in, looping between its points
+// ---- 3. the first touch: a key. The menu inks itself in and the music comes in: generated, on the band's clock
 await page.keyboard.press('KeyQ');
 await sleep(2600);
-{ const m = await ev(() => { const M = window.__front.music; return { state: M.ctx?.state, playing: M.playing, loop: M.src?.loop, ls: M.src?.loopStart, le: M.src?.loopEnd, start: M.loopStart, end: M.loopEnd, period: window.__front.FRONT.music.long.period, gain: M.master?.gain.value, fade: M.fade?.gain.value, err: M.error, which: M.which, dur: M.buffer?.duration, band: window.__game.music.running, cur: window.__front.cur, awake: document.getElementById('front').classList.contains('awake') }; });
+{ const m = await ev(() => { const M = window.__front.music; return { state: M.ctx?.state, playing: M.playing, which: M.which, gain: M.gain, err: M.error, shared: !!M.ctx && M.ctx === window.__game.music.context, band: window.__game.music.running, notes: M.tm?.state.log.length, cur: window.__front.cur, awake: document.getElementById('front').classList.contains('awake') }; });
   check('the first touch inks the menu in, with Dive chosen, and leaves the dive alone', m.awake && m.cur === 'dive' && !m.band, JSON.stringify({ awake: m.awake, cur: m.cur, band: m.band }));
-  check('after it the music plays, from a sound decoded once and looped between its exact points', m.state === 'running' && m.playing && m.loop && Math.abs((m.le - m.ls) - m.period / 44100) < 1e-6 && m.ls === m.start && m.le <= m.dur + 1e-6 && m.gain > 0.1 && m.fade > 0.5 && !m.err, JSON.stringify(m));
-  const pos = await ev(() => { const M = window.__front.music; M.startedAt -= 200; return M.position(); }); // two hundred seconds on, it is still inside its loop
-  check('its place in the sound stays between the loop points however long it plays', pos >= m.ls && pos < m.le, String(pos)); }
+  check('after it the Lullaby plays, made as it goes, on an AudioContext the band will play on too (the band not started)', m.state === 'running' && m.playing && m.which === 'a' && m.gain > 0.1 && m.notes > 3 && m.shared && !m.band && !m.err, JSON.stringify(m));
+  check('no sound file is fetched', audioFetched.length === 0, JSON.stringify(audioFetched)); }
 
 // ---- 4. every item by keyboard: each opens its screen over the page, and closing it comes back to the page
 const items = await ev(() => window.__front.menu.map((b) => b.dataset.go));
@@ -101,14 +104,14 @@ for (const go of ['library', 'band', 'settings', 'feedback']) {
 // ---- 5. the sound switch and the volume, set in the band's own drawer over the page
 for (let n = 0; n < 6 && (await ev(() => window.__front.cur)) !== 'band'; n++) await page.keyboard.press('ArrowRight');
 await page.keyboard.press('Enter'); await sleep(600);
-{ await ev(() => { const v = document.getElementById('m-volume'); v.value = '20'; v.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(700);
-  const quiet = await ev(() => window.__front.music.master.gain.value);
+{ await ev(() => { const v = document.getElementById('m-volume'); v.value = '20'; v.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(1200);
+  const quiet = await ev(() => window.__front.music.gain);
   await page.click('#music-mute'); await sleep(700);
-  const off = await ev(() => ({ g: window.__front.music.master.gain.value, muted: window.__game.music.muted }));
+  const off = await ev(() => ({ g: window.__front.music.gain, muted: window.__game.music.muted }));
   await page.click('#music-mute'); await sleep(200);
   await ev(() => { const v = document.getElementById('m-volume'); v.value = '70'; v.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(700);
-  const on = await ev(() => window.__front.music.master.gain.value);
-  check('the music follows the game\'s volume and its sound switch', Math.abs(quiet - 0.2 * 0.75 * 0.6) < 0.03 && off.muted && off.g < 0.01 && on > quiet, JSON.stringify({ quiet, off, on })); }
+  const on = await ev(() => window.__front.music.gain);
+  check('the music follows the game\'s volume and its sound switch', Math.abs(quiet - 0.2 * (await ev(() => window.__front.music.DREAM.level)) * 0.6) < 0.03 && off.muted && off.g < 0.01 && on > quiet, JSON.stringify({ quiet, off, on })); }
 await page.keyboard.press('Escape'); await sleep(500);
 
 // ---- 6. a controller: it moves through the items and chooses, and the game's own menu answers it over the page
@@ -137,9 +140,11 @@ await ev(() => { window.__pad.on = false; });
   await page.click('#front .menu button.dive');
   await page.waitForFunction('window.__front.state === "gone"', null, { timeout: 15000 }).catch(() => {});
   await sleep(1500);
-  const s = await ev(() => ({ state: window.__front.state, hidden: document.getElementById('front').hidden, holds: window.__front.holds, time: window.__game.run.time, play: window.__game.run.state, paused: window.__game.paused, front: window.__front.music.playing, fctx: window.__front.music.ctx.state, band: window.__game.music.running, cls: document.documentElement.className }));
+  const s = await ev(() => ({ state: window.__front.state, hidden: document.getElementById('front').hidden, holds: window.__front.holds, time: window.__game.run.time, play: window.__game.run.state, paused: window.__game.paused, front: window.__front.music.playing, band: window.__game.music.running, cls: document.documentElement.className }));
+  const L = await landing(ev);
   check('clicking Dive starts a dive: the page is gone, the dive runs', s.state === 'gone' && s.hidden && !s.holds && s.time > before && s.play === 'play' && !s.paused && !/front-over/.test(s.cls), JSON.stringify(s));
-  check('in the dive the page\'s music is silent and its sound put away, and the band plays', !s.front && s.fctx !== 'running' && s.band, JSON.stringify(s)); }
+  check('in the dive the page\'s music has let go (its hand-over rings out under the band), and the band plays', !s.front && s.band, JSON.stringify(s));
+  check('the hand-over run lands on the band\'s second downbeat, on the same clock, within 3 ms', L.same && L.bar === 1 && L.off !== null && Math.abs(L.off) < 3, JSON.stringify(L)); }
 
 // ---- 8. back to the page from the end card, and from the pause menu; Dive again is as quick as before
 { await ev(() => window.__game.die()); await sleep(1300);
@@ -151,13 +156,16 @@ await ev(() => { window.__pad.on = false; });
   check('the end card keeps "Dive again" on the keyboard, and has a way back to the front page', end.on && end.focus === 'btn-again' && end.has, JSON.stringify(end));
   check('back from the end card: the page is up with its music, a fresh dive waits behind it, held and not drawn', s.state === 'menu' && s.shown && s.holds && s.run === 'play' && !s.end && s.playing && s2.t === s.t && s2.f === s.f && s2.band === 0, JSON.stringify({ s, s2 })); }
 { await page.keyboard.press('Enter'); await page.waitForFunction('window.__front.state === "gone"', null, { timeout: 15000 }).catch(() => {});
-  await sleep(600); await ev(() => window.__game.setPaused(true)); await sleep(300);
+  await sleep(600);
+  { const L = await landing(ev); check('diving again from the page (the band playing silently all along): the run lands on one of its downbeats, within 3 ms', L.same && L.off !== null && Math.abs(L.off) < 3 && L.land - L.at >= 1.5, JSON.stringify(L)); } await ev(() => window.__game.setPaused(true)); await sleep(300);
   await page.click('#btn-front'); const armed = await ev(() => ({ text: document.getElementById('btn-front').textContent, front: window.__front.state }));
   await page.click('#btn-front'); await sleep(1500);
   const s = await ev(() => ({ state: window.__front.state, holds: window.__front.holds, paused: window.__game.paused, pause: document.getElementById('pause').classList.contains('on') }));
   check('from the pause menu, "Front page" asks once more (it leaves the dive) and then goes back to the page', /Again/.test(armed.text) && armed.front === 'gone' && s.state === 'menu' && s.holds && !s.paused && !s.pause, JSON.stringify({ armed, s })); }
-{ await page.keyboard.press('Space'); await page.waitForFunction('window.__front.state === "gone"', null, { timeout: 15000 }).catch(() => {});
-  await sleep(500); await ev(() => window.__game.die()); await sleep(1200);
+{ await page.keyboard.press('Space'); await sleep(250); await page.keyboard.press('KeyX'); // and skipped with a key
+  await page.waitForFunction('window.__front.state === "gone"', null, { timeout: 15000 }).catch(() => {});
+  await sleep(1800);
+  { const L = await landing(ev); check('a dive-in skipped with a key: the run still lands on the band\'s downbeat, within 3 ms', L.same && L.off !== null && Math.abs(L.off) < 3, JSON.stringify(L)); } await ev(() => window.__game.die()); await sleep(1200);
   const t0 = Date.now(); await page.keyboard.press('Enter'); await sleep(300);
   const s = await ev(() => ({ run: window.__game.run.state, front: window.__front.state }));
   check('Dive again on the end card is still one key, straight into the next dive', s.run === 'play' && s.front === 'gone' && Date.now() - t0 < 2000, JSON.stringify(s)); }
@@ -190,5 +198,6 @@ await ctx.close();
   check('?title=0 turns it off for a player too', !s.front && s.t > 0, JSON.stringify(s)); await ctx.close(); }
 
 await browser.close(); server.close();
+check('no page asked for a sound file at any point', audioFetched.length === 0, JSON.stringify(audioFetched));
 console.log(failures ? `\n${failures} check(s) failed` : '\nall front page checks passed');
 process.exit(failures ? 1 : 0);

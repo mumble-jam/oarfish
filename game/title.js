@@ -4,7 +4,8 @@
 // plate's colours, a stipple of spots, a fine line round everything, edges that wander a little as a lithograph's do, paper grain
 // through the ink. Under the caption, five items set as the plate's lettering: Dive, the specimen library, the band, settings and
 // keys, feedback. The page opens silent; the first touch (a key, a click, a tap, a button on a controller) inks the menu in and
-// starts its music, a long version built only from slices of one bass track (title/music; how it was cut: title-music-map.md).
+// starts its music, the Lullaby: a music box over a low held note, made as the band makes its sound (titlemusic.js), which lands on the
+// band's first chord and beat when Dive is pressed.
 //
 // What it costs the dive: the dive is built behind it (index.html boots the game at once, so "Dive" has nothing to wait for), and
 // nothing of the dive is stepped or drawn while this page is up: main.js holds its loop (`window.__front.holds`, one block there).
@@ -18,6 +19,7 @@
 import * as THREE from 'three';
 import { buildOarfish, PALETTE } from './oarfish.js';
 import { OarfishRig, SPEED } from './rig.js';
+import { createTitleMusic, DREAM } from './titlemusic.js';
 
 // ---------------------------------------------------------------- every number of the page
 export const FRONT = {
@@ -37,13 +39,11 @@ export const FRONT = {
   dive: { wash: 0.95, straighten: 0.85, swim: 1.5, release: 1.3, reveal: 0.55, skip: 0.22 }, // seconds: the event of diving in
   back: { fade: 0.6 }, // coming back to the page from a dive
   music: {
-    // Both versions are built only from the one track (title-music-map.md). `period` is the loop's length in samples at 44.1 kHz;
-    // `first` is where its first sound crosses 0.01 in the left channel, which finds the loop in the decoded sound whatever the
-    // browser's decoder puts in front of it.
-    long: { src: 'title/music/title-long.mp4', period: 5359208, first: 40015 },
-    loop: { src: 'title/music/title-loop.mp4', period: 914987, first: 1803 },
-    gain: 0.75, fadeIn: 1.6, fadeOut: 1.4,
+    // The Lullaby (titlemusic.js, every number of it in DREAM there). ?music=b and ?music=c play the other two sketches George was
+    // offered (the waltz, the band asleep), for him to hear again; a is what a player gets.
+    sketches: ['a', 'b', 'c'],
   },
+
 };
 
 const store = { get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } } };
@@ -426,7 +426,8 @@ export async function openFront({ boot }) {
     if (awake && !document.hidden) raf = requestAnimationFrame(loop);
   }
   addEventListener('resize', () => { frame(); draw(); wake(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); wake(); } else if (F.music) F.music.pause(); if (!document.hidden && F.music && F.state !== 'gone') F.music.resume(); });
+  // a hidden tab: the page's sound waits (its context is the band's too, which is silent while the page is up; in a dive it is the game's to keep)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = performance.now(); wake(); } if (!F.music || F.state === 'gone') return; if (document.hidden) F.music.pause(); else F.music.resume(); });
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => { still = reduced(); wake(); });
   await document.fonts?.load?.('16px "Front Fell"').catch(() => {});
   await Promise.all(['16px "Front Fell"', 'italic 16px "Front Fell"', '16px "Front Fell SC"'].map((f) => document.fonts?.load?.(f).catch(() => {})));
@@ -439,7 +440,7 @@ export async function openFront({ boot }) {
   let game = null;
   F.gameReady = new Promise((res) => setTimeout(() => Promise.resolve(boot()).then(() => { game = window.__game; hookGame(); res(game); last = performance.now(); }), 60));
 
-  // ---- the music: decoded once and looped between exact points, so there is no gap at the join
+  // ---- the music: generated as it plays, on the band's own clock
   F.music = createMusic();
 
   // ---- the first touch: the menu inks itself in and the music comes in
@@ -570,6 +571,7 @@ export async function openFront({ boot }) {
     const g = game, music = g.music;
     // the band does not start behind this page: the game's own listeners would start it at the first click
     unlockBand = music.unlock.bind(music);
+    if (F.music.ctx) music.adopt(F.music.ctx); // the page's music started before the game was built: the band will play on its clock
     music.unlock = () => (F.state === 'gone' || F.over === 'library' ? unlockBand() : false);
     watch.observe(document.getElementById('pause'), { attributes: true, attributeFilter: ['class'] });
     watch.observe(document.getElementById('stage'), { attributes: true, attributeFilter: ['class'] });
@@ -600,7 +602,7 @@ export async function openFront({ boot }) {
     // the water's colour: the band's own, as the first frame of the dive will be filled with it
     try { const c = g.scene.fog?.color || g.scene.background; if (c) press.uniforms.uWater.value.copy(c); } catch { /* keep the page's own */ }
     g.music.duck(0); unlockBand?.(); // the band starts now, silent, and comes up as the page's music goes
-    F.music.fadeOut(FRONT.music.fadeOut);
+    F.music.dive(g.music); // the page holds the band's chord and runs up into its downbeat, on its clock, and fades under it
     fadeLettering(0, 0.45);
     wake();
   }
@@ -634,7 +636,7 @@ export async function openFront({ boot }) {
   function gone() {
     F.state = 'gone'; root.hidden = true; root.style.transition = ''; root.style.opacity = '';
     html.classList.remove('front', 'front-over');
-    F.music.stop();
+    // (the page's music is not stopped here: its hand-over rings on under the band, a skip or not, and lets itself go)
     cancelAnimationFrame(raf); raf = 0;
     document.getElementById('stage')?.focus?.();
   }
@@ -668,73 +670,61 @@ export async function openFront({ boot }) {
   }
   function advance(secs) { for (let t = 0; t < secs - 1e-6; t += 1 / 60) { animate(1 / 60); tickTransition(1 / 60); } frame(); draw(); }
   // ---- what the checks read and drive (tools/test_title.mjs)
-  Object.assign(F, { root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, renderer, rig, FRONT, box, at, advance });
+  Object.assign(F, { shared, camera, mesh, view, root, menu, choose: (go) => choose(menu.findIndex((b) => b.dataset.go === go)), touch: firstTouch, comeBack, skip, renderer, rig, FRONT, box, at, advance });
   Object.defineProperty(F, 'cur', { get: () => menu[cur].dataset.go }); // a getter, read each time (Object.assign would copy its value once)
   wake();
   return F;
 }
 
 // ---------------------------------------------------------------- the page's music
-// One AudioContext of its own, made at the first touch. The sound is fetched and decoded once; an AudioBufferSourceNode loops it
-// between exact points (a compressed file left to loop by itself usually gaps). It follows the game's sound switch and volume,
-// read from the game when it is there and from what it saved before that, and it never plays once the dive has begun.
+// The Lullaby, generated as it plays (titlemusic.js). It is made at the first touch on an AudioContext that is the band's too: the game's
+// music adopts it (music.js adopt), so when Dive is pressed the page reads where the band's beats will fall (music.js grid) on the same
+// clock and lands its run on the band's downbeat. It follows the game's sound switch and volume, read from the game when it is there and
+// from what it saved before that; a fresh one is made each time the page comes back.
 function createMusic() {
-  const which = new URLSearchParams(location.search).get('music') === 'loop' ? 'loop' : 'long';
-  const spec = FRONT.music[which];
-  const M = { which, ctx: null, buffer: null, src: null, fade: null, master: null, playing: false, loopStart: 0, loopEnd: 0, duckK: 1, error: null, want: false };
-  let data = null;
-  const fetched = fetch(spec.src).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status}`)))).then((b) => { data = b; }).catch((e) => { M.error = String(e); });
+  const q = new URLSearchParams(location.search).get('music'), which = FRONT.music.sketches.includes(q) ? q : 'a';
+  const M = { which, ctx: null, tm: null, duckK: 1, want: false, error: null, handover: null, muted: false, volume: 0.7 };
   function settings() { // the game's sound switch and volume: from the game when it is there, else from what it saved
     const g = window.__game;
     if (g?.music) return { muted: !!g.music.muted, volume: g.music.params?.volume ?? 0.7 };
     const p = store.get('oarfish.music', {});
     return { muted: !!p.muted, volume: Number.isFinite(p.volume) ? p.volume / 100 : 0.7 };
   }
-  M.level = () => {
-    if (!M.master) return;
-    const s = settings(), v = s.muted ? 0 : s.volume * FRONT.music.gain * M.duckK;
-    M.master.gain.setTargetAtTime(v, M.ctx.currentTime, 0.08); M.muted = s.muted; M.volume = s.volume;
-  };
-  async function decode() {
-    if (M.buffer || !M.ctx) return M.buffer;
-    await fetched; if (!data) return null;
-    try { M.buffer = await M.ctx.decodeAudioData(data.slice(0)); } catch (e) { M.error = String(e); return null; }
-    // find the loop in what was decoded: its first sound, against where it is in the file as made
-    const ch = M.buffer.getChannelData(0), sr = M.buffer.sampleRate;
-    let i = 0; while (i < ch.length && Math.abs(ch[i]) < 0.01) i++;
-    const lead = clamp(i / sr - spec.first / 44100, 0, 0.2);
-    M.loopStart = lead; M.loopEnd = lead + spec.period / 44100;
-    if (M.loopEnd > M.buffer.duration) { M.loopEnd = M.buffer.duration; M.loopStart = M.loopEnd - spec.period / 44100; }
-    return M.buffer;
-  }
-  M.start = async () => {
+  M.level = () => { if (!M.tm) return; const s = settings(); M.tm.setVolume(s.volume, s.muted, M.duckK); M.muted = s.muted; M.volume = s.volume; };
+  Object.defineProperty(M, 'playing', { get: () => !!M.tm?.playing });
+  Object.defineProperty(M, 'gain', { get: () => (M.tm ? M.tm.gain : 0) }); // what the page's music is turned to now (its master), for the checks
+  M.start = () => {
     M.want = true;
     try {
-      if (!M.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; M.ctx = new AC(); M.master = M.ctx.createGain(); M.master.gain.value = 0; M.master.connect(M.ctx.destination); }
+      if (!M.ctx) {
+        const band = window.__game?.music;
+        M.ctx = band?.context || null;
+        if (!M.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; M.ctx = new AC(); band?.adopt(M.ctx); }
+      }
       if (M.ctx.state === 'suspended') M.ctx.resume().catch(() => {});
     } catch (e) { M.error = String(e); return; }
-    M.level();
-    if (!(await decode()) || !M.want || M.playing) return;
-    const src = M.ctx.createBufferSource(); src.buffer = M.buffer; src.loop = true; src.loopStart = M.loopStart; src.loopEnd = M.loopEnd;
-    const fade = M.ctx.createGain(); fade.gain.value = 0; src.connect(fade).connect(M.master);
-    const t = M.ctx.currentTime + 0.02;
-    fade.gain.setValueAtTime(0, t); fade.gain.linearRampToValueAtTime(1, t + FRONT.music.fadeIn);
-    src.start(t, M.loopStart);
-    Object.assign(M, { src, fade, playing: true, startedAt: t });
+    if (M.tm?.playing) return;
+    M.tm?.stop();
+    M.tm = createTitleMusic({ context: M.ctx, sketch: which, seed: (Math.random() * 2 ** 31) | 0 });
+    M.tm.start(); M.level();
   };
-  M.fadeOut = (secs) => {
+  // Dive: the band has just been started (or, back from a dive, has been playing silently all along). Its grid is on this clock if it
+  // adopted ours; if it did not (it had a context of its own), the grid is moved across by the difference of the two clocks.
+  M.dive = (band) => {
     M.want = false;
-    if (!M.playing) return;
-    const t = M.ctx.currentTime, g = M.fade.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + secs);
-    const src = M.src; src.stop(t + secs + 0.05); M.playing = false; M.src = null;
-    setTimeout(() => { if (!M.playing && !M.want) M.ctx?.suspend?.().catch(() => {}); }, (secs + 0.3) * 1000);
+    if (!M.tm?.playing) return null;
+    let grid = band?.grid?.() || null;
+    const bc = band?.context;
+    if (grid && bc && bc !== M.ctx) grid = { ...grid, at: grid.at + (M.ctx.currentTime - bc.currentTime) };
+    M.handover = M.tm.dive({ at: M.ctx.currentTime, grid, chordOf: band?.chordOf ? (bar) => band.chordOf(bar) : null, beatAt: band?.beat ? (i) => { const b = band.beat(i); return b && bc && bc !== M.ctx ? { ...b, at: b.at + (M.ctx.currentTime - bc.currentTime) } : b; } : null, energy: band?.params?.energy, swing: band?.params?.swing });
+    return M.handover;
   };
-  M.stop = () => { M.fadeOut(0.05); };
+  M.stop = () => { M.want = false; M.tm?.stop(); };
   M.duck = (k) => { M.duckK = k; M.level(); };
   M.pause = () => { M.ctx?.suspend?.().catch(() => {}); };
-  M.resume = () => { if (M.playing) M.ctx?.resume?.().catch(() => {}); };
-  M.position = () => (M.playing && M.ctx ? (M.loopStart + ((M.ctx.currentTime - M.startedAt) % (M.loopEnd - M.loopStart))) : null);
+  M.resume = () => { if (M.tm?.playing) M.ctx?.resume?.().catch(() => {}); };
   // follow the sound switch and the volume while they are changed in the band's drawer over this page
-  setInterval(() => { if (M.master && (M.playing || M.want)) M.level(); }, 250);
+  setInterval(() => { if (M.tm?.playing) M.level(); }, 250);
+  M.DREAM = DREAM;
   return M;
 }

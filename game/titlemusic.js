@@ -41,12 +41,15 @@ export const DREAM = {
     stop: 0.1, // s: the page's own notes let go this quickly at the press (time constant); their tails ring on in the room
     swell: 0.35, // s: the held chord comes up (time constant)
     fadeAt: 1.25, fadeTc: 0.55, // the page fades under the band from here (s after the press), with this time constant
+    land: 1.5, // s: the run lands on the band's first downbeat at least this long after the press (a fresh band: its second bar, at 1.78 s)
     off: 6, // s after the press: the page is silent and stops
   },
   // a: Lullaby. A slow six (two bars of it to every two of the band's at its own tempo, rubato), a music box over a held low note.
   a: {
     eighth: 0.555, rubato: 0.05, ritard: 1.12, // s; each bar wanders this much either way; the last bar of a period is drawn out
-    tune: { base: 77, v: 0.9, third: 0.3, grace: 0.18 }, // F5; loudness; how often a phrase is doubled a third under; a grace note on a long note
+    tune: { base: 77, v: 0.9, first: 0.75, attack: 0.05, third: 0.3, grace: 0.18 }, // F5; loudness, and of a phrase's first note (it was 1: at 34.4 s of the first render
+    // a phrase's first E over Am9, struck at full loudness out of a near-silence, rose 15.5 dB in 10 ms, the band's steepest being 8.8); the bell's
+    // attack in seconds (was 0.014; at 0.03 the steepest was 12.8 dB, a phrase's first G4 struck with the period's pad, held note and chord); how often a phrase is doubled a third under; a grace note on a long note
     pad: 0.4, pedal: 0.45, roll: 0.4, // loudness of the pad, the held note, the broken chord at a period's start
     breath: 4, // every fourth period the tune rests and a few bells fall in its place
     run: { voice: 'celesta', notes: [69, 71, 72, 74, 76], ticks: [6, 8, 9, 11, 12], v: 0.6 }, // A B C D into E, on the band's swung eighths of its first bar, landing on its second
@@ -139,7 +142,7 @@ export function createTitleMusic({ context = null, sketch = 'a', seed = 1 } = {}
   const rnd = seeded(seed);
   const pick = (list, recent) => { const ok = list.map((_, i) => i).filter((i) => !recent.includes(i)); const i = ok[Math.floor(rnd() * ok.length)]; recent.push(i); if (recent.length > 2) recent.shift(); return i; };
   let ctx = context, n = null, noiseBuf = null, timer = null;
-  const st = { started: false, dived: false, next: 0, period: 0, recent: [], recent2: [], last: null, pending: [], volume: 0.7, duck: 1, log: [] };
+  const st = { playing: false, started: false, dived: false, next: 0, period: 0, recent: [], recent2: [], last: null, pending: [], volume: 0.7, duck: 1, log: [] };
 
   // ---------------------------------------------------------------- the room
   function build() {
@@ -193,7 +196,7 @@ export function createTitleMusic({ context = null, sketch = 'a', seed = 1 } = {}
       src(car, t, t + tail + 0.05); src(mod, t, t + tail + 0.05);
     },
     celesta(t, m, dur, v, out = n.tune) { // the Lamplighter's: small bells, a long time dying
-      note('celesta', t, m, dur, v); const g = gain(out); env(g.gain, t, 0.014, 0.3 * v, dur);
+      note('celesta', t, m, dur, v); const g = gain(out); env(g.gain, t, DREAM.a.tune.attack, 0.3 * v, dur);
       for (const [k, level, cents] of [[1, 0.6, 0], [1, 0.3, 9], [3, 0.08, 0], [5.4, 0.025, 0]]) { const og = ctx.createGain(); og.gain.value = level; const o = osc('sine', mtof(m) * k, t, t + dur + 0.2); o.detune.value = cents; o.connect(og); og.connect(g); }
     },
     vibes(t, m, dur, v, out = n.tune) { // the angler's vibraphone, struck softer, its motor turning slowly
@@ -268,7 +271,7 @@ export function createTitleMusic({ context = null, sketch = 'a', seed = 1 } = {}
             const bar = from + Math.floor(e / 6), tt = when(bar, e % 6) + (e === 0 ? 0.04 : 0), ch = CH[P.chords[bar]], dur = Math.max(1.2, (l / 6) * len[bar] * 1.6);
             const m = fit(ch, stepOf(A.tune.base + up, LYDIAN, d));
             if (l >= 3 && rnd() < A.tune.grace) V.celesta(tt - 0.07, fit(ch, stepOf(A.tune.base + up, LYDIAN, d + 1)), 0.4, A.tune.v * 0.4); // a grace note from above
-            V.celesta(tt, m, dur, A.tune.v * (e === 0 ? 1 : 0.85));
+            V.celesta(tt, m, dur, A.tune.v * (e === 0 ? A.tune.first : 0.85));
             if (third) V.celesta(tt + 0.015, fit(ch, stepOf(A.tune.base + up, LYDIAN, d - 2)), dur, A.tune.v * 0.45);
           }
         });
@@ -343,50 +346,80 @@ export function createTitleMusic({ context = null, sketch = 'a', seed = 1 } = {}
     n.fade.gain.setValueAtTime(0.0001, at); n.fade.gain.exponentialRampToValueAtTime(1, at + DREAM.fadeIn);
   }
 
-  // ---------------------------------------------------------------- Dive: the page lands on the band's first chord and hands it the tempo
-  // `at`: when Dive was pressed, on this page's clock. `first`, `beat`, `late`: the band's first beat on this page's clock, its length,
-  // and where its swung eighth falls; by default worked out from the band's own numbers (DREAM.band) and its sliders (energy, swing).
-  function dive({ at = ctx.currentTime, energy = 0.5, swing = 0.6, first = null, beat = null, late = null } = {}) {
+  // ---------------------------------------------------------------- Dive: the page lands on the band's chord and hands it the tempo
+  // `at`: when Dive was pressed. `grid`: where the band's beats fall on this same clock (music.js grid(): a beat's time, its number,
+  // bar * 4 + beat, its length, its swung eighth); `chordOf(bar)`: the band's chord in a bar. The run lands on the first downbeat of the
+  // band's at least DREAM.dive.land after the press (a fresh band: its second bar), and the held chord is the chord of the bar before.
+  // With no grid (the tools' renders), the band's own numbers: its first beat DREAM.band.first after the press, at the length its
+  // sliders give it.
+  // `beatAt(index)`, if given, is the band's own beat once it has scheduled it ({ at, dur, late }, or null before): the run's notes then wait
+  // for the beat they fall in and are put exactly where the band put it (its tempo can move a little once the dive is let go and the
+  // game tells it how things are, so a guess made at the press could drift by some milliseconds over the bar).
+  function dive({ at = ctx.currentTime, grid = null, chordOf = null, beatAt = null, energy = 0.5, swing = 0.6 } = {}) {
     if (!st.started || st.dived) return null;
     st.dived = true;
     const D = DREAM.dive, Bd = DREAM.band;
-    beat ??= 60 / (lerp(108, 172, energy) * (1 + 0.1 * Bd.intensity)); first ??= at + Bd.first; late ??= lerp(0.5, 0.74, swing);
-    const tick = (g) => first + Math.floor(g / 3) * beat + [0, 1 / 3, late][g % 3] * beat; // the band's ticks, 12 to its bar
+    grid ??= { at: at + Bd.first, index: 0, dur: 60 / (lerp(108, 172, energy) * (1 + 0.1 * Bd.intensity)), late: lerp(0.5, 0.74, swing) };
+    const beat = grid.dur, late = grid.late, barAt = (k) => grid.at + (4 * k - grid.index) * beat;
+    let k = Math.ceil(grid.index / 4); while (barAt(k) < at + D.land) k++; // the bar the run lands on
+    const first = barAt(k - 1), tick = (g) => first + Math.floor(g / 3) * beat + [0, 1 / 3, late][g % 3] * beat; // the band's ticks in the bar before it, 12 to a bar
+    const ch = chordOf ? chordOf(k - 1) : CH.Dm9;
     // what had not started yet never will; what is sounding lets go into the room
     for (const x of st.pending) if (x.t > at + 0.005) { try { x.o.stop(at); } catch { /* already stopped */ } }
     st.pending = [];
     n.live.gain.setTargetAtTime(0, at, D.stop);
     n.hand.gain.setValueAtTime(0, at); n.hand.gain.setTargetAtTime(1, at, D.swell);
-    // the band's first chord, held, with its D under it
-    const S = DREAM[sketch], hold = D.off;
-    V.pad(at, Bd.pad, hold, 1, n.hand);
-    if (sketch === 'a') V.pedal(at, Bd.root, hold - 1.2, DREAM.a.pedal * 1.2, n.hand);
-    if (sketch === 'b') { roll('vibes', at + 0.02, Bd.voicing, 3.5, 0.4, 0.07, n.hand); V.cello(at + 0.05, Bd.root + 12, 3, 0.55, n.hand); }
-    if (sketch === 'c') { roll('piano', at + 0.02, Bd.voicing, 3, 0.4, 0.018, n.hand); V.bass(at + 0.02, Bd.root, 2.5, 0.5, n.hand); for (let b = 1; b < 4; b++) V.brush(tick(b * 3), 0.35 + 0.1 * b, n.hand); } // the brushes pick up the band's beat
-    // a run up the scale in the band's tempo, into its second bar (its first chord still)
+    // the band's chord, held as its pad and its piano voice it, with its root under it (the first band's first: Dm9 over D)
+    const later = []; // what is played on the band's beats: { g: tick in the bar before the landing (12: the landing), play(t) }
+    const root = bassOf(ch, 40), pad = voicing(ch, 50).slice(0, 3).concat(bassOf(ch, 43) + 12), keys = voicing(ch), S = DREAM[sketch], hold = D.off;
+    V.pad(at, pad, hold, 1, n.hand);
+    if (sketch === 'a') V.pedal(at, root, hold - 1.2, DREAM.a.pedal * 1.2, n.hand);
+    if (sketch === 'b') { roll('vibes', at + 0.02, keys, 3.5, 0.4, 0.07, n.hand); V.cello(at + 0.05, root + 12, 3, 0.55, n.hand); }
+    if (sketch === 'c') { roll('piano', at + 0.02, keys, 3, 0.4, 0.018, n.hand); V.bass(at + 0.02, root, 2.5, 0.5, n.hand); for (let b = 1; b < 4; b++) if (tick(b * 3) > at + 0.05) later.push({ g: b * 3, play: (t) => V.brush(t, 0.35 + 0.1 * b, n.hand) }); } // the brushes pick up the band's beat
+    // a run up the scale in the band's tempo, into the downbeat. The lullaby's lands on the chord's ninth (Dm9: E), a step at a time up
+    // the white notes; the waltz's and the sleeper's are written for Dm9 (they are for listening to, not shipped)
     const R = S.run, voice = R.voice;
+    let notes = R.notes;
+    if (sketch === 'a') { let m = 48 + ch.root + ch.voice[3]; while (m < 72) m += 12; while (m >= 84) m -= 12; notes = [m]; while (notes.length < R.notes.length) { let x = notes[0] - 1; while (!LYDIAN.includes((((x - 5) % 12) + 12) % 12)) x--; notes.unshift(fit(ch, x)); } }
     R.ticks.forEach((g, i) => {
-      if (tick(g) < at + 0.05) return; // (if the band's grid starts too soon for the first notes)
-      const lastOne = i === R.ticks.length - 1, m = R.land && lastOne ? R.land : R.notes[Math.min(i, R.notes.length - 1)];
-      V[voice](tick(g), m, lastOne ? 2.8 : beat * 0.6, R.v * (0.75 + 0.25 * (i / (R.ticks.length - 1))), n.hand);
+      if (tick(g) < at + 0.05) return; // (a grid that leaves too little room: the run starts later)
+      const lastOne = i === R.ticks.length - 1, m = R.land && lastOne ? R.land : notes[Math.min(i, notes.length - 1)];
+      later.push({ g, play: (t, b) => { V[voice](t, m, lastOne ? 2.8 : b * 0.6, R.v * (0.75 + 0.25 * (i / (R.ticks.length - 1))), n.hand); if (lastOne) st.handover.land = t; } });
     });
+    // each on its beat: the band's own, once it has scheduled it; or, with nothing to ask, where the grid says
+    const base = (k - 1) * 4;
+    st.later = later.map((x) => ({ ...x, index: base + Math.floor(x.g / 3), part: x.g % 3 }));
+    st.beatAt = beatAt;
     if (n.fade.gain.cancelAndHoldAtTime) n.fade.gain.cancelAndHoldAtTime(at); n.fade.gain.setTargetAtTime(0, at + D.fadeAt, D.fadeTc); // held where it is (a fade-in cut short stays where it got to), then let go
-    st.handover = { at, first, beat, late, land: tick(12), chord: 'Dm9', notes: [Bd.root, ...Bd.pad, ...Bd.voicing] };
+    st.handover = { at, first, beat, late, land: beatAt ? null : tick(12), guess: tick(12), bar: k, chord: ch, notes: [root, ...pad, ...keys] };
+    if (beatAt) hand(); else { for (const x of st.later) x.play(tick(x.g), beat); st.later = []; }
     return st.handover;
   }
 
+  // the hand-over's notes whose beat the band has now scheduled
+  function hand() {
+    if (!st.later?.length || !st.beatAt) return;
+    st.later = st.later.filter((x) => { const b = st.beatAt(x.index); if (!b) return true; x.play(b.at + [0, 1 / 3, b.late][x.part] * b.dur, b.dur); return false; });
+  }
+  // after a dive: the page's graph is let go (the context is the band's, and goes on)
+  function done() { if (timer) { clearInterval(timer); timer = null; } st.playing = false; try { n?.master.disconnect(); } catch { /* gone */ } }
   const api = {
     DREAM, state: st, sketch,
-    // at the first touch: make the context (title.js does this with its own), start, fade in
+    get playing() { return st.playing; },
+    get handover() { return st.handover || null; },
+    // at the first touch, on `context` if one is given (title.js gives the band's): start and fade in
     start() {
       try { if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; ctx = new AC(); } if (ctx.state === 'suspended') ctx.resume().catch(() => {}); } catch { return false; }
-      begin(ctx.currentTime + 0.05); schedule(ctx.currentTime + 1);
-      if (!timer) timer = setInterval(() => { schedule(ctx.currentTime + 1); if (st.dived && ctx.currentTime > st.handover.at + DREAM.dive.off) { clearInterval(timer); timer = null; ctx.suspend?.().catch(() => {}); } }, 120);
+      if (st.started) return true;
+      begin(ctx.currentTime + 0.05); schedule(ctx.currentTime + 1); st.playing = true;
+      timer = setInterval(() => { schedule(ctx.currentTime + 1); hand(); if (st.dived && ctx.currentTime > st.handover.at + DREAM.dive.off) done(); }, 25); // often enough to catch each of the band's beats ahead of it (it schedules 0.16 s ahead)
       return true;
     },
-    dive(o) { return dive(o); },
-    setVolume(v, muted = false) { st.volume = muted ? 0 : v; level(); },
+    dive(o) { const h = dive(o); if (h) st.playing = false; return h; },
+    stop() { if (!n) return done(); const t = ctx.currentTime; n.fade.gain.cancelScheduledValues(t); n.fade.gain.setTargetAtTime(0, t, 0.05); st.dived = true; setTimeout(done, 400); st.playing = false; },
+    setVolume(v, muted = false, duck = st.duck) { st.volume = muted ? 0 : v; st.duck = clamp(duck, 0, 1); level(); },
     duck(k) { st.duck = clamp(k, 0, 1); level(0.18); },
+    get gain() { return n ? n.master.gain.value : 0; },
     // for the tools: `seconds` on an OfflineAudioContext, Dive pressed at `diveAt` (or never)
     async render(seconds, { diveAt = null, ...o } = {}) {
       begin(0);

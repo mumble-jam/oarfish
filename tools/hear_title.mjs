@@ -46,7 +46,7 @@ for (const sk of WHICH) {
     }, 0.01);
     const d = band.describe(), mood = B.MOODS.find((m) => m.name === d.mood);
     const bt = [...beats.values()].sort((a, b) => a.index - b.index).slice(0, 9).map((b) => ({ index: b.index, at: +b.at.toFixed(4), dur: +b.dur.toFixed(4) }));
-    return { L: pack(pbuf.getChannelData(0)), R: pack(pbuf.getChannelData(1)), bL: pack(bbuf.getChannelData(0)), bR: pack(bbuf.getChannelData(1)), hand: tm.state.handover, band: { mood: d.mood, key: d.key, bpm: d.bpm, first: mood.bars[0], beats: bt }, notes: tm.state.log.length, periods: tm.state.period };
+    return { L: pack(pbuf.getChannelData(0)), R: pack(pbuf.getChannelData(1)), bL: pack(bbuf.getChannelData(0)), bR: pack(bbuf.getChannelData(1)), hand: tm.state.handover, band: { mood: d.mood, key: d.key, bpm: d.bpm, first: mood.bars[0], beats: bt }, notes: tm.state.log.length, periods: tm.state.period, log: tm.state.log.filter((x) => x.t < PRESS) };
   }, { sk, PRESS, AFTER, SR, RELEASE, SEED });
   results[sk] = r;
 }
@@ -78,7 +78,8 @@ function onsets(L, R) {
   for (let o = 0; o + W <= L.length; o += W) { let s = 0; for (let i = o; i < o + W; i++) s += L[i] * L[i] + R[i] * R[i]; lv.push(10 * Math.log10(s / (2 * W) + 1e-12)); }
   const rise = []; for (let i = 1; i < lv.length; i++) if (lv[i] > -60) rise.push(lv[i] - lv[i - 1]);
   rise.sort((a, b) => a - b); const q = (p) => rise[Math.min(rise.length - 1, Math.floor(p * rise.length))];
-  return { p99: q(0.99), max: rise[rise.length - 1], per10s: rise.filter((x) => x > 6).length / (L.length / SR / 10) };
+  let at = 0, best = -1; for (let i = 1; i < lv.length; i++) if (lv[i] > -60 && lv[i] - lv[i - 1] > best) { best = lv[i] - lv[i - 1]; at = i * 0.01; }
+  return { p99: q(0.99), max: rise[rise.length - 1], per10s: rise.filter((x) => x > 6).length / (L.length / SR / 10), at };
 }
 const step = (L, R) => { let m = 0; for (const x of [L, R]) for (let i = 1; i < x.length; i++) m = Math.max(m, Math.abs(x[i] - x[i - 1])); return m; };
 const db = (x) => 20 * Math.log10(x);
@@ -105,9 +106,9 @@ for (const [sk, r] of Object.entries(results)) {
     peakDb: +db(peak).toFixed(2), clipped: clip, pagePeakDb: +db(Math.max(...pg.map((x) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0)))).toFixed(2),
     pageRmsDb: +rmsDb(...pg).toFixed(1), pageLufs: +lufs(...pg).toFixed(1), bandLufs: +lufs(...bd).toFixed(1),
     hfPage: +(sp.hf * 100).toFixed(2), hfBand: +(sb.hf * 100).toFixed(2), centroidPage: Math.round(sp.centroid), centroidBand: Math.round(sb.centroid),
-    onsetP99Page: +op.p99.toFixed(2), onsetP99Band: +ob.p99.toFixed(2), onsetMaxPage: +op.max.toFixed(1), onsetMaxBand: +ob.max.toFixed(1), sharpPer10sPage: +op.per10s.toFixed(1), sharpPer10sBand: +ob.per10s.toFixed(1),
+    onsetP99Page: +op.p99.toFixed(2), onsetP99Band: +ob.p99.toFixed(2), onsetMaxPage: +op.max.toFixed(1), onsetMaxAt: +(op.at + P0).toFixed(2), onsetNotes: r.log.filter((x) => Math.abs(x.t - (op.at + P0)) < 0.06).map((x) => `${x.voice} ${x.m == null ? '' : nm(x.m)} at ${x.t.toFixed(3)} v ${(+x.v).toFixed(2)}`), onsetMaxBand: +ob.max.toFixed(1), sharpPer10sPage: +op.per10s.toFixed(1), sharpPer10sBand: +ob.per10s.toFixed(1),
     stepAtPress: +step(...atPress).toFixed(4), stepHandover: +step(...around).toFixed(4), stepPage: +step(...pageMid).toFixed(4), stepBand: +step(...bandMid).toFixed(4),
-    handChord: `${H.chord} (${H.notes.map(nm).join(' ')})`, bandFirstChord: `${r.band.mood} in ${r.band.key}: ${r.band.first[1]} on the tonic`, bandBpm: r.band.bpm,
+    handChord: H.notes.map(nm).join(' '), bandFirstChord: `${r.band.mood} in ${r.band.key}: ${r.band.first[1]} on the tonic`, bandBpm: r.band.bpm,
     predictedFirst: +(H.first - PRESS).toFixed(4), actualFirst: firstBeat ? firstBeat.at : null, predictedBeat: +H.beat.toFixed(4), actualBeat: firstBeat ? firstBeat.dur : null,
     runLands: +(H.land - PRESS).toFixed(4), bandBar2: bar1 ? bar1.at : null,
   };
