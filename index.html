@@ -327,6 +327,275 @@ button:disabled { opacity: 0.4; cursor: default; }
   #drawer, #card, #hint, #fade { transition: none; }
   .scale.low #scale-bar, #stage.hurt #pulse, #stage.grow #pulse { animation: none; }
 }
+
+/* ------------------------------------------------------------------------------------------------------------------------------
+   The pause menu: a leaf of the book laid open over the dive (markup below in #pause, behaviour in game/leaf.js).
+   The plate (the dive, the front page) speaks in the Fell faces; the book's text pages speak in Old Standard, a modern face of the
+   plate's own century. Paper and ink are the front page's. The ornaments are from the Règne animal's text volumes: a row of pearls
+   over a chapter's opening, the swelled rule with three rings, dot leaders, and the ruled head of the Table méthodique.
+   Nothing here carries meaning by colour: the one action is the largest word, "on" is a pearl with the word beside it, and the
+   place you are is the engraver's rule with a lozenge at each end, as on the front page.
+   ------------------------------------------------------------------------------------------------------------------------------ */
+@font-face { font-family: "Old Standard TT"; src: url(menu/fonts/old-standard-400.woff2) format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Old Standard TT"; src: url(menu/fonts/old-standard-400-italic.woff2) format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Old Standard TT"; src: url(menu/fonts/old-standard-700.woff2) format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+#pause { --pi: #3b3026; --pp: #f3eedb; --pq: #665848; --os: "Old Standard TT", "Bodoni 72", Didot, "Times New Roman", serif; --k: 1;
+  --loz: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 7'%3E%3Cpath d='M3 0L6 3.5L3 7L0 3.5Z' fill='%233b3026'/%3E%3C/svg%3E");
+  --dots: radial-gradient(circle, var(--pi) 0 1px, transparent 1.35px) 0 100% / 10px 5px repeat-x;
+  --pearl: radial-gradient(circle at 4.6px 4.1px, var(--pp) 0 1.5px, var(--pi) 1.9px);
+  padding: 0; overflow: hidden; place-items: center; place-content: center; background: color-mix(in srgb, var(--ink) 60%, transparent); }
+#pause.noting { padding: 28px; overflow-y: auto; place-items: safe center; }
+#pause.noting > .leaf { display: none; }
+/* while the leaf is open the plate keeps its lettering sharp over the veil; a window too small for both lets the lettering go */
+#stage.paused:not(.leaf-tight):not(.lib) > .plate, #stage.paused:not(.leaf-tight):not(.lib) > .lettering.book, #stage.paused:not(.leaf-tight):not(.lib) > .lettering.class, #stage.paused:not(.leaf-tight):not(.lib) > .lettering.where { z-index: 5; }
+#stage.paused:not(.cine) > .top > #music-tab, #stage.paused.leaf-single:not(.cine):not(.lib) > .top { display: none; } /* its dials are on the leaf's page while the dive is paused */
+
+.leaf { display: flex; flex: none; width: 1280px; height: 860px; transform: scale(var(--k)); border-radius: 2px; color: var(--pi); font: 400 19px/1.3 var(--os); text-align: left;
+  background: var(--pp) url(menu/paper.jpg) center / 100% 100% no-repeat; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 34px 90px rgba(2, 16, 24, 0.6), 0 3px 10px rgba(2, 16, 24, 0.4); }
+.leaf > section { width: 640px; height: 860px; box-sizing: border-box; display: flex; flex-direction: column; min-width: 0; }
+.leaf .verso { padding: 38px 54px 30px 62px; align-items: center; }
+.leaf .recto { padding: 38px 62px 30px 54px; }
+/* the leaf is made smaller for a smaller window (leaf.js sets --k): by zoom where the browser has it, so that it takes the room it shows and nothing overflows */
+@supports (zoom: 2) { .leaf { transform: none; zoom: var(--k); } }
+#pause .leaf button { all: unset; box-sizing: border-box; cursor: pointer; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+#pause .leaf button:focus { outline: none; }
+#pause .leaf button:disabled { opacity: 0.4; cursor: default; }
+#pause .leaf button[hidden], #pause .leaf [hidden] { display: none; }
+#pause .leaf p { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
+
+/* the focus: one piece, so that a word can also carry its asterisk. A rule under the word, a lozenge at each end */
+.leaf .fx, .leaf .nm, .leaf .w, .leaf .dial > label { position: relative; }
+.leaf .fx::before, .leaf .nm::before, .leaf .w::before, .leaf .dial > label::before { content: ""; position: absolute; left: -12px; right: -12px; bottom: var(--fy, 3px); height: 7px; opacity: 0; transition: opacity 0.14s; pointer-events: none;
+  background: var(--loz) left center / 6px 7px no-repeat, var(--loz) right center / 6px 7px no-repeat, linear-gradient(var(--pi), var(--pi)) center / calc(100% - 18px) 1px no-repeat; }
+.leaf button.fx:focus::before, .leaf button.fx:hover::before, .leaf button:focus > .w::before, .leaf button:hover > .w::before, .leaf button:focus > .nm::before, .leaf .sw:focus-within > .nm::before, .leaf .rw:focus-within > .nm::before, .leaf .dial:focus-within > label::before { opacity: 1; }
+.leaf .cur > .nm::after, .leaf .dial.cur > label::after { content: "*"; font-style: italic; }
+
+/* the left page */
+.lf-name { display: flex; align-items: center; gap: 14px; font: 400 15px/1 var(--font-caps) !important; letter-spacing: 0.34em; white-space: nowrap; }
+.lf-name::before, .lf-name::after { content: ""; width: 44px; height: 1px; background: currentColor; opacity: 0.55; }
+.lf-name span { padding-left: 0.34em; }
+.lf-pearls { width: 520px; height: 12px; margin-top: 30px; flex: none; background: radial-gradient(circle at 5.2px 4.7px, var(--pp) 0 1.7px, var(--pi) 2.1px 4.8px, transparent 5.2px) 0 0 / 13px 12px repeat-x; }
+#pause .leaf h2 { margin: 40px 0 0; padding-left: 0.2em; font: 700 60px/62px var(--os); letter-spacing: 0.2em; text-transform: uppercase; text-align: center; }
+.lf-swell { display: block; flex: none; margin-top: 28px; }
+#pause .leaf #btn-resume { position: relative; margin-top: 30px; padding: 0 8px; font: italic 400 62px/66px var(--font-display); letter-spacing: 0.02em; white-space: nowrap; --fy: -6px; }
+#pause .leaf #btn-resume.long { font-size: 40px; line-height: 66px; }
+#pause .leaf #btn-resume::before { left: -6px; right: -6px; }
+.lf-contents { align-self: stretch; margin-top: 36px; display: flex; flex-direction: column; }
+#pause .leaf .lf-contents button { display: flex; align-items: baseline; height: 44px; padding-left: 17px; position: relative; }
+.lf-contents .w { font: 400 21px/44px var(--os); white-space: nowrap; --fy: 5px; }
+.leaf .ld { flex: 1; min-width: 26px; height: 5px; margin: 0 9px; opacity: 0.7; background: var(--dots); }
+.lf-contents em { font: italic 400 17px/44px var(--os); color: var(--pq); white-space: nowrap; }
+.lf-contents button[aria-current="true"] .w { font-weight: 700; }
+.lf-contents button[aria-current="true"]::before { content: ""; position: absolute; left: 0; top: 50%; width: 6px; height: 7px; margin-top: -3px; background: var(--loz) center / 6px 7px no-repeat; }
+#pause .leaf #pause-msg { margin-top: 8px; min-height: 0; text-align: center; font: italic 400 15px/1.35 var(--os); color: var(--pq); text-wrap: balance; }
+.lf-leave { margin-top: 14px; padding-top: 20px; position: relative; display: flex; align-items: center; gap: 20px; }
+.lf-leave::before { content: ""; position: absolute; top: 0; left: 50%; width: 56px; height: 1px; margin-left: -28px; background: var(--pi); opacity: 0.7; }
+#pause .leaf .lf-leave button, #pause .leaf .lf-acts button, #pause .leaf .preset button { position: relative; padding: 7px 0; font: 400 14px/1 var(--font-caps); letter-spacing: 0.2em; white-space: nowrap; --fy: -1px; }
+.leaf .lz { width: 6px; height: 7px; flex: none; opacity: 0.5; background: var(--loz) center / 6px 7px no-repeat; }
+.lf-hints { margin-top: auto !important; display: flex; align-items: center; justify-content: center; gap: 22px; font: italic 400 15px/1 var(--os) !important; color: var(--pq) !important; }
+.lf-hints span { display: inline-flex; align-items: center; gap: 6px; }
+.leaf .kc { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 22px; height: 22px; padding: 0 5px; border: 1px solid var(--pi); border-radius: 2px; font: 700 12px/1 var(--os); font-style: normal; letter-spacing: 0.04em; color: var(--pi); }
+
+/* the right page: one chapter at a time */
+.leaf .ch { display: none; flex: 1; min-height: 0; flex-direction: column; }
+#pause[data-ch="dive"] .ch[data-ch="dive"], #pause[data-ch="settings"] .ch[data-ch="settings"], #pause[data-ch="keys"] .ch[data-ch="keys"], #pause[data-ch="band"] .ch[data-ch="band"], #pause[data-ch="work"] .ch[data-ch="work"] { display: flex; }
+.leaf h3 { margin: 0; text-align: center; padding-left: 0.18em; font: 700 16px/1 var(--os); letter-spacing: 0.18em; text-transform: uppercase; }
+.leaf h3::after { content: ""; display: block; width: 36px; height: 1px; margin: 14px auto 0; background: var(--pi); opacity: 0.7; }
+.leaf .grp { display: flex; align-items: center; gap: 12px; margin-top: 20px; min-height: 28px; font: 400 13px/1 var(--os); letter-spacing: 0.2em; text-transform: uppercase; white-space: nowrap; flex: none; }
+.leaf .grp::after { content: ""; flex: 1; height: 1px; background: var(--pi); opacity: 0.45; }
+.leaf .rw, .leaf .sw, #pause .leaf button.sw { display: flex; align-items: baseline; min-height: 40px; flex: none; }
+#pause .leaf button.sw { width: 100%; }
+.leaf label.sw { cursor: pointer; }
+.leaf .nm { font: 400 19px/40px var(--os); white-space: nowrap; }
+.leaf .vl { font: 400 18px/1 var(--os); white-space: nowrap; font-variant-numeric: lining-nums; }
+.leaf .fn { display: none !important; }
+.leaf .st { display: inline-flex; align-items: baseline; gap: 8px; min-width: 2.6em; font: italic 400 17px/1 var(--os); white-space: nowrap; }
+.leaf input[type="checkbox"] { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; margin: 0 8px 0 0; flex: none; align-self: center; box-sizing: border-box; border: 1.6px solid var(--pi); border-radius: 50%; background: none; outline: none; cursor: pointer; }
+.leaf input[type="checkbox"]:checked { border: 0; background: var(--pearl); }
+.leaf input[type="checkbox"] + .st::after { content: "off"; }
+.leaf input[type="checkbox"]:checked + .st::after { content: "on"; }
+.leaf button.sw > .st::before, #pause .leaf #music-mute::before { content: ""; width: 12px; height: 12px; flex: none; align-self: center; box-sizing: border-box; border: 1.6px solid var(--pi); border-radius: 50%; }
+.leaf button.sw[aria-pressed="true"] > .st::before, #pause .leaf #music-mute[aria-pressed="true"]::before { border: 0; background: var(--pearl); }
+.leaf button.sw > .st::after { content: "off"; }
+.leaf button.sw[aria-pressed="true"] > .st::after { content: "on"; }
+/* a choice of two: the one chosen, between two small arrows */
+.leaf .chooser { display: inline-flex; align-items: baseline; gap: 9px; cursor: pointer; }
+.leaf .chooser::before, .leaf .chooser::after { content: ""; width: 6px; height: 9px; flex: none; align-self: center; background: var(--pq); }
+.leaf .chooser::before { clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+.leaf .chooser::after { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+#pause .leaf .chooser button { font: 400 18px/40px var(--os); white-space: nowrap; }
+#pause .leaf .chooser button[aria-pressed="false"] { display: none; }
+#pause .leaf .chooser button:focus, #pause .leaf .chooser button:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 6px; }
+
+/* a dial is the plate's scale bar: a ruled line with ticks, a lozenge on the value */
+.leaf .dial { display: grid; grid-template-columns: auto minmax(26px, 1fr) 220px; grid-template-rows: 40px 18px; gap: 0; flex: none; position: relative; }
+.leaf .dial > label { grid-area: 1 / 1; font: 400 19px/40px var(--os); letter-spacing: 0; white-space: nowrap; justify-self: start; }
+.leaf .dial::before { content: ""; grid-area: 1 / 2; align-self: start; height: 5px; margin: 22px 9px 0; opacity: 0.7; background: var(--dots); }
+.leaf .dial > input[type="range"] { grid-area: 1 / 3; align-self: start; margin: 13px 0 0; }
+.leaf .dial > .lo, .leaf .dial > .hi { grid-area: 2 / 3; align-self: start; margin-top: -2px; font: italic 400 13px/1 var(--os); color: var(--pq); white-space: nowrap; }
+.leaf .dial > .lo { justify-self: start; }
+.leaf .dial > .hi { justify-self: end; text-align: right; }
+.leaf .dial > p { display: none; }
+.leaf .dial > .live { display: none; }
+.leaf input[type="range"] { -webkit-appearance: none; appearance: none; --n: 10; width: 220px; height: 22px; margin: 0; padding: 0; border: 0; outline: none; cursor: pointer;
+  background: linear-gradient(var(--pi), var(--pi)) 0 13px / 100% 1px no-repeat, linear-gradient(var(--pi), var(--pi)) 0 5px / 1px 9px no-repeat, linear-gradient(var(--pi), var(--pi)) 100% 5px / 1px 9px no-repeat,
+    repeating-linear-gradient(90deg, var(--pi) 0 1px, transparent 1px calc((100% - 1px) / var(--n))) 0 9px / 100% 5px no-repeat; }
+.leaf .dial.n3 input { --n: 3; }
+.leaf .dial.n1 input { --n: 1; }
+.leaf input[type="range"]::-webkit-slider-runnable-track { height: 22px; background: none; border: 0; }
+.leaf input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 15px; margin-top: 6px; border: 0; border-radius: 0; box-shadow: none; background: var(--pi); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.leaf input[type="range"]::-moz-range-track { height: 22px; background: none; border: 0; }
+.leaf input[type="range"]::-moz-range-thumb { width: 10px; height: 15px; border: 0; border-radius: 0; background: var(--pi); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); transform: translateY(2.5px); }
+#pause:not(.has-pad) .leaf .pad-only { display: none; }
+
+/* the note at the foot: the long explanation, only for the row in hand */
+.leaf .lf-foot { margin-top: auto; padding-top: 10px; min-height: 54px; flex: none; }
+.leaf .lf-foot::before { content: ""; display: block; width: 84px; height: 1px; margin-bottom: 9px; background: var(--pi); opacity: 0.8; }
+.leaf .lf-foot:has(> p:empty)::before { opacity: 0; }
+#pause .leaf .lf-foot p { font: italic 400 15px/1.4 var(--os); color: var(--pq); text-wrap: pretty; }
+
+/* this dive */
+.leaf .fact { min-height: 36px; }
+.leaf .fact .nm { line-height: 36px; }
+.leaf h3 + .fact { margin-top: 16px; }
+.lf-body { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px; flex: none; }
+.lf-body .vl { padding-bottom: 17px; }
+#lf-ruler svg { display: block; overflow: visible; }
+.lf-th { display: grid; grid-template-columns: minmax(0, 1fr) 92px; margin-top: 26px; flex: none; }
+.lf-th .grp { margin: 0 12px 0 0; align-self: end; padding-bottom: 5px; }
+.lf-th b { padding: 7px 0 6px; text-align: center; font: 700 12px/1.15 var(--os); border-top: 3px solid var(--pi); border-bottom: 1px solid var(--pi); border-left: 3px double var(--pi); border-right: 3px double var(--pi); }
+#lf-shells { list-style: none; margin: 0; padding: 0; flex: none; }
+#lf-shells li { display: grid; grid-template-columns: minmax(0, 1fr) 92px; }
+#lf-shells .sh { padding: 4px 0; }
+#lf-shells li:first-child .sh, #lf-shells li:first-child .sg { padding-top: 12px; }
+#lf-shells li:last-child .sh { padding-bottom: 12px; }
+#lf-shells li:last-child .sg { border-bottom: 1px solid var(--pi); }
+#lf-shells .hd { display: flex; align-items: baseline; height: 32px; }
+#lf-shells .hd svg { width: 22px; height: 22px; flex: none; align-self: center; margin-right: 9px; }
+#lf-shells .hd b { font: 400 21px/32px var(--os); }
+#pause .leaf #lf-shells p { margin: 0 12px 0 31px; font: 400 15px/1.4 var(--os); color: var(--pq); text-wrap: pretty; }
+#lf-shells .sg { padding-top: 4px; text-align: center; font: 400 21px/32px var(--os); font-variant-numeric: lining-nums; border-left: 3px double var(--pi); border-right: 3px double var(--pi); }
+#lf-shells li.none { display: block; }
+#pause .leaf #lf-shells li.none p { margin: 12px 0 0; }
+.lf-th.none b { visibility: hidden; }
+
+/* keys: the Table méthodique. The game writes the cells (showBinds in main.js); the rules of the two columns are drawn behind them */
+#pause .leaf #bind-grid { --c1: 62px; --c2: 62px; --c3: 116px; display: grid; grid-template-columns: minmax(0, 1fr) var(--c1) var(--c2) var(--c3); gap: 0; row-gap: 0; margin-top: 16px; align-items: center; flex: none; font: 400 16px/25px var(--os);
+  background: linear-gradient(var(--pi), var(--pi)) calc(100% - 240px) 0 / 1px 100% no-repeat, linear-gradient(var(--pi), var(--pi)) calc(100% - 238px) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--pi), var(--pi)) calc(100% - 116px) 0 / 1px 100% no-repeat, linear-gradient(var(--pi), var(--pi)) calc(100% - 114px) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--pi), var(--pi)) 100% 0 / 1px 100% no-repeat, linear-gradient(var(--pi), var(--pi)) calc(100% - 2px) 0 / 1px 100% no-repeat,
+    linear-gradient(var(--pi), var(--pi)) 100% 100% / 241px 1px no-repeat; padding-bottom: 5px; }
+#pause .leaf #bind-grid > b { align-self: stretch; padding: 8px 0 7px; margin-bottom: 5px; text-align: center; font: 700 12px/1 var(--os); letter-spacing: 0; border-top: 3px solid var(--pi); border-bottom: 1px solid var(--pi); }
+#pause .leaf #bind-grid > b:nth-child(1) { visibility: hidden; }
+#pause .leaf #bind-grid > b:nth-child(2) { grid-column: 2 / 4; margin-left: 0; }
+#pause .leaf #bind-grid > b:nth-child(3) { display: none; }
+#pause .leaf #bind-grid > span:not(.fixed) { display: flex; align-items: baseline; height: 25px; padding-left: 2px; white-space: nowrap; overflow: hidden; }
+#pause .leaf #bind-grid > span:not(.fixed)::after { content: ""; flex: 1; min-width: 14px; height: 5px; margin: 0 9px; opacity: 0.7; background: var(--dots); }
+#pause .leaf #bind-grid > button { justify-self: center; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 21px; padding: 0 5px; border: 1px solid var(--pi); border-radius: 2px; font: 700 12px/1 var(--os); letter-spacing: 0.02em; white-space: nowrap; }
+#pause .leaf #bind-grid > button.none { border-color: transparent; color: var(--pq); font-weight: 400; }
+#pause .leaf #bind-grid > button:focus, #pause .leaf #bind-grid > button:hover { background: var(--pi); color: var(--pp); }
+#pause .leaf #bind-grid > button.wait { border-color: transparent; background: none; color: var(--pi); font: italic 400 13px/1 var(--os); text-decoration: underline; text-underline-offset: 4px; }
+#pause .leaf #bind-grid > .fixed { justify-self: center; font: 400 14px/25px var(--os); color: var(--pq); text-align: center; white-space: nowrap; }
+.lf-acts { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; flex: none; }
+.lf-acts + .lf-acts { margin-top: 2px; }
+.lf-acts label { font: 400 14px/1 var(--font-caps); letter-spacing: 0.2em; white-space: nowrap; }
+#pause .leaf select, #pause .leaf input[type="text"] { min-width: 0; flex: 0 1 auto; width: 170px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--pi); border-radius: 0; outline: none; background: none; color: var(--pi); font: 400 16px/1.2 var(--os); }
+.leaf input[type="text"]::placeholder { color: var(--pq); font-style: italic; opacity: 1; }
+#pause .leaf select:focus, #pause .leaf input[type="text"]:focus { border-bottom-width: 2px; padding-bottom: 3px; }
+
+/* the band: the drawer's dials, set two abreast (leaf.js carries them here while the dive is paused, and back) */
+#lf-band { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 48px; row-gap: 11px; align-content: start; margin-top: 12px; flex: none; }
+#lf-band > h2 { display: none; }
+#pause .leaf #lf-band > .now { grid-column: 1 / -1; min-height: 20px; margin-bottom: 4px; text-align: center; font: italic 400 15px/20px var(--os); color: var(--pq); }
+#pause .leaf #music-mute { align-self: start; justify-self: start; display: inline-flex; align-items: baseline; gap: 9px; margin-top: 2px; font: 400 18px/22px var(--os); white-space: nowrap; }
+#lf-band > .grp { grid-column: 1 / -1; margin-top: 4px; }
+#lf-band > .scope { grid-column: 1 / -1; display: flex; align-items: baseline; min-height: 34px; }
+#lf-band > .scope .nm { line-height: 34px; font-size: 18px; }
+#pause .leaf #lf-band .chooser button { line-height: 34px; }
+#lf-band .dial { grid-template-columns: 1fr 1fr; grid-template-rows: 22px 24px 15px; }
+#lf-band .dial > label { grid-area: 1 / 1 / 2 / 3; font: 400 18px/22px var(--os); --fy: -4px; }
+#lf-band .dial::before { display: none; }
+#lf-band .dial > input { grid-area: 2 / 1 / 3 / 3; width: 100%; margin: 2px 0 0; }
+#lf-band .dial > .lo { grid-area: 3 / 1; margin-top: 2px; }
+#lf-band .dial > .hi { grid-area: 3 / 2; margin-top: 2px; }
+#lf-band .dial > .live { display: block; grid-area: 2 / 1 / 3 / 3; align-self: start; justify-self: start; position: relative; height: 0; margin: 15.5px 0 0; border-radius: 0; background: none; opacity: 1; pointer-events: none; }
+#lf-band .dial > .live::after { content: ""; position: absolute; right: -4px; top: -4px; width: 8px; height: 8px; box-sizing: border-box; border: 1.2px solid var(--pi); border-radius: 50%; background: var(--pp); }
+#lf-band > .preset { grid-column: 1 / -1; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 14px; margin-top: 6px; padding: 0; border: 0; }
+#lf-band > .preset label { display: none; }
+#lf-band > .preset .row { display: flex; align-items: center; gap: 12px; }
+#lf-band > .preset #preset-msg { display: none; }
+#pause .leaf #lf-band > .preset input { width: 190px; font: 400 13px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+/* the workbench: the testing tools and the controller's plumbing, in one plain place */
+.leaf .ch[data-ch="work"] { overflow-y: auto; gap: 7px; }
+#pause .leaf .lf-plain { margin-top: 12px; text-align: center; font: italic 400 15px/1.3 var(--os); color: var(--pq); }
+#pause .leaf .set { gap: 7px; padding-top: 0; border-top: 0; }
+#pause .leaf .cap { margin-top: 8px; font: 400 13px/1 var(--os); letter-spacing: 0.2em; text-transform: uppercase; }
+#pause .leaf .row { display: flex; gap: 6px; flex: none; }
+#pause .leaf .row.wrap { flex-wrap: wrap; }
+#pause .leaf .ch[data-ch="work"] .row button { flex: 1 1 0; min-height: 30px; padding: 5px 8px; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--pi) 55%, transparent); border-radius: 2px; text-align: center; font: 400 14px/1.15 var(--os); }
+#pause .leaf .ch[data-ch="work"] .row.wrap button { flex: 1 1 30%; }
+#pause .leaf .ch[data-ch="work"] .row button:hover, #pause .leaf .ch[data-ch="work"] .row button:focus { border-color: var(--pi); box-shadow: 0 0 0 1px var(--pi) inset; }
+#pause .leaf .ch[data-ch="work"] .row button[aria-pressed="true"] { background: var(--pi); color: var(--pp); }
+#pause .leaf .ch[data-ch="work"] p { font: italic 400 14px/1.35 var(--os); color: var(--pq); }
+.leaf .lf-back { display: none !important; }
+
+/* a narrow or upright window: one page at a time (leaf.js sets .single, and .in-ch once a chapter is opened) */
+#pause.single .leaf { width: 420px; height: var(--ph, 860px); }
+#pause.single .leaf > section { width: 420px; height: 100%; overflow-y: auto; }
+#pause.single .leaf .verso { padding: 26px 26px 22px; }
+#pause.single .leaf .recto { padding: 12px 26px 22px; }
+#pause.single.in-ch .verso, #pause.single:not(.in-ch) .recto { display: none; }
+#pause.single .leaf { background-size: 212% 100%; background-position: 0 0; }
+#pause.single .lf-pearls { width: 364px; margin-top: 22px; }
+#pause.single .leaf h2 { margin-top: 30px; font-size: 44px; line-height: 46px; }
+#pause.single .lf-swell { width: 320px; margin-top: 22px; }
+#pause.single .leaf #btn-resume { margin-top: 22px; font-size: 54px; line-height: 60px; }
+#pause.single .leaf #btn-resume.long { font-size: 32px; }
+#pause.single .lf-contents { margin-top: 26px; }
+#pause.single .leaf .lf-contents button { height: 48px; padding-left: 0; }
+#pause.single .lf-contents .w { font-size: 20px; line-height: 48px; }
+#pause.single .lf-contents em { font-size: 15px; line-height: 48px; }
+#pause.single .lf-contents button[aria-current="true"] .w { font-weight: 400; }
+#pause.single .lf-contents button[aria-current="true"]::before { display: none; }
+#pause.single .lf-hints { display: none; }
+#pause.single .lf-leave { margin-top: auto; }
+#pause.single .leaf .lf-leave button { padding: 15px 0; }
+#pause.single .leaf .lf-back { display: inline-flex !important; align-items: center; gap: 8px; align-self: flex-start; height: 44px; font: 400 13px/1 var(--font-caps); letter-spacing: 0.2em; }
+#pause.single .leaf .lf-back::before { content: ""; width: 6px; height: 9px; background: var(--pq); clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+#pause.single .leaf .rw, #pause.single .leaf .sw { min-height: 48px; }
+#pause.single .leaf .dial { grid-template-columns: auto minmax(20px, 1fr) 160px; grid-template-rows: 44px 18px; }
+#pause.single .leaf .dial > input[type="range"] { width: 160px; margin-top: 15px; }
+#pause.single .leaf .dial::before { margin-top: 24px; }
+#pause.single .leaf .dial > label { line-height: 44px; }
+#pause.single #lf-band { grid-template-columns: minmax(0, 1fr); }
+#pause.single #lf-band .dial { grid-template-columns: 1fr 1fr; grid-template-rows: 22px 24px 15px; }
+#pause.single #lf-band .dial > input { width: 100%; margin-top: 2px; }
+#pause.single .leaf #bind-grid { --c1: 50px; --c2: 50px; --c3: 92px; font-size: 14px; background: none; }
+#pause.single .leaf #bind-grid > b { border: 0; border-bottom: 1px solid var(--pi); }
+#pause.single .lf-acts { flex-wrap: wrap; }
+#pause.single #lf-ruler svg { width: 300px; height: auto; }
+#pause.single .lf-th, #pause.single #lf-shells li { grid-template-columns: minmax(0, 1fr) 70px; }
+@media (prefers-reduced-motion: reduce) { .leaf .fx::before, .leaf .nm::before, .leaf .w::before { transition: none; } }
+/* the feedback sheet: one page of the same paper */
+#pause > .note { width: min(520px, 100%); box-sizing: border-box; padding: 34px 40px 30px; gap: 14px; border-radius: 2px; color: var(--pi); font: 400 17px/1.4 var(--os);
+  background: var(--pp) url(menu/paper.jpg) 0 0 / 212% 100% no-repeat; box-shadow: 0 34px 90px rgba(2, 16, 24, 0.6), 0 3px 10px rgba(2, 16, 24, 0.4); }
+#pause > .note h2 { margin: 0 0 4px; padding-left: 0.18em; font: 700 24px/1.1 var(--os); letter-spacing: 0.18em; text-transform: uppercase; }
+#pause > .note p { font: italic 400 15px/1.4 var(--os); color: var(--pq); }
+#pause > .note textarea { border: 1px solid var(--pi); border-radius: 2px; background: rgba(255, 255, 255, 0.35); color: var(--pi); font: 400 16px/1.4 var(--os); }
+#pause > .note textarea::placeholder { color: var(--pq); font-style: italic; }
+#pause > .note .check { font: 400 15px/1.35 var(--os); color: var(--pi); }
+#pause > .note .check input { accent-color: var(--pi); }
+#pause > .note .check b { font: 700 16px/1.2 var(--os); }
+#pause > .note .check span { color: var(--pq); }
+#pause > .note button { all: unset; box-sizing: border-box; flex: 1 1 0; padding: 10px 14px; border: 1px solid var(--pi); border-radius: 2px; text-align: center; cursor: pointer; font: 400 14px/1 var(--font-caps); letter-spacing: 0.2em; color: var(--pi); }
+#pause > .note button.main { background: var(--pi); color: var(--pp); }
+#pause > .note button:focus-visible, #pause > .note textarea:focus-visible { outline: 2px solid var(--pi); outline-offset: 2px; }
+#pause > .note button[hidden] { display: none; }
+#drawer .nm, #drawer .ld, #drawer .fn { display: none; }
+#drawer .grp { margin-top: 6px; font: 400 13px/1 var(--font-caps); letter-spacing: 0.16em; color: color-mix(in srgb, var(--foam) 80%, transparent); }
+#drawer .chooser { display: flex; gap: 6px; }
+#drawer .chooser button { flex: 1 1 0; }
 </style>
 </head>
 <body>
@@ -398,89 +667,117 @@ button:disabled { opacity: 0.4; cursor: default; }
     <button type="button" id="music-mute" aria-pressed="true">Sound on</button>
     <div class="dial"><label for="m-volume">Volume</label><input type="range" id="m-volume" min="0" max="100" value="70"><span class="lo">quiet</span><span class="hi">loud</span></div>
     <div class="scope" role="group" aria-label="Where the sliders below apply">
-      <button type="button" id="scope-all" aria-pressed="true">All depths</button>
-      <button type="button" id="scope-zone" aria-pressed="false">This depth only</button>
-      <p id="scope-note"></p>
+      <span class="nm">These dials are for</span><i class="ld"></i>
+      <span class="chooser"><button type="button" id="scope-all" aria-pressed="true">All depths</button><button type="button" id="scope-zone" aria-pressed="false">This depth only</button></span>
+      <p class="fn" id="scope-note"></p>
     </div>
+    <div class="grp">The playing</div>
     <div class="dial"><label for="m-dream">Dream</label><input type="range" id="m-dream" min="0" max="100" value="60"><span class="lo">dry club</span><span class="hi">deep under water</span><p>Reverb, how dark the sound is, and how long notes hang.</p></div>
     <div class="dial"><label for="m-energy">Energy</label><input type="range" id="m-energy" min="0" max="100" value="50"><i class="live" id="energy-live" title="Where the band is now"></i><span class="lo">drifting</span><span class="hi">hunting</span><p>Tempo, and how busy the band is. The slider is where it rests in empty water. From there it climbs by itself with what is going on round you: swarms, hunters, whatever keeps the rift. The line under the slider shows where it is now.</p></div>
     <div class="dial"><label for="m-menace">Menace</label><input type="range" id="m-menace" min="0" max="100" value="50"><span class="lo">sweet</span><span class="hi">feral</span><p>Which harmony plays, from floating major to something with teeth. Adds low brass and toms.</p></div>
     <div class="dial"><label for="m-react">Reaction</label><input type="range" id="m-react" min="0" max="100" value="70"><span class="lo">steady band</span><span class="hi">follows every move</span><p>How hard speed, wrapping, danger and catches push the band around.</p></div>
     <div class="dial"><label for="m-swing">Swing</label><input type="range" id="m-swing" min="0" max="100" value="60"><span class="lo">straight</span><span class="hi">hard swing</span></div>
     <div class="dial"><label for="m-band">Balance</label><input type="range" id="m-band" min="0" max="100" value="50"><span class="lo">drummer forward</span><span class="hi">harmony forward</span></div>
-    <div class="dial"><label for="m-turn">Turnaround</label><input type="range" id="m-turn" min="0" max="99" step="33" value="66"><span class="lo">off · every 8</span><span class="hi">every 4 · every 2 bars</span><p>Every few bars a line turns round at the end of the bar, pam-pa-PAM-pam, into the next. The keepers always; the other creatures with the switch below.</p></div>
-    <div class="dial"><label for="m-turnsize">Turnaround size</label><input type="range" id="m-turnsize" min="0" max="99" step="33" value="66"><span class="lo">one passing note</span><span class="hi">a short run</span></div>
+    <div class="grp">The turnaround</div>
+    <div class="dial n3"><label for="m-turn">Turnaround</label><input type="range" id="m-turn" min="0" max="99" step="33" value="66"><span class="lo">off · every 8</span><span class="hi">every 4 · every 2 bars</span><p>Every few bars a line turns round at the end of the bar, pam-pa-PAM-pam, into the next. The keepers always; the other creatures with the switch below.</p></div>
+    <div class="dial n3"><label for="m-turnsize">Turnaround size</label><input type="range" id="m-turnsize" min="0" max="99" step="33" value="66"><span class="lo">one passing note</span><span class="hi">a short run</span></div>
     <div class="dial"><label for="m-turnheight">Turnaround height</label><input type="range" id="m-turnheight" min="0" max="100" value="20"><span class="lo">step by step</span><span class="hi">from an octave down</span></div>
-    <div class="dial"><label for="m-turnall">Creatures turn round too</label><input type="range" id="m-turnall" min="0" max="100" step="100" value="0"><span class="lo">keepers only</span><span class="hi">every creature</span></div>
-    <div class="dial"><label for="m-farcarry">Hear the keeper from afar</label><input type="range" id="m-farcarry" min="0" max="100" step="100" value="100"><span class="lo">only near</span><span class="hi">far, and from its side</span><p>The keeper of the band plays faintly from far off, louder as you near it, and from the side it is on.</p></div>
+    <div class="dial n1"><label for="m-turnall">Creatures turn round too</label><input type="range" id="m-turnall" min="0" max="100" step="100" value="0"><span class="lo">keepers only</span><span class="hi">every creature</span></div>
+    <div class="dial n1"><label for="m-farcarry">Hear the keeper from afar</label><input type="range" id="m-farcarry" min="0" max="100" step="100" value="100"><span class="lo">only near</span><span class="hi">far, and from its side</span><p>The keeper of the band plays faintly from far off, louder as you near it, and from the side it is on.</p></div>
     <div class="preset">
       <button type="button" id="preset-copy">Copy preset</button>
       <label for="preset-in">Paste a preset</label>
       <div class="row"><input type="text" id="preset-in" placeholder="oarfish-music:1:..." autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" id="preset-apply">Apply</button></div>
       <p id="preset-msg" aria-live="polite">A preset is the sliders above as a line of text. Volume is not part of it.</p>
     </div>
-    <div class="feel">
-      <h2>The feel</h2>
-      <div class="dial"><label for="f-assist">Loop assist</label><input type="range" id="f-assist" min="0" max="100" value="60"><span class="lo">by hand</span><span class="hi">guided</span><p>How far round a swarm you must go, how much the fish holds the ring for you, and how readily the swarm settles inside it. At zero you close every loop yourself.</p></div>
-    </div>
   </aside>
 
   <div id="fade"></div>
-  <div id="pause" role="dialog" aria-labelledby="pause-title"><div class="in">
-    <h2 id="pause-title">Paused</h2>
-    <button type="button" class="main" id="btn-resume">Resume</button>
-    <div class="row">
-      <button type="button" id="btn-full" aria-pressed="false">Full screen</button>
-      <button type="button" id="btn-new">New dive</button>
-    </div>
-    <button type="button" id="btn-note">Leave feedback</button>
-    <p id="pause-msg" aria-live="polite"></p>
-    <div class="set">
-      <span class="cap">Shells</span>
-      <ul id="shell-list"></ul>
-    </div>
-    <div class="set mouse">
-      <span class="cap" id="mode-cap">Controls</span>
-      <div class="row" role="group" aria-labelledby="mode-cap">
-        <button type="button" id="mode-point" aria-pressed="true">Point and swim</button>
-        <button type="button" id="mode-look" aria-pressed="false">Adventure camera</button>
+  <!-- The pause menu: a leaf of the book laid open over the dive (game/leaf.js; drawn on the canvas "Oarfish dive: pause menu redesign").
+       Left page: the title, Resume, the chapters, the ways out. Right page: the chapter chosen. Every id the game looks for is kept. -->
+  <div id="pause" role="dialog" aria-labelledby="pause-title" data-ch="dive"><div class="leaf">
+    <section class="verso">
+      <p class="lf-name" aria-hidden="true"><span>Oarfish dive</span></p>
+      <div class="lf-pearls" aria-hidden="true"></div>
+      <h2 id="pause-title">Paused</h2>
+      <svg class="lf-swell" width="420" height="14" viewBox="0 0 420 14" aria-hidden="true"><g fill="#3b3026"><path d="M82 7C114 6.3 148 3.1 172 3.1C183 3.1 190 4.8 190 7C190 9.2 183 10.9 172 10.9C148 10.9 114 7.7 82 7Z"/><path d="M0 7L100 6.45L100 7.55Z"/><path d="M338 7C306 6.3 272 3.1 248 3.1C237 3.1 230 4.8 230 7C230 9.2 237 10.9 248 10.9C272 10.9 306 7.7 338 7Z"/><path d="M420 7L320 6.45L320 7.55Z"/></g><g fill="none" stroke="#f3eedb" stroke-width="0.8" stroke-linecap="round"><path d="M132 5.9Q156 4.5 176 5.1"/><path d="M288 5.9Q264 4.5 244 5.1"/></g><g fill="none" stroke="#3b3026" stroke-width="2"><circle cx="199" cy="7" r="4.1"/><circle cx="210" cy="7" r="4.1"/><circle cx="221" cy="7" r="4.1"/></g></svg>
+      <button type="button" class="main" id="btn-resume">Resume</button>
+      <nav class="lf-contents" aria-label="Chapters">
+        <button type="button" data-ch="dive" id="ch-dive"><span class="w">This dive</span><i class="ld"></i><em id="v-dive"></em></button>
+        <button type="button" data-ch="settings" id="ch-settings"><span class="w">Settings</span><i class="ld"></i><em>camera, picture, teaching</em></button>
+        <button type="button" data-ch="keys" id="btn-binds"><span class="w">Keys</span><i class="ld"></i><em id="v-keys"></em></button>
+        <button type="button" data-ch="band" id="ch-band"><span class="w">The band</span><i class="ld"></i><em id="v-band"></em></button>
+        <button type="button" id="btn-library"><span class="w">Specimen library</span><i class="ld"></i><em>every creature met</em></button>
+        <button type="button" id="btn-note"><span class="w">Leave feedback</span><i class="ld"></i><em>a line is plenty</em></button>
+        <button type="button" data-ch="work" id="ch-work"><span class="w">Workbench</span><i class="ld"></i><em>testing, controller</em></button>
+      </nav>
+      <p id="pause-msg" aria-live="polite"></p>
+      <div class="lf-leave"><button type="button" id="btn-new">New dive</button></div>
+      <p class="lf-hints" id="lf-hints" aria-hidden="true"></p>
+    </section>
+    <section class="recto">
+      <button type="button" class="lf-back" id="lf-back">Paused</button>
+      <div class="ch" data-ch="dive">
+        <h3>This dive.</h3>
+        <div class="rw fact"><span class="nm">Time under water</span><i class="ld"></i><span class="vl" id="lf-time"></span></div>
+        <div class="rw fact"><span class="nm">Caught</span><i class="ld"></i><span class="vl" id="lf-caught"></span></div>
+        <div class="rw fact"><span class="nm">Longest body</span><i class="ld"></i><span class="vl" id="lf-longest"></span></div>
+        <div class="grp">The body</div>
+        <div class="lf-body"><div id="lf-ruler"></div><span class="vl" id="lf-len"></span></div>
+        <div class="lf-th"><span class="grp">Shells worn</span><b>On<br>segment</b></div>
+        <ul id="lf-shells"></ul>
+        <ul id="shell-list" hidden></ul>
       </div>
-      <p id="mode-note"></p>
-    </div>
-    <div class="dial"><label for="f-look">Look speed</label><input type="range" id="f-look" min="0" max="100" value="50"><span class="lo">slow</span><span class="hi">fast</span><p>How fast the mouse or the right stick turns the view.</p></div>
-    <label class="check"><input type="checkbox" id="f-teach" checked><span><b>Teach me as I play</b>A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
-    <label class="check"><input type="checkbox" id="f-light"><span><b>Lighter picture</b>Softer, and drawn about sixty times a second at most. For a laptop that runs hot, or on battery.</span></label>
-    <button type="button" id="btn-library">Specimen library</button>
-    <div class="row"><button type="button" id="btn-binds">Key bindings</button><button type="button" id="btn-keys">Show keys and tools on screen</button></div>
-    <div class="set dev">
-      <span class="cap" id="dev-cap">Testing</span>
-      <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
-      <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button><button type="button" id="dev-bloom">Go to the bloom water</button></div>
-      <div class="row"><button type="button" id="dev-sandflat">Go to the sand flat</button><button type="button" id="dev-reef">Go to the reef head</button><button type="button" id="dev-kelpwood">Go to the kelp forest</button></div>
-      <div class="row"><button type="button" id="dev-shapes" aria-pressed="false">Show hit shapes</button><button type="button" id="dev-marker" aria-pressed="false">Show the marker to the rift</button><button type="button" id="dev-seal">Closed rift: glass</button></div>
-      <div class="row"><button type="button" id="dev-frametime" aria-pressed="false">Show frame time</button><button type="button" id="dev-measure">Measure the first band</button></div>
-      <span class="cap" id="bring-cap">Bring one to look at (not in the dive yet)</span>
-      <div class="row wrap" id="dev-bring" role="group" aria-labelledby="bring-cap"></div>
-      <div class="row"><button type="button" id="dev-unlock">Unlock every shell</button><button type="button" id="dev-forget">Empty the nest</button></div>
-      <p id="dev-msg" aria-live="polite"></p>
-    </div>
-    <ul class="keys menu" id="pause-keys" aria-label="Controls"></ul>
-    <div class="dial"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
-    <button type="button" id="btn-rumble">Test the vibration</button>
-    <button type="button" id="btn-direct" hidden>Connect DualSense motors</button>
-    <p id="rumble-msg" aria-live="polite"></p>
-    <p id="pad-note" aria-live="polite"></p>
-  </div>
-  <div class="in binds">
-    <h2>Key bindings</h2>
-    <div class="set preset">
-      <label for="bind-preset">Saved sets</label>
-      <div class="row paste"><select id="bind-preset"></select><button type="button" id="bind-delete">Delete</button></div>
-      <div class="row paste"><input type="text" id="bind-name" placeholder="Name this set" maxlength="24" autocomplete="off" spellcheck="false" aria-label="Name for this set"><button type="button" id="bind-save">Save</button></div>
-      <p id="bind-msg" aria-live="polite"></p>
-    </div>
-    <div id="bind-grid"></div>
-    <div class="row foot"><button type="button" id="bind-reset">Back to the defaults</button><button type="button" class="main" id="bind-back">Done</button></div>
+      <div class="ch" data-ch="settings">
+        <h3>Settings.</h3>
+        <div class="grp" id="mode-cap">Controls</div>
+        <div class="rw mouse" role="group" aria-labelledby="mode-cap"><span class="nm">Camera</span><i class="ld"></i><span class="chooser"><button type="button" id="mode-point" aria-pressed="true">Point and swim</button><button type="button" id="mode-look" aria-pressed="false">Adventure camera</button></span><p class="fn" id="mode-note"></p></div>
+        <div class="dial"><label for="f-look">Look speed</label><input type="range" id="f-look" min="0" max="100" value="50"><span class="lo">slow</span><span class="hi">fast</span><p>How fast the mouse or the right stick turns the view.</p></div>
+        <div class="dial"><label for="f-assist">Loop assist</label><input type="range" id="f-assist" min="0" max="100" value="60"><span class="lo">by hand</span><span class="hi">guided</span><p>How far round a swarm you must go, how much the fish holds the ring for you, and how readily the swarm settles inside it. At zero you close every loop yourself.</p></div>
+        <div class="dial pad-only"><label for="f-rumble">Vibration</label><input type="range" id="f-rumble" min="0" max="100" value="70"><span class="lo">off</span><span class="hi">strong</span><p>On a controller: hits, a heartbeat when you are hunted, a hum as a loop closes.</p></div>
+        <div class="grp">Picture</div>
+        <button type="button" class="sw" id="btn-full" aria-pressed="false"><span class="nm">Full screen</span><i class="ld"></i><span class="st"></span></button>
+        <label class="sw"><span class="nm">Lighter picture</span><i class="ld"></i><input type="checkbox" id="f-light"><span class="st"></span><span class="fn">Softer, and drawn about sixty times a second at most. For a laptop that runs hot, or on battery.</span></label>
+        <button type="button" class="sw" id="btn-keys" aria-pressed="false"><span class="nm">Keys and tools on screen</span><i class="ld"></i><span class="st"></span></button>
+        <div class="grp">Teaching</div>
+        <label class="sw"><span class="nm">Teach me as I play</span><i class="ld"></i><input type="checkbox" id="f-teach" checked><span class="st"></span><span class="fn">A first dive opens in the nursery, and keys are shown beside new things, once each. Off: none of that, ever, until you turn it on again.</span></label>
+        <div class="lf-foot"><p></p></div>
+      </div>
+      <div class="ch binds" data-ch="keys">
+        <h3>Keys.</h3>
+        <div id="bind-grid"></div>
+        <div class="lf-acts"><label for="bind-preset">Saved sets</label><select id="bind-preset"></select><button type="button" id="bind-delete">Delete</button></div>
+        <div class="lf-acts"><input type="text" id="bind-name" placeholder="Name this set" maxlength="24" autocomplete="off" spellcheck="false" aria-label="Name for this set"><button type="button" id="bind-save">Save</button><i class="lz" aria-hidden="true"></i><button type="button" id="bind-reset">Back to the defaults</button><button type="button" id="bind-back">Done</button></div>
+        <div class="lf-foot"><p id="bind-msg" aria-live="polite"></p></div>
+      </div>
+      <div class="ch" data-ch="band">
+        <h3>The band.</h3>
+        <div id="lf-band"></div>
+        <div class="lf-foot"><p></p></div>
+      </div>
+      <div class="ch" data-ch="work">
+        <h3>Workbench.</h3>
+        <p class="lf-plain">For trying things out. Nothing here is needed to play.</p>
+        <div class="set dev">
+          <span class="cap" id="dev-cap">Go to a band</span>
+          <div class="row" id="dev-bands" role="group" aria-labelledby="dev-cap"></div>
+          <span class="cap">Testing</span>
+          <div class="row"><button type="button" id="dev-grow">Grow four segments</button><button type="button" id="dev-keeper">Beat the keeper here</button><button type="button" id="dev-bloom">Go to the bloom water</button></div>
+          <div class="row"><button type="button" id="dev-sandflat">Go to the sand flat</button><button type="button" id="dev-reef">Go to the reef head</button><button type="button" id="dev-kelpwood">Go to the kelp forest</button></div>
+          <div class="row"><button type="button" id="dev-shapes" aria-pressed="false">Show hit shapes</button><button type="button" id="dev-marker" aria-pressed="false">Show the marker to the rift</button><button type="button" id="dev-seal">Closed rift: glass</button></div>
+          <div class="row"><button type="button" id="dev-frametime" aria-pressed="false">Show frame time</button><button type="button" id="dev-measure">Measure the first band</button></div>
+          <span class="cap" id="bring-cap">Bring one to look at (not in the dive yet)</span>
+          <div class="row wrap" id="dev-bring" role="group" aria-labelledby="bring-cap"></div>
+          <div class="row"><button type="button" id="dev-unlock">Unlock every shell</button><button type="button" id="dev-forget">Empty the nest</button></div>
+          <p id="dev-msg" aria-live="polite"></p>
+        </div>
+        <span class="cap">Controller</span>
+        <div class="row"><button type="button" id="btn-rumble">Test the vibration</button><button type="button" id="btn-direct" hidden>Connect DualSense motors</button></div>
+        <p id="rumble-msg" aria-live="polite"></p>
+        <p id="pad-note" aria-live="polite"></p>
+        <ul class="keys menu" id="pause-keys" aria-label="Controls" hidden></ul>
+      </div>
+    </section>
   </div>
   <div class="in note">
     <h2>Leave feedback</h2>
@@ -522,7 +819,9 @@ setTimeout(() => { if (!window.__ready) document.getElementById('error').style.d
 <style>html.front, html.front body { background: #f3eedb; } html.front:not(.front-up) #stage { visibility: hidden; }</style>
 <script type="module">
 const fail = (e) => { document.getElementById('error').style.display = 'grid'; console.error(e); };
-const boot = (saved) => import('./game/main.js').then(({ start }) => start(saved || {})).then(() => { window.__ready = true; document.getElementById('error').style.display = 'none'; }).catch(fail);
+// the pause menu's leaf (game/leaf.js) is mounted once the game is: without it the menu still opens and works, unarranged
+const leaf = () => import('./game/leaf.js').then(({ mountLeaf }) => mountLeaf()).catch((e) => console.error(e));
+const boot = (saved) => import('./game/main.js').then(({ start }) => start(saved || {})).then(leaf).then(() => { window.__ready = true; document.getElementById('error').style.display = 'none'; }).catch(fail);
 const front = () => import('./game/title.js').then(({ openFront }) => openFront({ boot: () => boot({}) })).catch((e) => { console.error(e); document.documentElement.classList.remove('front'); document.getElementById('front')?.remove(); window.__front = undefined; boot({}); }); // no front page: the dive, as before
 const has = (saved) => saved && Number.isFinite(saved.seed);
 // inside the viewer, pick up where the previous version of the page left the dive

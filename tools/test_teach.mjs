@@ -92,7 +92,7 @@ check('the next dive does not open in the nursery, and a sealed jar by the ruins
 // ---- the setting, and skipping
 await page.keyboard.press('KeyP'); await page.waitForTimeout(150);
 s = await ev(() => ({ checked: document.getElementById('f-teach').checked }));
-await page.click('#f-teach'); await page.click('#f-teach'); // off, then on again: from the beginning
+await ev(() => window.__leaf.show('settings')); await page.click('#f-teach'); await page.click('#f-teach'); // off, then on again: from the beginning (the box is on the leaf's Settings page)
 await page.waitForTimeout(450); await page.keyboard.press('KeyP'); await page.waitForTimeout(200);
 s = { ...s, ...(await ev(() => { const g = window.__game; g.startRun(4242); g.sim(0.2, window.N.none); return { on: g.teach.on, done: g.teach.done, learned: Object.keys(g.teach.learned).length, nursery: !!g.world.nursery, skip: !document.getElementById('btn-skip').hidden }; })) };
 check('turning the teaching off and on again in the pause menu starts it over', s.checked && s.on && !s.done && s.learned === 0 && s.nursery && s.skip, JSON.stringify(s));

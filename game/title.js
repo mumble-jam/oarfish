@@ -594,7 +594,7 @@ export async function openFront({ boot }) {
     const resume = document.getElementById('btn-resume'); resumeText = resume.textContent; resume.textContent = 'Back to the front page';
     if (go === 'library') g.openLibrary();
     else if (go === 'feedback') g.openNote(true);
-    else { g.setPaused(true); if (go === 'band') { const tab = document.getElementById('music-tab'); if (tab.getAttribute('aria-expanded') !== 'true') tab.click(); } if (go === 'settings') document.getElementById('btn-resume').focus({ preventScroll: true }); }
+    else { g.setPaused(true); window.__leaf?.show(go === 'band' ? 'band' : 'settings'); document.getElementById('btn-resume').focus({ preventScroll: true }); } // the leaf's own chapters (leaf.js)
     F.music.duck(go === 'library' ? 0.35 : 0.6);
   }
   function overDone() {

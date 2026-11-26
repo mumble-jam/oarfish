@@ -202,7 +202,7 @@ check('a dive opens on the plain view: no key list or tools, but a pause button,
 await ev(() => window.__game.sim(0.3)); await snap('c-plain');
 await page.keyboard.press('KeyP'); await page.waitForTimeout(100);
 s = await view();
-check('...and the other corner buttons come back while paused', s.tuning !== 'none' && s.fs !== 'none', JSON.stringify(s));
+check('...and Full screen comes back to the corner while paused (Tuning does not: its dials are on the leaf\'s page then)', s.tuning === 'none' && s.fs !== 'none', JSON.stringify(s));
 await page.waitForTimeout(450); await page.keyboard.press('KeyP');
 await page.keyboard.press('KeyH');
 s = await view();
@@ -267,7 +267,7 @@ s = await ev(() => { const g = window.__game, h = g.hap, sw = g.world.schools.fi
   const hum = h.log.map((r) => r[1]), clicks = hum.filter((v, i) => v > 0.33 && !(hum[i - 1] > 0.33)).length; h.log = null; g.sim(1); return { left: sw.left, hum: Math.max(...hum), clicks, sent: window.rumbles.length }; });
 check('a loop closing hums and clicks its way round', s.left === 0 && s.hum > 0.15 && s.clicks >= 4 && s.sent > 5, JSON.stringify(s));
 await page.keyboard.press('KeyP'); await page.waitForTimeout(150);
-await page.click('#btn-rumble'); await page.waitForFunction(() => /played|answered/.test(document.getElementById('rumble-msg').textContent), null, { timeout: 20000 }).catch(() => {}); // timers run slowly in a window nobody is looking at
+await ev(() => window.__leaf.show('work')); await page.click('#btn-rumble'); await page.waitForFunction(() => /played|answered/.test(document.getElementById('rumble-msg').textContent), null, { timeout: 20000 }).catch(() => {}); // timers run slowly in a window nobody is looking at
 s = await ev(() => ({ msg: document.getElementById('rumble-msg').textContent, note: document.getElementById('pad-note').textContent, n: window.rumbles.filter((r) => r.duration === 350).length }));
 check('the pause menu tests the vibration and says what the browser reports for the controller', /motors \(dual-rumble\)/.test(s.msg) && /played all three/.test(s.msg) && /can vibrate/.test(s.note) && s.n === 2, JSON.stringify(s));
 // a DualSense's motors, which no browser drives on Windows: the page asks for the controller and sends it Sony's own command
@@ -326,7 +326,7 @@ s = await ev(async () => { const g = window.__game, pad = g.pad, wait = (ms) => 
 await page.waitForTimeout(350); await page.keyboard.press('KeyP');
 s = await ev(() => { const g = window.__game; window.tap(9); const p1 = g.paused; const f0 = document.activeElement?.id; window.tap(13); const f1 = document.activeElement?.id; window.tap(12); const f2 = document.activeElement?.id; window.tap(0); const p2 = g.paused;
   window.tap(8); const full1 = g.ui.full; window.tap(8); return { p1, f0, f1, f2, p2, full1, full2: g.ui.full }; });
-check('Options pauses, the D-pad walks the menu, Cross resumes, Create hides and shows the keys and tools', s.p1 && s.f0 === 'btn-resume' && s.f1 === 'btn-full' && s.f2 === 'btn-resume' && !s.p2 && !s.full1 && s.full2, JSON.stringify(s));
+check('Options pauses, the D-pad walks the menu, Cross resumes, Create hides and shows the keys and tools', s.p1 && s.f0 === 'btn-resume' && s.f1 === 'ch-dive' /* the first chapter's line is what stands under Resume on the leaf */ && s.f2 === 'btn-resume' && !s.p2 && !s.full1 && s.full2, JSON.stringify(s));
 // ---- the key-binding menu: change keys and buttons, save the set under a name, get it back
 await page.keyboard.press('KeyP'); await page.waitForTimeout(150); await page.click('#btn-binds');
 s = await ev(() => ({ shown: getComputedStyle(document.querySelector('#pause .binds')).display, main: getComputedStyle(document.querySelector('#pause .in')).display, slots: document.querySelectorAll('#bind-grid button').length, w: document.querySelector('#bind-grid button[data-a="up"][data-k="0"]').textContent, pad: document.querySelector('#bind-grid button[data-a="sprint"][data-p]').textContent }));
@@ -381,14 +381,15 @@ if (shots) {
 }
 // ---- testing tools: in the pause menu, in either view
 await ev(() => { const g = window.__game; g.startRun(4242); g.sim(1); g.setFull(false, true); g.setPaused(true); }); await frame();
+await ev(() => window.__leaf.show('work')); await frame(); // the testing tools are the leaf's Workbench chapter
 const devPlain = await ev(() => document.querySelector('#pause .dev').getClientRects().length > 0);
 await ev(() => { window.__game.setFull(true, true); }); await frame();
 s = await ev(() => ({ shown: document.querySelector('#pause .dev').getClientRects().length > 0, bands: document.querySelectorAll('#dev-bands button').length, here: document.querySelector('#dev-bands [aria-pressed="true"]')?.textContent, segs: window.__game.run.segs }));
-await page.click('#dev-grow'); await page.click('#dev-bands button:nth-child(3)'); await frame();
+await ev(() => window.__leaf.show('work')); await page.click('#dev-grow'); await page.click('#dev-bands button:nth-child(3)'); await frame();
 const went = await ev(() => { const g = window.__game; return { floor: g.run.floor, paused: g.paused, state: g.run.state, segs: g.run.segs, keeper: g.guard?.kind }; });
-await ev(() => { window.__game.setPaused(true); }); await page.click('#dev-keeper'); await frame();
+await ev(() => { window.__game.setPaused(true); }); await frame(); await ev(() => window.__leaf.show('work')); await page.click('#dev-keeper'); await frame();
 const beat = await ev(() => { const g = window.__game, out = { done: g.guard.done, here: document.querySelector('#dev-bands [aria-pressed="true"]')?.textContent, off: document.getElementById('dev-keeper').disabled }; g.setFull(false, true); g.setPaused(false); return out; });
-check('the testing tools are in the pause menu, in the plain view too: any band, a longer body, the keeper beaten', devPlain && s.shown && s.bands === 5 && s.here === '1' && went.floor === 2 && !went.paused && went.state === 'play' && went.segs === s.segs + 4 && went.keeper === 'lamplighter' && beat.done && beat.here === '3', JSON.stringify({ devPlain, ...s, went, beat }));
+check('the testing tools are in the pause menu (its Workbench chapter), in the plain view too: any band, a longer body, the keeper beaten', devPlain && s.shown && s.bands === 5 && s.here === '1' && went.floor === 2 && !went.paused && went.state === 'play' && went.segs === s.segs + 4 && went.keeper === 'lamplighter' && beat.done && beat.here === '3', JSON.stringify({ devPlain, ...s, went, beat }));
 // ---- feedback: a sheet in the pause menu and at the end of a dive; the note is copied, never sent
 await ev(() => { const g = window.__game; g.startRun(4242); g.sim(3); g.setPaused(true); });
 await page.click('#btn-note'); await frame(page);

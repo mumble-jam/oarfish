@@ -1166,7 +1166,6 @@ export async function start(saved = {}) {
   document.addEventListener('fullscreenchange', () => {
     const on = fsOn();
     for (const id of ['btn-fs', 'btn-full']) $(id).setAttribute('aria-pressed', String(on));
-    $('btn-full').textContent = on ? 'Leave full screen' : 'Full screen';
     $('btn-fs').setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
     if (!on) { try { navigator.keyboard?.unlock?.(); } catch { /* nothing was locked */ } }
     if (!on && !fsMine && !paused && !ended()) setPaused(true); // Esc took the page out of full screen: it usually means pause
@@ -1178,7 +1177,7 @@ export async function start(saved = {}) {
   function setFull(on, quiet) {
     ui.full = !!on; delete ui.bare; store.set('oarfish.ui', ui); // `bare` was this setting the other way round, when the full view was the usual one
     stage.classList.toggle('full', ui.full);
-    $('btn-keys').textContent = ui.full ? 'Hide keys and tools on screen' : 'Show keys and tools on screen';
+    $('btn-keys').setAttribute('aria-pressed', String(ui.full)); // a switch on the leaf's Settings page: a pearl for on
     if (!ui.full && !paused) closeDrawer();
     if (!ui.full && !quiet && !paused) tell(dev === 'pad' ? `Keys and tools hidden. ${pb('hide')} brings them back.` : touch ? 'Keys and tools hidden.' : `Keys and tools hidden. ${kb('hide')} brings them back.`, 4);
   }
@@ -1203,7 +1202,7 @@ export async function start(saved = {}) {
   const actionOf = (code) => { for (const [a] of ACTIONS) if (binds.keys[a].includes(code)) return a; return null; };
   const sameBinds = (a, b) => JSON.stringify(cleanBinds(a)) === JSON.stringify(cleanBinds(b));
   function showBinds(msg) {
-    const head = '<b>Action</b><b>Key</b><b>Or</b><b>Controller</b>';
+    const head = '<b>Action</b><b>Keyboard</b><b>Or</b><b>Controller</b>'; // the leaf sets the two key columns under one ruled head
     const f = document.activeElement?.closest?.('#bind-grid button'), keep = f ? `button[data-a="${f.dataset.a}"]${f.dataset.p ? '[data-p]' : `[data-k="${f.dataset.k}"]`}` : ''; // the grid is redrawn: keep the place
     $('bind-grid').innerHTML = head + ACTIONS.map(([a, label]) => {
       const slot = (i) => `<button type="button" data-a="${a}" data-k="${i}"${wait && wait.a === a && wait.k === i ? ' class="wait"' : ''}>${wait && wait.a === a && wait.k === i ? 'press a key' : keyName(binds.keys[a][i]) || '\u2013'}</button>`;
@@ -1422,8 +1421,8 @@ export async function start(saved = {}) {
         const at = menu.contains(document.activeElement) ? document.activeElement : null;
         const nudge = (pad.pressed(BTN.right) ? 1 : 0) - (pad.pressed(BTN.left) ? 1 : 0);
         if (nudge && at?.type === 'range') { at.value = +at.value + nudge * 5; at.dispatchEvent(new Event('input')); }
-        if (pad.pressed(BTN.cross)) (at?.tagName === 'BUTTON' ? at : menu.querySelector('button')).click();
-        if (paused && pad.pressed(BTN.circle)) { if (fb.open) openNote(false); else if ($('pause').classList.contains('binding')) openBinds(false); else setPaused(false); }
+        if (pad.pressed(BTN.cross)) (at && (at.tagName === 'BUTTON' || at.type === 'checkbox') ? at : menu.querySelector('button')).click();
+        if (paused && pad.pressed(BTN.circle)) { if (fb.open) openNote(false); else if ($('pause').classList.contains('binding')) openBinds(false); else if (!window.__leaf?.back()) setPaused(false); } // from inside a chapter, Circle first goes back to the left page
       } else {
         if (pp('hide')) setFull(!ui.full);
         if (pp('shed')) shed();

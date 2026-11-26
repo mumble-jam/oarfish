@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node tools/serve.mjs",
-    "test": "node tools/test_game.mjs && node tools/test_boss.mjs && node tools/test_controls.mjs && node tools/test_teach.mjs && node tools/test_library.mjs",
+    "test": "node tools/test_game.mjs && node tools/test_boss.mjs && node tools/test_controls.mjs && node tools/test_teach.mjs && node tools/test_library.mjs && node tools/test_leaf.mjs",
     "shots": "node tools/shot_models.mjs now"
   },
   "devDependencies": {
