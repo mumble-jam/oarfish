@@ -74,11 +74,10 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
    on the picture's axis: the picture (its row no taller than the fish needs, --pic-h, so what is left is shared above and below the block),
    the caption a beat (--beat) under it, the draughtsman's credit small and light close under the caption on the same axis (George chose one
    axis over the plate's credit at the corner, which read as a staircase), and the menu a beat under that */
-#front .head { grid-area: head; display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 12px; margin-bottom: var(--beat); }
+#front .head { grid-area: head; display: grid; grid-template-columns: 1fr 1fr; align-items: baseline; gap: 12px; margin-bottom: var(--beat); }
 #front .book { display: block; font: 400 clamp(11px, 1.15vw, 16px)/1 "Front Fell SC", serif; letter-spacing: 0.24em; margin: 0; }
-#front .name { margin: 0; text-align: center; font: 400 clamp(17px, 2.1vw, 30px)/1 "Front Fell SC", serif; letter-spacing: 0.34em; padding-left: 0.34em; white-space: nowrap; }
-#front .name::before, #front .name::after { content: ""; display: inline-block; vertical-align: 0.3em; width: clamp(18px, 4vw, 64px); height: 1px; background: currentColor; opacity: 0.55; }
-#front .name::before { margin-right: 0.7em; } #front .name::after { margin-left: 0.36em; }
+/* the game's name is not lettered on the plate (George: 'can we get rid of this title?'); it stays as a heading for screen readers only */
+#front .name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #front .class { display: block; margin: 0; justify-self: end; font: italic 400 clamp(13px, 1.4vw, 20px)/1 "Front Fell", serif; white-space: nowrap; }
 #front .class span { font-style: normal; font-size: 0.8em; letter-spacing: 0.06em; margin-left: 3em; }
 #front .pic { grid-area: pic; min-height: 0; }
@@ -119,9 +118,7 @@ html.front, html.front body { background: ${FRONT.colours.paper}; }
 @media (max-aspect-ratio: 3/4) {
   #front .sheet { --beat: 16px; }
   #front .menu { padding: 0 24px; }
-  #front .head { grid-template-columns: 1fr 1fr; grid-template-areas: "name name" "book class"; row-gap: 14px; }
-  #front .name { grid-area: name; font-size: clamp(18px, 5.6vw, 28px); }
-  #front .book { grid-area: book; font-size: 11px; } #front .class { grid-area: class; font-size: 14px; }
+  #front .book { font-size: 11px; } #front .class { font-size: 14px; }
   #front .menu { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 0.15em; }
   #front .menu .sep { display: none; }
   #front .menu button { font-size: 15px; padding: 0.55em 0.4em 0.6em; }
