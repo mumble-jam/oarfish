@@ -157,6 +157,7 @@ export async function start(saved = {}) {
   // the skeleton: wherever a column, a lintel, kelp or a coral head hides the fish, its model shows through as a dark wireframe (George: 'it was
   // beautiful'). Drawn with the ghost, after the world and before the fish itself, only where something already stands nearer the camera, so the
   // fish's own surface never has it; blended like the ghost (not in the transparent pass), the wire's colour at `blendAlpha`.
+  const SKELETON = false; // off: George looked at it and wants the faint pink tint alone, as it always was ('that was exactly what i needed'); true brings the wireframe back
   const boneMat = new THREE.MeshBasicMaterial({
     color: '#06222e', wireframe: true, depthFunc: THREE.GreaterDepth, depthWrite: false, fog: false,
     blending: THREE.CustomBlending, blendSrc: THREE.ConstantAlphaFactor, blendDst: THREE.OneMinusConstantAlphaFactor, blendAlpha: 0.6,
@@ -172,7 +173,7 @@ export async function start(saved = {}) {
     const twin = (material, order) => { const m = new THREE.SkinnedMesh(mesh.geometry, material); m.bind(mesh.skeleton, mesh.bindMatrix); m.frustumCulled = false; m.renderOrder = order; built.group.add(m); return m; };
     mesh.frustumCulled = false; // the bones carry the mesh far from its rest-pose bounds
     mesh.castShadow = true; mesh.receiveShadow = true; mesh.renderOrder = 2;
-    const ghost = twin(ghostMat, 1), bones = twin(boneMat, 1.5), wire = twin(wireMat, 3);
+    const ghost = twin(ghostMat, 1), bones = twin(boneMat, 1.5), wire = twin(wireMat, 3); bones.visible = SKELETON;
     wire.visible = show.wire;
     const helper = new THREE.SkeletonHelper(built.group);
     helper.visible = show.bones; helper.frustumCulled = false;

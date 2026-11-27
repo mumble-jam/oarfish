@@ -1508,7 +1508,7 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   // skeleton-look: the window round the fish (sight.js) is off, and the fish shows through whatever stands in front of it as its dark wireframe
   // (main.js, `boneMat`). On each walk the review swam, every step where a tenth or more of the fish is covered must draw the wireframe.
   const pass = async (setup, steps, steer, arg) => { await ev(setup, arg); let worst = 1, hid = 0, bare = 0; for (let i = 0; i < steps; i++) { await ev(steer); const s = await page.evaluate(seenShare); const sh = s ? s.share : 1; worst = Math.min(worst, sh);
-    if (sh < 0.9) { hid++; const k = await page.evaluate(skeletonShown); if (!k || k.dark < 5) bare++; } } return { worst: +worst.toFixed(2), hid, bare }; };
+    if (sh < 0.9) { hid++; const k = await page.evaluate(skeletonShown); if (!k || k.px < 5) bare++; } } return { worst: +worst.toFixed(2), hid, bare }; };
   const out = {};
   for (const name of ['sandflat', 'reef', 'kelpwood']) out[name] = await pass((name) => { const g = window.__game; g.setMode('look'); g.startRun(4242); const w = g.world; g.run.safe = 1e9;
       const q = w.quiet[name], fx = Math.sin(q.gate.yaw), fz = Math.cos(q.gate.yaw), x = q.gate.x + fx * 12, z = q.gate.z + fz * 12, yaw = Math.atan2(-fx, -fz);
@@ -1534,7 +1534,7 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   await ev(() => { const g = window.__game; g.startRun(4242); const w = g.world, p = g.rig.pos.clone(); p.y = w.height(p.x, p.z) + 6; g.rig.reset(p, 0); g.cam.yaw = Math.PI; g.cam.pitch = 0.6; g.snap(); });
   const openSeen = await page.evaluate(seenShare), openBones = await page.evaluate(skeletonShown);
   check('the window is off (no material is cut), a fish behind a column is covered by it and shows through as its dark wireframe, and in open water the wireframe draws nothing',
-    !col.on && col.cut === 0 && colSeen && colSeen.share < 0.8 && colBones && colBones.dark >= 100 && openSeen && openSeen.share > 0.97 && openBones && openBones.px === 0,
+    !col.on && col.cut === 0 && colSeen && colSeen.share < 0.8 && colBones && colBones.px >= 100 && openSeen && openSeen.share > 0.97 && openBones && openBones.px === 0,
     JSON.stringify({ col, colSeen, colBones, openSeen, openBones })); }
 { // the Keeper's ground: no standing column its legs can reach (the tall pillars on the ledge at the rift's mouth aside), and its numbers are the fight's
   const s = await ev(() => { const g = window.__game, F = g.KEEPER_FIGHT; g.startRun(4242); const w = g.world, K = w.keeperGround;

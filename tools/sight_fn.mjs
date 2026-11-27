@@ -32,17 +32,18 @@ export async function seenShare() {
 // The skeleton (main.js, `boneMat`): how many pixels the dark wireframe of the fish changes in the picture as the dive is drawn now. It draws
 // the whole scene into a small target twice, with the wireframe twin and without it, and counts the pixels that differ (`px`), and how many of
 // those are darker (`dark`). Behind a column it should be many; in open water none (it never draws over the fish's own skin).
+// (Since the wireframe was switched off again, this measures what shows through as the game draws it: the pink tint, and the wireframe if SKELETON is on.)
 export async function skeletonShown() {
   const THREE = await import('three'), g = window.__game, f = window.__sight?.fish?.();
   if (!f?.bones) return null;
   const r = g.renderer, W = 320, H = Math.round(320 * g.camera.aspect ** -1);
   const rt = (window.__boneRT ||= new THREE.WebGLRenderTarget(W, H, { depthBuffer: true }));
   if (rt.width !== W || rt.height !== H) rt.setSize(W, H);
-  const a = new Uint8Array(W * H * 4), b = new Uint8Array(W * H * 4), was = f.bones.visible, auto = r.autoClear;
+  const a = new Uint8Array(W * H * 4), b = new Uint8Array(W * H * 4), was = f.bones.visible, wasG = f.ghost.visible, auto = r.autoClear;
   r.setRenderTarget(rt); r.autoClear = true;
-  f.bones.visible = true; r.render(g.scene, g.camera); r.readRenderTargetPixels(rt, 0, 0, W, H, a);
-  f.bones.visible = false; r.render(g.scene, g.camera); r.readRenderTargetPixels(rt, 0, 0, W, H, b);
-  r.setRenderTarget(null); r.autoClear = auto; f.bones.visible = was;
+  f.ghost.visible = true; r.render(g.scene, g.camera); r.readRenderTargetPixels(rt, 0, 0, W, H, a);
+  f.bones.visible = false; f.ghost.visible = false; r.render(g.scene, g.camera); r.readRenderTargetPixels(rt, 0, 0, W, H, b);
+  r.setRenderTarget(null); r.autoClear = auto; f.bones.visible = was; f.ghost.visible = wasG;
   let px = 0, dark = 0;
   for (let i = 0; i < a.length; i += 4) { const d = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); if (d > 12) { px++; if (a[i] + a[i + 1] + a[i + 2] < b[i] + b[i + 1] + b[i + 2]) dark++; } }
   return { px, dark, of: W * H };
