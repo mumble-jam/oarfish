@@ -2174,6 +2174,7 @@ float seaLight(vec2 p, float t) {
   const sorting = (on) => { sight.on = on; sight.fx = NaN; sight.view = null; };
   const tally = () => scatters.reduce((o, sc) => { o.all += sc.items.length; o.shown += sc.mesh.count; if (sc.shade) { o.cast += sc.items.length; o.shaded += sc.shaded; } return o; }, { all: 0, shown: 0, cast: 0, shaded: 0 });
   // whatever stands (stone, plants, coral, jars) can be cut away in the window round the fish (sight.js); the bed cannot, nor anything see-through
+  // (while SEE.on is false, as now, seeThrough leaves every material as it is)
   for (const m of materials) if (m !== tMat) seeThrough(m);
   for (const c of dropped) colliders.splice(colliders.indexOf(c), 1); // (review polish) the Keeper's ground: see leaveOut
   // size, spawn, wrap: how far across this world is, its start, and the shortest way round it. solids and sites are for the tools that map and audit: what stands in the way, and the ground that places have claimed

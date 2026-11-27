@@ -1,4 +1,4 @@
-// The window round the fish. Whatever stands between the camera and the fish (stone, a lintel, a capital, kelp, tall grass, a coral head)
+// The window round the fish (switched off: SEE.on, below). Whatever stands between the camera and the fish (stone, a lintel, a capital, kelp, tall grass, a coral head)
 // is cut away in a soft stippled window round the fish as it is drawn, and anything right in front of the lens is stippled away too, so the
 // fish is never lost behind the world and nothing fills the screen. It is a pattern, not a fade: each pixel is kept or dropped by a fixed 4x4
 // ordered dither in screen space (the flat look of the game, and nothing to sort). Only what is nearer the camera than the fish is touched,
@@ -10,6 +10,10 @@
 import * as THREE from 'three';
 
 export const SEE = {
+  on: false, // OFF since skeleton-look: George wants back the dark wireframe of the fish showing through whatever stands in front of it (main.js,
+  // `boneMat`), and not this dotted window ('i liked it much better than today's solution'). Off, nothing here touches a material at all (the
+  // lens part included: at the adventure camera's 11 m and more, a column between the lens and the fish is inside `lens`, so it would come
+  // back as a dotted column with the fish through it). `on: true` brings all of it back as it was.
   head: 1.6, body: 1.3, // the window's radius round the head and round the point `along` metres back down the body, in metres at the fish
   along: 3.2, // how far back down the body the window reaches (a capsule from the head to there)
   soft: 0.45, // the outer part of the radius over which the window thins to nothing
@@ -52,7 +56,7 @@ const BODY = /* glsl */`
 
 // Lets the window cut this material. Keeps whatever the material already does to its shaders, and its own cache key.
 export function seeThrough(m) {
-  if (!m || m.userData.see || !m.isMeshLambertMaterial || m.transparent) return m;
+  if (!SEE.on || !m || m.userData.see || !m.isMeshLambertMaterial || m.transparent) return m;
   const before = m.onBeforeCompile, key = m.customProgramCacheKey;
   m.onBeforeCompile = (sh, r) => {
     before?.call(m, sh, r);
@@ -69,6 +73,7 @@ export function seeThrough(m) {
 // Where the window is this frame: the head, and the point `along` metres back down the body, seen from the camera.
 const pa = new THREE.Vector3(), pb = new THREE.Vector3();
 export function aim(camera, joints, width, height, on = true) {
+  on = on && SEE.on;
   SIGHT.v.value.set(width, height, SEE.lens, on ? 1 : 0);
   if (!on || !joints?.length) return;
   let k = 0, run = 0;

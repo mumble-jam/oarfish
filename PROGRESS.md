@@ -1,3 +1,8 @@
+# Skeleton look (branch skeleton-look)
+
+- [x] The window round the fish off (`SEE.on: false` in sight.js; lens part off too). The fish shows through whatever stands in front of it as a dark wireframe (`boneMat`, main.js). Found: before d4ead03 only the pink ghost showed through things; the dark `wireMat` was the model tools' Show wire, on the fish's surface. The see-through wireframe is new, drawn as George remembers it.
+- [x] `skeletonShown` in tools/sight_fn.mjs; the game suite's window checks are now skeleton checks (covered steps draw the wire; a colonnade column hides the fish and shows the wire; open water draws none).
+
 # Review polish (branch review-polish): progress
 
 Brief: the reviewer's ranked visual faults (/home/claude/review-findings.md), items 1 to 11. Worktree `/home/claude/oarfish-polish`; logs `/home/claude/polish-logs/`; scratch scripts `/home/claude/polish-work/`; pictures `/home/claude/polish-shots/`; sheet `/home/claude/polish-sheet.jpg`. Hands off sandflat.js, reef.js, kelpwood.js, bloom.js, music.js, and main.js's input and loudness lines.

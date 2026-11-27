@@ -154,6 +154,13 @@ export async function start(saved = {}) {
     blending: THREE.CustomBlending, blendSrc: THREE.ConstantAlphaFactor, blendDst: THREE.OneMinusConstantAlphaFactor, blendAlpha: 0.4,
   });
   const wireMat = new THREE.MeshBasicMaterial({ color: '#06222e', wireframe: true, transparent: true, opacity: 0.6 });
+  // the skeleton: wherever a column, a lintel, kelp or a coral head hides the fish, its model shows through as a dark wireframe (George: 'it was
+  // beautiful'). Drawn with the ghost, after the world and before the fish itself, only where something already stands nearer the camera, so the
+  // fish's own surface never has it; blended like the ghost (not in the transparent pass), the wire's colour at `blendAlpha`.
+  const boneMat = new THREE.MeshBasicMaterial({
+    color: '#06222e', wireframe: true, depthFunc: THREE.GreaterDepth, depthWrite: false, fog: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.ConstantAlphaFactor, blendDst: THREE.OneMinusConstantAlphaFactor, blendAlpha: 0.6,
+  });
   const rig = new OarfishRig();
   const show = { wire: !!saved.wire, bones: !!saved.bones };
   let fish = null;
@@ -165,12 +172,12 @@ export async function start(saved = {}) {
     const twin = (material, order) => { const m = new THREE.SkinnedMesh(mesh.geometry, material); m.bind(mesh.skeleton, mesh.bindMatrix); m.frustumCulled = false; m.renderOrder = order; built.group.add(m); return m; };
     mesh.frustumCulled = false; // the bones carry the mesh far from its rest-pose bounds
     mesh.castShadow = true; mesh.receiveShadow = true; mesh.renderOrder = 2;
-    const ghost = twin(ghostMat, 1), wire = twin(wireMat, 3);
+    const ghost = twin(ghostMat, 1), bones = twin(boneMat, 1.5), wire = twin(wireMat, 3);
     wire.visible = show.wire;
     const helper = new THREE.SkeletonHelper(built.group);
     helper.visible = show.bones; helper.frustumCulled = false;
     scene.add(built.group, helper);
-    fish = { group: built.group, mesh, ghost, wire, helper };
+    fish = { group: built.group, mesh, ghost, bones, wire, helper };
     rig.attach(built.group);
     for (const s of run.shells) { // each shell sits on the back of the segment that carries it
       const bone = rig.spine[s.seg - 1];
@@ -1808,11 +1815,12 @@ export async function start(saved = {}) {
     { const c = run.charge, full = c >= 1, beat = full ? 0.5 + 0.5 * Math.sin(world.time.value * 7) : 0; // the crest: a glow over the head that grows as it fills, and beats when it is full
       crest.position.copy(rig.joints[0]).y += 0.3; crest.scale.setScalar(c > 0 ? 0.5 + 0.9 * c + 0.3 * beat : 0.01); crest.material.opacity = damp(crest.material.opacity, c > 0 ? 0.2 + 0.4 * c + 0.2 * beat : 0, 6, dt); }
 
-    seeFish(); // (review polish) the window round the fish, where the camera now is
+    seeFish(); // (review polish) the window round the fish, where the camera now is (switched off since skeleton-look: SEE.on in sight.js)
     ringsStep(dt); // (review polish) rings fade in
   }
   // ---- review polish: the window round the fish (sight.js). Whatever stands between the camera and the fish is stippled away round it,
-  // and whatever is right in front of the lens; world.js hands its standing materials to it. Off in the testing tools' `devSee.window`.
+  // and whatever is right in front of the lens; world.js hands its standing materials to it. Off in the testing tools' `devSee.window`, and
+  // off for everyone while `SEE.on` is false (it is: the skeleton, `boneMat`, shows the fish through things instead).
   const seeSize = new THREE.Vector2();
   function seeFish() {
     camera.updateMatrixWorld(); renderer.getDrawingBufferSize(seeSize);

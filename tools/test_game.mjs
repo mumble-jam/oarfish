@@ -1504,15 +1504,16 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
     r.every((o) => !o.moved.length && o.kelp[1] < o.kelp[0]), JSON.stringify(r)); }
 
 // ---- review polish (items 1 to 10): the window round the fish, the Keeper's ground, the title and the beads, a moment's line, the dressing, the rings
-{ const { seenShare } = await import('./sight_fn.mjs');
-  const pass = async (setup, steps, steer, arg) => { await ev(setup, arg); let worst = 1; for (let i = 0; i < steps; i++) { await ev(steer); const s = await page.evaluate(seenShare); worst = Math.min(worst, s ? s.share : 1); } return +worst.toFixed(2); };
+{ const { seenShare, skeletonShown } = await import('./sight_fn.mjs');
+  // skeleton-look: the window round the fish (sight.js) is off, and the fish shows through whatever stands in front of it as its dark wireframe
+  // (main.js, `boneMat`). On each walk the review swam, every step where a tenth or more of the fish is covered must draw the wireframe.
+  const pass = async (setup, steps, steer, arg) => { await ev(setup, arg); let worst = 1, hid = 0, bare = 0; for (let i = 0; i < steps; i++) { await ev(steer); const s = await page.evaluate(seenShare); const sh = s ? s.share : 1; worst = Math.min(worst, sh);
+    if (sh < 0.9) { hid++; const k = await page.evaluate(skeletonShown); if (!k || k.dark < 5) bare++; } } return { worst: +worst.toFixed(2), hid, bare }; };
   const out = {};
   for (const name of ['sandflat', 'reef', 'kelpwood']) out[name] = await pass((name) => { const g = window.__game; g.setMode('look'); g.startRun(4242); const w = g.world; g.run.safe = 1e9;
       const q = w.quiet[name], fx = Math.sin(q.gate.yaw), fz = Math.cos(q.gate.yaw), x = q.gate.x + fx * 12, z = q.gate.z + fz * 12, yaw = Math.atan2(-fx, -fz);
       window.__to = [q.gate.x - fx * 6, q.gate.z - fz * 6]; g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 3, z), yaw); g.cam.yaw = yaw + Math.PI; g.cam.pitch = 0.34; g.cam.zoom = 1; g.snap(); }, 28,
     () => { const g = window.__game, p = g.rig.joints[0], [tx, tz] = window.__to, dx = tx - p.x, dz = tz - p.z, L = Math.hypot(dx, dz) || 1; for (let f = 0; f < 15; f++) { g.sim(1 / 60, { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: L < 0.6 ? 0 : 0.55 }); g.cam.yaw += (((g.rig.yaw + Math.PI - g.cam.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI) * 0.06; } }, name);
-  // the arches at the height the review swam them; through each the fish is never wholly hidden (it was: 0.00 at the reef's lintel), and never less than a third seen
-  check('through each gate arch from the adventure camera the fish is never hidden: at least a third of it is seen at every step (sight.js)', Object.values(out).every((v) => v >= 0.33), JSON.stringify(out));
   out.lane = await pass(() => { const g = window.__game; g.startRun(4242); const w = g.world; g.run.safe = 1e9; const L = w.quiet.kelpwood.lanes.find((l) => l.name === 'main').points; window.__lane = L; window.__li = 1;
       g.rig.reset(g.rig.pos.clone().set(L[0][0], w.height(L[0][0], L[0][1]) + 1.6, L[0][1]), Math.atan2(L[1][0] - L[0][0], L[1][1] - L[0][1])); g.cam.yaw = g.rig.yaw + Math.PI + 0.9; g.cam.pitch = 0.3; g.snap(); }, 40,
     () => { const g = window.__game, L = window.__lane; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0]; while (window.__li < L.length - 1 && Math.hypot(L[window.__li][0] - p.x, L[window.__li][1] - p.z) < 2.5) window.__li++; const t = L[window.__li], dx = t[0] - p.x, dz = t[1] - p.z, d = Math.hypot(dx, dz) || 1;
@@ -1520,10 +1521,21 @@ check('the fragment in the kelp forest\'s nook is taken up by going round it, as
   out.keeper = await pass(() => { const g = window.__game; g.startRun(4242); g.run.segs = 16; g.buildFish(16); g.run.hush = 1e9; const G = g.guard, yaw = G.mesh.rotation.y, x = G.pos.x + Math.sin(yaw) * 9, z = G.pos.z + Math.cos(yaw) * 9;
       g.rig.reset(g.rig.pos.clone().set(x, g.world.height(x, z) + 1.6, z), Math.atan2(G.pos.x - x, G.pos.z - z)); g.cam.yaw = g.rig.yaw + Math.PI; g.cam.pitch = 0.34; g.snap(); }, 24,
     () => { const g = window.__game, G = g.guard; for (let f = 0; f < 15; f++) { const p = g.rig.joints[0], dx = G.pos.x - p.x, dz = G.pos.z - p.z, L = Math.hypot(dx, dz); g.sim(1 / 60, L > 0.8 ? { ...window.T.none(), dir: { x: dx / L, y: 0, z: dz / L }, amount: 0.3 } : window.T.none()); } });
-  check('down the kelp forest\'s main lane with the camera looking across the stems, and in under the Keeper, the fish is never wholly hidden (the crab\'s own body on top of it aside, a fifth or more is seen)', out.lane >= 0.33 && out.keeper >= 0.2, JSON.stringify(out));
-  const off = await ev(() => { const g = window.__game; g.startRun(4242); const S = window.__sight; S.devSee.window = false; g.snap(); return true; });
-  const shut = await page.evaluate(seenShare); await ev(() => { window.__sight.devSee.window = true; window.__game.snap(); });
-  check('the window can be turned off for the testing tools (devSee.window), and the measure is the same picture without it', off && shut && shut.all > 0, JSON.stringify(shut)); }
+  check('through each gate arch, down the kelp forest\'s main lane and in under the Keeper, wherever a tenth or more of the fish is covered its dark wireframe shows through (skeleton-look)', Object.values(out).every((v) => v.bare === 0), JSON.stringify(out));
+  // a fish 3 m behind a standing column of the colonnade, the adventure camera on the line through it: the column is drawn whole, and the fish's wireframe through it
+  const col = await ev(() => { const g = window.__game; g.setMode('look'); g.startRun(4242); const w = g.world; g.run.safe = 0; g.run.hush = 1e9;
+    const c = w.quiet.colonnade.find((c) => c.state === 'standing' && c.h > 7), dir = Math.atan2(c.x - w.spawn.x, c.z - w.spawn.z); let x = c.x + Math.sin(dir) * 3, z = c.z + Math.cos(dir) * 3;
+    for (let i = 0; i < 3; i++) { g.rig.reset(g.rig.pos.clone().set(x, w.height(x, z) + 1.8, z), dir - 0.6); g.cam.yaw = dir + Math.PI; g.cam.pitch = 0.2; g.cam.zoom = 1; g.snap();
+      const h = g.rig.joints[0], p = g.camera.position, ox = h.x - x, oz = h.z - z, dx = c.x - p.x, dz = c.z - p.z, L = Math.hypot(dx, dz); x = c.x + dx / L * 3 - ox * 0.5; z = c.z + dz / L * 3 - oz * 0.5; }
+    let cut = 0; g.scene.traverse((o) => { for (const m of [].concat(o.material || [])) if (m.userData?.see) cut++; });
+    return { cut, on: window.__sight.SEE.on }; });
+  const colSeen = await page.evaluate(seenShare), colBones = await page.evaluate(skeletonShown);
+  // the same fish in open water: nothing in front, and the wireframe is not drawn over its own skin
+  await ev(() => { const g = window.__game; g.startRun(4242); const w = g.world, p = g.rig.pos.clone(); p.y = w.height(p.x, p.z) + 6; g.rig.reset(p, 0); g.cam.yaw = Math.PI; g.cam.pitch = 0.6; g.snap(); });
+  const openSeen = await page.evaluate(seenShare), openBones = await page.evaluate(skeletonShown);
+  check('the window is off (no material is cut), a fish behind a column is covered by it and shows through as its dark wireframe, and in open water the wireframe draws nothing',
+    !col.on && col.cut === 0 && colSeen && colSeen.share < 0.8 && colBones && colBones.dark >= 100 && openSeen && openSeen.share > 0.97 && openBones && openBones.px === 0,
+    JSON.stringify({ col, colSeen, colBones, openSeen, openBones })); }
 { // the Keeper's ground: no standing column its legs can reach (the tall pillars on the ledge at the rift's mouth aside), and its numbers are the fight's
   const s = await ev(() => { const g = window.__game, F = g.KEEPER_FIGHT; g.startRun(4242); const w = g.world, K = w.keeperGround;
     const cols = g.world.solids.filter((c) => c.top !== undefined && Math.abs(c.r - 0.78) < 1e-6 && K.reach(c.x, c.z, 0.8) && g.world.rift.in(c.x, c.z) < 0);
